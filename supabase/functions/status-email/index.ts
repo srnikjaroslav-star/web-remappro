@@ -44,6 +44,22 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log(`Sending status email for order ${orderNumber} to ${customerEmail}, status: ${status}`);
 
+    // STRICT BLOCK: If status is 'cancelled', DO NOT send any emails
+    // Credit notes are handled by generate-invoice function with documentType: 'CREDIT_NOTE'
+    if (status === 'cancelled') {
+      console.warn('[status-email] BLOCKED: Status is cancelled - email sending is forbidden. Use generate-invoice with documentType: CREDIT_NOTE instead.');
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Email sending blocked: Order is cancelled. Credit note workflow must be used instead.',
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        }
+      );
+    }
+
     if (!customerEmail) {
       throw new Error("Customer email is required");
     }

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { 
   Download, Upload, Eye, CheckCircle, Clock, Package, 
-  RefreshCw, Search, User, Power, Save, Edit3, LogOut, FileText, X
+  RefreshCw, Search, User, Power, Save, Edit3, LogOut, FileText, X, RotateCcw
 } from 'lucide-react';
 import Logo from '@/components/Logo';
 import SystemStatus, { fetchSystemStatusFromDB, setSystemStatusInDB, isSystemOnline, SystemStatusMode } from '@/components/SystemStatus';
@@ -18,11 +18,21 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { supabase } from '@/lib/supabase';
-import { Order } from '@/integrations/supabase/client';
-import { createClient } from '@supabase/supabase-js';
+import { Order, ActivityLog } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { SERVICES } from '@/data/services';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 
 const ManagementPortal = () => {
   const navigate = useNavigate();
@@ -43,7 +53,26 @@ const ManagementPortal = () => {
   const [detailOrder, setDetailOrder] = useState<Order | null>(null);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
-  const [pendingCancelOrder, setPendingCancelOrder] = useState<{ orderId: string; newStatus: string } | null>(null);
+  const [pendingCancelOrder, setPendingCancelOrder] = useState<Order | null>(null);
+  const [refundReason, setRefundReason] = useState('');
+  const [refundAmount, setRefundAmount] = useState<string>('');
+  const [taxPointDate, setTaxPointDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [refundIban, setRefundIban] = useState<string>('');
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
+  const [financialStats, setFinancialStats] = useState<{ grossRevenue: number; refunds: number; netRevenue: number } | null>(null);
+  
+  // NEW: Refund Wizard Modal State
+  const [refundModalOpen, setRefundModalOpen] = useState(false);
+  const [refundModalOrder, setRefundModalOrder] = useState<Order | null>(null);
+  const [refundWizardAmount, setRefundWizardAmount] = useState<string>('');
+  const [refundWizardReason, setRefundWizardReason] = useState('');
+  const [issuingCreditNote, setIssuingCreditNote] = useState(false);
+  
+  // Aliasy pre kompatibilitu
+  const isRefundModalOpen = refundModalOpen;
+  const setIsRefundModalOpen = setRefundModalOpen;
+  const selectedOrderForRefund = refundModalOrder;
+  const setSelectedOrderForRefund = setRefundModalOrder;
 
   // Check authentication on mount - only allow specific email
   useEffect(() => {
@@ -153,6 +182,7 @@ const ManagementPortal = () => {
     if (isCheckingAuth) return;
 
     fetchOrders();
+    calculateFinancialStats();
 
     // Set up realtime subscription for orders table
     const channel = supabase
@@ -210,6 +240,11 @@ const ManagementPortal = () => {
         if (updatedOrder.important_note !== detailOrder.important_note) {
           setImportantNote(updatedOrder.important_note || '');
         }
+        
+        // Fetch activity logs when detail order is set
+        if (updatedOrder.id) {
+          fetchActivityLogs(updatedOrder.id);
+        }
       }
     }
   }, [orders, detailOrder]);
@@ -244,6 +279,12 @@ const ManagementPortal = () => {
   };
 
   const sendStatusEmail = async (order: Order, status: string) => {
+    // STRICT BLOCK: If status is 'cancelled', DO NOT send any emails
+    if (status === 'cancelled' || order.status === 'cancelled') {
+      console.warn('[sendStatusEmail] BLOCKED: Status is cancelled - email sending is forbidden');
+      throw new Error('Email sending blocked: Order is cancelled. Credit note workflow must be used instead.');
+    }
+    
     try {
       const orderId = order.order_number || order.id.slice(0, 8).toUpperCase();
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://kivqvwdfujsnuwfxjtcz.supabase.co';
@@ -308,14 +349,171 @@ const ManagementPortal = () => {
     }
   };
 
+  // IBAN Extractor function
+  const extractIban = (order: Order): string | null => {
+    // Try to extract IBAN from customer_notes
+    if (order.customer_note) {
+      const ibanRegex = /[A-Z]{2}\d{2}[A-Z0-9]{4,30}/gi;
+      const matches = order.customer_note.match(ibanRegex);
+      if (matches && matches.length > 0) {
+        return matches[0].toUpperCase().replace(/\s/g, '');
+      }
+    }
+    
+    // Try to extract from Stripe metadata (if available)
+    // Note: This would require fetching Stripe session data
+    // For now, return null if not found in customer_notes
+    return null;
+  };
+
+  // Log activity function
+  const logActivity = async (orderId: string, action: string, details: Record<string, any>, adminId?: string) => {
+    try {
+      const { error } = await supabase
+        .from('activity_logs')
+        .insert({
+          order_id: orderId,
+          action,
+          details,
+          admin_id: adminId || 'system',
+        });
+      
+      if (error) {
+        console.error('[logActivity] Failed to log activity:', error);
+      } else {
+        console.log('[logActivity] Activity logged:', { orderId, action, details });
+      }
+    } catch (err) {
+      console.error('[logActivity] Error logging activity:', err);
+    }
+  };
+
+  // Fetch activity logs for an order
+  const fetchActivityLogs = async (orderId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('activity_logs')
+        .select('*')
+        .eq('order_id', orderId)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      setActivityLogs((data || []) as ActivityLog[]);
+    } catch (error) {
+      console.error('[fetchActivityLogs] Error fetching activity logs:', error);
+      setActivityLogs([]);
+    }
+  };
+
+  // Calculate financial statistics
+  const calculateFinancialStats = async () => {
+    try {
+      // Try to select with refund_amount, but fallback to basic fields if column doesn't exist
+      let ordersData: any[] = [];
+      let error: any = null;
+      
+      try {
+        const result = await supabase
+          .from('orders')
+          .select('total_price, invoice_number, credit_note_number, refund_amount');
+        ordersData = result.data || [];
+        error = result.error;
+      } catch (err: any) {
+        // If refund_amount column doesn't exist, select without it
+        if (err?.message?.includes('refund_amount') || err?.code === 'PGRST204') {
+          console.warn('[calculateFinancialStats] refund_amount column not found, using basic fields');
+          const result = await supabase
+            .from('orders')
+            .select('total_price, invoice_number, credit_note_number');
+          ordersData = result.data || [];
+          error = result.error;
+        } else {
+          throw err;
+        }
+      }
+      
+      if (error) throw error;
+      
+      let grossRevenue = 0;
+      let refunds = 0;
+      
+      (ordersData || []).forEach((order: any) => {
+        const price = typeof order.total_price === 'string' 
+          ? parseFloat(order.total_price) 
+          : (order.total_price || 0);
+        
+        // Add to gross revenue if invoice exists
+        if (order.invoice_number) {
+          grossRevenue += price;
+        }
+        
+        // Add to refunds if credit note exists
+        if (order.credit_note_number) {
+          // Use refund_amount if available, otherwise use full price
+          const refundAmount = order.refund_amount !== undefined && order.refund_amount !== null
+            ? (typeof order.refund_amount === 'string' ? parseFloat(order.refund_amount) : order.refund_amount)
+            : price;
+          refunds += refundAmount;
+        }
+      });
+      
+      setFinancialStats({
+        grossRevenue,
+        refunds,
+        netRevenue: grossRevenue - refunds,
+      });
+    } catch (error) {
+      console.error('[calculateFinancialStats] Error calculating stats:', error);
+    }
+  };
+
   const handleStatusChange = async (orderId: string, newStatus: string) => {
     console.log('Updating order status:', { orderId, newStatus });
     
-    // If changing to cancelled, show confirmation dialog
+    // THE REFUND CONNECTION: If changing to cancelled, COMPLETELY STOP old logic and redirect to processFullRefund
     if (newStatus === 'cancelled') {
-      setPendingCancelOrder({ orderId, newStatus });
+      const order = orders.find(o => o.id === orderId);
+      if (!order) {
+        toast.error('Objednávka nebola nájdená');
+        return;
+      }
+      
+      // Extract IBAN if available
+      const extractedIban = extractIban(order);
+      if (extractedIban) {
+        setRefundIban(extractedIban);
+      }
+      
+      // Set default refund amount to 100% of total price
+      const totalPrice = typeof order.total_price === 'string' 
+        ? parseFloat(order.total_price) 
+        : (order.total_price || 0);
+      
+      // If total_price is 0, use window.prompt to request amount
+      if (totalPrice === 0 || isNaN(totalPrice) || !totalPrice) {
+        const manualAmount = window.prompt('Order price is 0. Enter refund amount:');
+        if (!manualAmount || manualAmount.trim() === '') {
+          toast.error('Refund amount is required');
+          return;
+        }
+        const parsedAmount = parseFloat(manualAmount.trim());
+        if (isNaN(parsedAmount) || parsedAmount <= 0) {
+          toast.error('Please enter a valid amount greater than zero');
+          return;
+        }
+        setRefundAmount(parsedAmount.toFixed(2));
+      } else {
+        setRefundAmount(totalPrice.toFixed(2));
+      }
+      
+      // Set tax point date to today
+      setTaxPointDate(new Date().toISOString().split('T')[0]);
+      setRefundReason('');
+      
+      // Show dialog - when confirmed, it will call processFullRefund
+      setPendingCancelOrder(order);
       setCancelDialogOpen(true);
-      return;
+      return; // STOP - don't proceed with normal status change
     }
     
     // For other statuses, proceed normally
@@ -355,18 +553,17 @@ const ManagementPortal = () => {
         throw error;
       }
 
-      // If cancelled, generate and send credit note
-      if (newStatus === 'cancelled' && order) {
-        try {
-          await generateAndSendCreditNote(order);
-          toast.success('Objednávka zrušená a dobropis odoslaný zákazníkovi');
-        } catch (creditNoteError: any) {
-          console.error('[executeStatusChange] Credit note generation failed:', creditNoteError);
-          toast.error(`Chyba pri generovaní dobropisu: ${creditNoteError?.message || 'Neznáma chyba'}`);
-          toast.success('Status zmenený na Cancelled (dobropis sa nepodarilo odoslať)');
-        }
-      } else if (newStatus !== previousStatus && order && order.customer_email) {
-        // Send email for status changes to processing or completed
+      // DISCONNECTED: If cancelled, COMPLETELY STOP - NO automatic emails
+      // Email is sent ONLY through Refund Wizard (openRefundModal -> issueCreditNote)
+      if (newStatus === 'cancelled') {
+        console.log('[executeStatusChange] Status is CANCELLED - NO automatic emails. Use Refund Wizard instead.');
+        // Just update status, no emails
+        return;
+      }
+      
+      // For non-cancelled statuses, proceed with normal email workflows
+      if (newStatus !== previousStatus && order && order.customer_email && newStatus !== 'cancelled') {
+        // Send email for status changes to processing or completed (EXPLICITLY excluding cancelled)
         if (newStatus === 'processing' || newStatus === 'completed') {
           try {
             await sendStatusEmail(order, newStatus);
@@ -424,41 +621,269 @@ const ManagementPortal = () => {
     }
   };
 
-  const generateAndSendCreditNote = async (order: Order) => {
+  // THE REFUND CONNECTION: processFullRefund - Complete refund workflow in one indivisible unit
+  const processFullRefund = async (orderId: string, amount: number, reason: string) => {
+    console.log('[processFullRefund] Starting complete refund workflow:', { orderId, amount, reason });
+    
+    // Show admin message
+    toast.info('Generujem dobropis a odosielam refund email...');
+    
+    const order = orders.find(o => o.id === orderId);
+    if (!order) {
+      toast.error('Objednávka nebola nájdená');
+      return;
+    }
+
+    try {
+      // KROK A (Dáta): Create refundData object
+      // total_price = original_price * -1
+      // document_type = 'CREDIT_NOTE'
+      const originalPrice = typeof order.total_price === 'string' 
+        ? parseFloat(order.total_price) 
+        : (order.total_price || 0);
+      const negativeAmount = -Math.abs(amount);
+      
+      // VALIDATION: Ensure amount is negative
+      if (negativeAmount >= 0) {
+        console.error('[processFullRefund] CRITICAL ERROR: Amount is not negative!', { amount, negativeAmount });
+        throw new Error('Dobropis musí mať zápornú sumu. Aktuálna suma: ' + amount);
+      }
+      
+      const vatRate = 0.20; // 20% VAT
+      const negativeSubtotal = negativeAmount / (1 + vatRate);
+      const negativeTaxAmount = negativeAmount - negativeSubtotal;
+
+      // Get original invoice number (if exists)
+      const originalInvoiceNumber = order.invoice_number || null;
+      
+      // Generate credit note number: CN- + original invoice number
+      let creditNoteNumber: string;
+      if (originalInvoiceNumber && originalInvoiceNumber.startsWith('INV-')) {
+        creditNoteNumber = originalInvoiceNumber.replace(/^INV-/, 'CN-');
+      } else {
+        // Fallback: Generate new number if no invoice exists
+        const year = new Date().getFullYear();
+        const random = Math.floor(1000 + Math.random() * 9000);
+        creditNoteNumber = `CN-${year}-${random}`;
+      }
+
+      // Prepare items - single item for refund
+      const items = [{
+        name: `Storno objednávky ${order.order_number || order.id.slice(0, 8)}`,
+        price: negativeAmount, // Already negative
+        quantity: 1
+      }];
+
+      // KROK A: Create refundData object
+      const refundData = {
+        orderId: order.id,
+        orderNumber: order.order_number || '',
+        customerName: order.customer_name || 'Customer',
+        customerEmail: order.customer_email,
+        items: items,
+        totalAmount: negativeAmount, // original_price * -1
+        subtotal: negativeSubtotal, // Negative subtotal
+        taxAmount: negativeTaxAmount, // Negative tax
+        brand: order.car_brand || order.brand,
+        model: order.car_model || order.model,
+        fuelType: order.fuel_type,
+        year: order.year,
+        ecuType: order.ecu_type,
+        vin: order.vin,
+        documentType: 'CREDIT_NOTE' as const, // document_type = 'CREDIT_NOTE'
+        creditNote: true,
+        is_credit_note: true,
+        originalInvoiceNumber: originalInvoiceNumber,
+        creditNoteNumber: creditNoteNumber,
+        refundAmount: negativeAmount,
+        refundReason: reason,
+        refundIban: refundIban,
+        taxPointDate: taxPointDate,
+      };
+
+      console.log('[processFullRefund] KROK A: refundData created:', refundData);
+
+      // KROK B (Generovanie): Call Edge function and WAIT for PDF URL
+      console.log('[processFullRefund] KROK B: Calling Edge function generate-invoice...');
+      
+      const { data: invoiceResponse, error: invoiceError } = await supabase.functions.invoke('generate-invoice', {
+        body: refundData,
+      });
+
+      // ERROR HANDLING: If PDF generation fails, DO NOT change status
+      if (invoiceError) {
+        console.error('[processFullRefund] KROK B FAILED: Credit note generation failed:', invoiceError);
+        toast.error(`Chyba pri generovaní dobropisu: ${invoiceError.message}. Status objednávky sa nezmenil.`);
+        throw new Error(`Chyba pri generovaní dobropisu: ${invoiceError.message}`);
+      }
+
+      console.log('[processFullRefund] KROK B SUCCESS: Credit note PDF generated and email sent by Edge function');
+
+      // KROK C: Edge function already sent the email with PDF attachment
+      // The Edge function (generate-invoice) handles:
+      // - PDF generation with negative amounts
+      // - Saving PDF to credit-notes bucket
+      // - Saving credit_note_number and credit_note_pdf to database
+      // - Sending email with PDF attachment
+      // So KROK C is already complete!
+
+      // Update order status to cancelled and save refund data
+      // Note: credit_note_number and credit_note_pdf are already saved by Edge function
+      const { error: updateError } = await supabase
+        .from('orders')
+        .update({
+          status: 'cancelled',
+          refund_amount: negativeAmount,
+          refund_reason: reason || null,
+          refund_iban: refundIban || null,
+          tax_point_date: taxPointDate || null,
+        })
+        .eq('id', orderId);
+
+      if (updateError) {
+        console.error('[processFullRefund] Failed to update order status:', updateError);
+        throw new Error(`Chyba pri aktualizácii statusu: ${updateError.message}`);
+      }
+
+      console.log('[processFullRefund] Complete refund workflow finished successfully');
+      await fetchOrders();
+      toast.success(`Dobropis ${creditNoteNumber} vygenerovaný a odoslaný zákazníkovi.`);
+      
+    } catch (error: any) {
+      console.error('[processFullRefund] Refund workflow failed:', error);
+      toast.error(`Chyba pri refundácii: ${error.message}. Status objednávky sa nezmenil.`);
+      // Refresh orders to revert any optimistic updates
+      await fetchOrders();
+      throw error;
+    }
+  };
+
+  // Legacy handleRefund - now redirects to processFullRefund
+  const handleRefund = async (orderId: string, amount: number, reason: string) => {
+    // Redirect to processFullRefund
+    return processFullRefund(orderId, amount, reason);
+  };
+
+  // NEW: openRefundModal - Opens the Refund Wizard Modal
+  const openRefundModal = (order: Order) => {
+    console.log('[openRefundModal] Opening refund modal for order:', order.id);
+    
+    // Set default refund amount to order.total_price
+    const totalPrice = typeof order.total_price === 'string' 
+      ? parseFloat(order.total_price) 
+      : (order.total_price || 0);
+    
+    setRefundWizardAmount(totalPrice > 0 ? totalPrice.toFixed(2) : '');
+    setRefundWizardReason('');
+    setRefundModalOrder(order);
+    setRefundModalOpen(true);
+  };
+
+  // NEW: handleIssueCreditNote - Final action when confirming refund
+  const handleIssueCreditNote = async () => {
+    if (!refundModalOrder) {
+      toast.error('Objednávka nebola nájdená');
+      return;
+    }
+
+    // Ak je v DB nula, vezmeme manualAmount z Modalu
+    const amountToRefund = parseFloat(refundWizardAmount) || refundModalOrder.total_price || 0;
+    
+    if (!amountToRefund || amountToRefund <= 0) {
+      toast.error('Chyba: Suma pre dobropis musí byť vyššia ako 0.');
+      return;
+    }
+
+    if (!refundWizardReason.trim()) {
+      toast.error('Prosím zadajte dôvod refundácie');
+      return;
+    }
+
+    setIssuingCreditNote(true);
+    toast.info('Generujem dobropis a odosielam refund email...');
+
+    try {
+      // Presmerovanie: Použi ŠPECIÁLNY modul pre dobropisy
+      console.log("Spúšťam ŠPECIÁLNY modul pre dobropisy...");
+      
+      const requestPayload = {
+        orderId: refundModalOrder.id,
+        orderNumber: refundModalOrder.order_number || '',
+        customerEmail: refundModalOrder.customer_email,
+        customerName: refundModalOrder.customer_name || undefined,
+        totalAmount: parseFloat(amountToRefund.toFixed(2)), // Posielame plusové, Edge funkcia ho otočí na -1
+        taxAmount: parseFloat(amountToRefund.toFixed(2)) * 0.20, // Výpočet DPH (ak si platca)
+        refundReason: refundWizardReason,
+      };
+      
+      // Debugging Frontendu: Console.log pred volaním funkcie
+      console.log("INVOKING FUNCTION generate-credit-note WITH:", requestPayload);
+      console.log('[handleIssueCreditNote] Sending request to generate-credit-note:', JSON.stringify(requestPayload, null, 2));
+      
+      const { data, error } = await supabase.functions.invoke('generate-credit-note', {
+        body: requestPayload,
+      });
+
+      if (error) {
+        console.error('[handleIssueCreditNote] Error:', error);
+        throw new Error(`Chyba pri generovaní dobropisu: ${error.message}`);
+      }
+
+      // Edge funkcia už aktualizovala databázu (status, refund_amount, credit_note_number, credit_note_pdf)
+      // Takže len refreshneme dáta
+      console.log('[handleIssueCreditNote] Credit note generated successfully:', data);
+
+      console.log('[handleIssueCreditNote] Dobropis úspešne vygenerovaný a odoslaný!');
+      await fetchOrders();
+      toast.success('Dobropis úspešne vygenerovaný a odoslaný!');
+      
+      // Close modal
+      setRefundModalOpen(false);
+      setRefundModalOrder(null);
+      setRefundWizardAmount('');
+      setRefundWizardReason('');
+      
+    } catch (error: any) {
+      console.error('[handleIssueCreditNote] Failed:', error);
+      toast.error(`Chyba: ${error.message}`);
+    } finally {
+      setIssuingCreditNote(false);
+    }
+  };
+
+  const generateAndSendCreditNote = async (order: Order, partialAmount?: number | null) => {
     console.log('[generateAndSendCreditNote] Starting credit note generation for order:', order.id);
     
-    // Get Supabase configuration with fallbacks
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://kivqvwdfujsnuwfxjtcz.supabase.co';
-    const authKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
+    // Use partial amount if provided, otherwise use full order amount
+    const totalAmount = typeof order.total_price === 'string' 
+      ? parseFloat(order.total_price) 
+      : (order.total_price || 0);
+    const refundAmountValue = partialAmount !== null && partialAmount !== undefined 
+      ? partialAmount 
+      : totalAmount;
     
-    console.log('[generateAndSendCreditNote] Supabase URL:', supabaseUrl ? '✓ Set' : '✗ Missing');
-    console.log('[generateAndSendCreditNote] Service Role Key:', authKey ? '✓ Set' : '✗ Missing');
+    console.log('[generateAndSendCreditNote] Refund amount:', refundAmountValue, 'of', totalAmount, `(${((refundAmountValue / totalAmount) * 100).toFixed(1)}%)`);
+    
+    // Authorization moved to backend - Edge function has access to SERVICE_ROLE_KEY natively
+    console.log('[generateAndSendCreditNote] Calling Edge function - authorization handled on backend');
 
-    if (!supabaseUrl) {
-      console.error('[generateAndSendCreditNote] Missing VITE_SUPABASE_URL');
-      throw new Error('Missing Supabase URL configuration. Please set VITE_SUPABASE_URL in .env file.');
+    // Get original invoice number (if exists)
+    const originalInvoiceNumber = order.invoice_number || null;
+    
+    // Generate credit note number by replacing INV- prefix with CN- prefix
+    // If invoice is INV-2026-5857, credit note will be CN-2026-5857
+    let creditNoteNumber: string;
+    if (originalInvoiceNumber && originalInvoiceNumber.startsWith('INV-')) {
+      creditNoteNumber = originalInvoiceNumber.replace(/^INV-/, 'CN-');
+      console.log('[generateAndSendCreditNote] Original invoice:', originalInvoiceNumber);
+      console.log('[generateAndSendCreditNote] Credit note number (mirrored):', creditNoteNumber);
+    } else {
+      // Fallback: Generate new number if no invoice exists
+      const year = new Date().getFullYear();
+      const random = Math.floor(1000 + Math.random() * 9000);
+      creditNoteNumber = `CN-${year}-${random}`;
+      console.log('[generateAndSendCreditNote] No original invoice found, generating new credit note number:', creditNoteNumber);
     }
-    
-    // Determine which auth key to use (prefer SERVICE_ROLE_KEY, fallback to ANON_KEY)
-    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtpdnF2d2RmdWpzbnV3ZnhqdGN6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcwMjQ1OTMsImV4cCI6MjA4MjYwMDU5M30.-iDvC0T6lozYv5d4xrHrHeS9PSGOfqwajZapMB7hqjQ';
-    const finalAuthKey = authKey || anonKey;
-    
-    if (!authKey) {
-      console.warn('[generateAndSendCreditNote] Missing VITE_SUPABASE_SERVICE_ROLE_KEY - using ANON_KEY as fallback');
-      console.warn('[generateAndSendCreditNote] Note: ANON_KEY may have limited permissions. For production, set VITE_SUPABASE_SERVICE_ROLE_KEY in .env file.');
-    }
-    
-    if (!finalAuthKey) {
-      throw new Error('Missing Supabase authentication. Please set VITE_SUPABASE_SERVICE_ROLE_KEY or VITE_SUPABASE_ANON_KEY in .env file.');
-    }
-    
-    console.log('[generateAndSendCreditNote] Using auth key:', authKey ? 'SERVICE_ROLE_KEY' : 'ANON_KEY (fallback)');
-
-    // Generate credit note invoice number (original invoice number + "-D")
-    const originalInvoiceNumber = order.invoice_number || `INV-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
-    const creditNoteNumber = `${originalInvoiceNumber}-D`;
-    console.log('[generateAndSendCreditNote] Original invoice:', originalInvoiceNumber);
-    console.log('[generateAndSendCreditNote] Credit note number:', creditNoteNumber);
 
     // Get order items for credit note
     // Try order_items table first, but fallback to service_type from orders table if it doesn't exist
@@ -481,22 +906,88 @@ const ManagementPortal = () => {
       // Continue with fallback
     }
 
-    // Calculate negative total amount
-    const totalAmount = typeof order.total_price === 'string' 
+    // Calculate negative amounts (THE MIRROR LOGIC)
+    // Use refundAmountValue from parameter, or full order amount if not specified
+    const originalTotalAmount = typeof order.total_price === 'string' 
       ? parseFloat(order.total_price) 
       : (order.total_price || 0);
-    const negativeAmount = -Math.abs(totalAmount);
+    
+    // THE PRICE RESCUE: If total_price is 0 or missing, use window.prompt to request amount
+    let refundAmountToUse = refundAmountValue !== null && refundAmountValue !== undefined 
+      ? refundAmountValue 
+      : originalTotalAmount;
+    
+    if (refundAmountToUse === 0 || isNaN(refundAmountToUse) || !refundAmountToUse) {
+      console.warn('[generateAndSendCreditNote] Total price is ZERO or missing - requesting manual input');
+      const manualAmount = window.prompt('Order price is 0. Enter refund amount:');
+      if (!manualAmount || manualAmount.trim() === '') {
+        toast.error('Refund amount is required');
+        return;
+      }
+      const parsedAmount = parseFloat(manualAmount.trim());
+      if (isNaN(parsedAmount) || parsedAmount <= 0) {
+        toast.error('Please enter a valid amount greater than zero');
+        return;
+      }
+      refundAmountToUse = parsedAmount;
+    }
+    
+    // Transform all amounts to negative (mirror logic)
+    const negativeTotalAmount = -Math.abs(refundAmountToUse);
+    const vatRate = 0.20; // 20% VAT
+    const negativeSubtotal = negativeTotalAmount / (1 + vatRate);
+    const negativeTaxAmount = negativeTotalAmount - negativeSubtotal;
+    
+    console.log('[generateAndSendCreditNote] THE MIRROR LOGIC - Transformed amounts:', {
+      originalTotal: originalTotalAmount,
+      refundAmount: refundAmountToUse,
+      negativeTotal: negativeTotalAmount,
+      negativeSubtotal: negativeSubtotal,
+      negativeTax: negativeTaxAmount,
+    });
+    
+    // CRITICAL: Final validation - ensure totalAmount is NOT zero and is valid
+    if (negativeTotalAmount === 0 || isNaN(negativeTotalAmount) || !isFinite(negativeTotalAmount)) {
+      console.error('[generateAndSendCreditNote] CRITICAL ERROR: Calculated negative total is ZERO or invalid!', {
+        negativeTotalAmount,
+        refundAmountToUse,
+        originalTotalAmount,
+      });
+      throw new Error('Cannot generate credit note: Calculated amount is zero or invalid. Please check order data.');
+    }
 
     // Prepare items for credit note (with negative prices)
     // If order_items exists, use it; otherwise use service_type from orders table
     let items: Array<{ name: string; price: number; quantity: number }>;
     
     if (orderItemsData && orderItemsData.length > 0) {
-      items = orderItemsData.map(item => ({
-        name: item.service_type || item.name || 'Service',
-        price: -Math.abs(typeof item.price === 'string' ? parseFloat(item.price) : (item.price || 0)),
-        quantity: item.quantity || 1
-      }));
+      // DATA EXTRACTION FIX: If item prices are zero, calculate from total_price
+      const itemsWithPrices = orderItemsData.map(item => {
+        const itemPrice = typeof item.price === 'string' ? parseFloat(item.price) : (item.price || 0);
+        // If item price is zero or missing, calculate from total
+        const finalPrice = itemPrice > 0 ? itemPrice : (Math.abs(negativeTotalAmount) / orderItemsData.length);
+        return {
+          name: item.service_type || item.name || 'Service',
+          price: -Math.abs(finalPrice), // Ensure negative
+          quantity: item.quantity || 1
+        };
+      });
+      
+      // Verify sum matches negativeTotalAmount (allow small rounding differences)
+      const itemsSum = itemsWithPrices.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+      const difference = Math.abs(itemsSum - negativeTotalAmount);
+      
+      if (difference > 0.01) {
+        // Adjust prices proportionally to match total
+        const adjustmentFactor = negativeTotalAmount / itemsSum;
+        items = itemsWithPrices.map(item => ({
+          ...item,
+          price: item.price * adjustmentFactor
+        }));
+        console.log('[generateAndSendCreditNote] Adjusted item prices to match total:', { itemsSum, negativeTotalAmount, adjustmentFactor });
+      } else {
+        items = itemsWithPrices;
+      }
     } else {
       // Fallback: Use service_type from orders table
       // service_type can be an array or comma-separated string
@@ -505,135 +996,79 @@ const ManagementPortal = () => {
         : (typeof order.service_type === 'string' ? order.service_type.split(',').map(s => s.trim()) : []);
       
       if (serviceTypes.length > 0) {
-        const pricePerService = negativeAmount / serviceTypes.length;
+        const pricePerService = negativeTotalAmount / serviceTypes.length;
         items = serviceTypes.map(serviceName => ({
           name: serviceName.replace(/[\[\]"]/g, '').trim() || 'ECU Tuning Service',
           price: pricePerService,
           quantity: 1
         }));
       } else {
+        // FALLBACK: Create artificial item if order_items doesn't exist
+        // Single item with full negative amount
         items = [{
-          name: 'ECU Tuning Service',
-          price: negativeAmount,
+          name: `Refund of Order ${order.order_number || order.id.slice(0, 8)}`,
+          price: negativeTotalAmount, // Already negative
           quantity: 1
         }];
+        console.log('[generateAndSendCreditNote] Using fallback artificial item:', items[0]);
       }
     }
     
+    // CRITICAL: Verify no zero prices
+    const hasZeroPrice = items.some(item => item.price === 0 || Math.abs(item.price) < 0.01);
+    if (hasZeroPrice) {
+      console.error('[generateAndSendCreditNote] CRITICAL ERROR: Found zero prices in items!', items);
+      throw new Error('Cannot generate credit note: Found zero prices in items. Please check order data.');
+    }
+    
     console.log('[generateAndSendCreditNote] Prepared items for credit note:', items);
+    console.log('[generateAndSendCreditNote] Items total sum:', items.reduce((sum, item) => sum + (item.price * item.quantity), 0));
 
-    // Call generate-invoice function with creditNote flag
+    // Call generate-invoice function with documentType: 'CREDIT_NOTE' and transformed data
     const requestPayload = {
       orderId: order.id,
       orderNumber: order.order_number || '',
       customerName: order.customer_name || 'Customer',
       customerEmail: order.customer_email,
       items: items,
-      totalAmount: negativeAmount,
+      totalAmount: negativeTotalAmount, // Negative total (multiplied by -1)
+      subtotal: negativeSubtotal, // Negative subtotal (multiplied by -1)
+      taxAmount: negativeTaxAmount, // Negative tax (multiplied by -1)
       brand: order.car_brand || order.brand,
       model: order.car_model || order.model,
       fuelType: order.fuel_type,
       year: order.year,
       ecuType: order.ecu_type,
       vin: order.vin,
-      creditNote: true, // Flag to indicate this is a credit note
+      documentType: 'CREDIT_NOTE' as const, // Explicit document type parameter
+      creditNote: true, // Legacy flag for backward compatibility
       originalInvoiceNumber: originalInvoiceNumber,
-      creditNoteNumber: creditNoteNumber
+      creditNoteNumber: creditNoteNumber,
+      refundAmount: negativeTotalAmount, // Store as negative for dashboard calculation
+      refundReason: refundReason,
+      refundIban: refundIban,
+      taxPointDate: taxPointDate,
     };
     
-    console.log('[generateAndSendCreditNote] Calling generate-invoice with payload:', JSON.stringify(requestPayload, null, 2));
+    console.log('[generateAndSendCreditNote] Calling Edge function - backend handles authorization and DB updates');
     
-    const invoiceResponse = await fetch(`${supabaseUrl}/functions/v1/generate-invoice`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${finalAuthKey}`,
-      },
-      body: JSON.stringify(requestPayload),
+    // Use supabase.functions.invoke - backend handles all authorization and DB updates
+    const { data: invoiceData, error: invoiceError } = await supabase.functions.invoke('generate-invoice', {
+      body: requestPayload,
     });
 
-    console.log('[generateAndSendCreditNote] Response status:', invoiceResponse.status);
-    
-    if (!invoiceResponse.ok) {
-      const errorText = await invoiceResponse.text();
-      console.error('[generateAndSendCreditNote] Invoice generation failed:', errorText);
-      throw new Error(`Invoice generation failed: ${errorText}`);
+    if (invoiceError) {
+      console.error('[generateAndSendCreditNote] Invoice generation failed:', invoiceError);
+      throw new Error(`Invoice generation failed: ${invoiceError.message}`);
     }
 
-    const invoiceData = await invoiceResponse.json();
-    console.log('[generateAndSendCreditNote] Credit note generated successfully:', invoiceData);
+    console.log('[generateAndSendCreditNote] Credit note generated successfully - backend handled DB update');
     
-    // Extract credit note data from response
-    // Edge Function returns: invoiceNumber, invoiceUrl, creditNoteNumber, creditNotePdf
-    const generatedCreditNoteNumber = invoiceData.creditNoteNumber || invoiceData.invoiceNumber || creditNoteNumber;
-    const generatedCreditNotePdf = invoiceData.creditNotePdf || invoiceData.invoiceUrl || null;
+    // Simple response handling - backend already updated the database
+    // Just refresh the orders list to show updated data
+    await fetchOrders();
     
-    console.log('[generateAndSendCreditNote] Extracted credit note data:', {
-      creditNoteNumber: generatedCreditNoteNumber,
-      creditNotePdf: generatedCreditNotePdf,
-      fullResponse: invoiceData
-    });
-    
-    console.log('[generateAndSendCreditNote] Extracted from response:', {
-      credit_note_number: generatedCreditNoteNumber,
-      credit_note_pdf: generatedCreditNotePdf
-    });
-    
-    // CRITICAL: Update database from frontend to ensure data is saved
-    // Edge Function may have saved it, but we'll do it again from frontend to be sure
-    if (generatedCreditNoteNumber && generatedCreditNotePdf) {
-      console.log('[generateAndSendCreditNote] Updating database from frontend...');
-      
-      // Use SERVICE_ROLE_KEY if available, otherwise use ANON_KEY
-      let supabaseClient = supabase;
-      
-      if (finalAuthKey && finalAuthKey !== anonKey) {
-        try {
-          supabaseClient = createClient(supabaseUrl, finalAuthKey);
-          console.log('[generateAndSendCreditNote] Using SERVICE_ROLE_KEY for database update');
-        } catch (err) {
-          console.warn('[generateAndSendCreditNote] Failed to create client with SERVICE_ROLE_KEY, using default:', err);
-          supabaseClient = supabase;
-        }
-      }
-      
-      const { data: updateData, error: updateError } = await supabaseClient
-        .from('orders')
-        .update({
-          credit_note_number: generatedCreditNoteNumber,
-          credit_note_pdf: generatedCreditNotePdf,
-        })
-        .eq('id', order.id)
-        .select('credit_note_number, credit_note_pdf');
-      
-      if (updateError) {
-        console.error('[generateAndSendCreditNote] Failed to update database from frontend:', updateError);
-        console.error('[generateAndSendCreditNote] Error details:', JSON.stringify(updateError, null, 2));
-        throw new Error(`Failed to save credit note to database: ${updateError.message}`);
-      } else {
-        console.log('[generateAndSendCreditNote] ✓ Database updated successfully from frontend:', updateData);
-        
-        if (updateData && updateData.length > 0) {
-          const updated = updateData[0];
-          if (updated.credit_note_number === generatedCreditNoteNumber && updated.credit_note_pdf === generatedCreditNotePdf) {
-            console.log('[generateAndSendCreditNote] ✓ Verification: Credit note data matches in database');
-          } else {
-            console.warn('[generateAndSendCreditNote] ⚠ Verification: Credit note data mismatch');
-            console.warn('[generateAndSendCreditNote] Expected:', {
-              credit_note_number: generatedCreditNoteNumber,
-              credit_note_pdf: generatedCreditNotePdf
-            });
-            console.warn('[generateAndSendCreditNote] Got:', {
-              credit_note_number: updated.credit_note_number,
-              credit_note_pdf: updated.credit_note_pdf
-            });
-          }
-        }
-      }
-    } else {
-      console.error('[generateAndSendCreditNote] CRITICAL: Missing credit note data in response:', invoiceData);
-      throw new Error('Credit note generation failed: Missing credit note number or PDF URL in response');
-    }
+    toast.success(`Credit Note ${creditNoteNumber} generated and sent to customer. Balance adjusted.`);
   };
 
   const handleFieldChange = (orderId: string, field: 'checksum_crc' | 'internal_note', value: string) => {
@@ -813,6 +1248,15 @@ const ManagementPortal = () => {
         .from('modified-files')
         .getPublicUrl(fileName);
 
+      // CRITICAL: Check if order is cancelled - if so, abort invoice generation
+      const currentOrder = orders.find(o => o.id === orderId);
+      if (currentOrder?.status === 'cancelled') {
+        console.warn('[handleResultUpload] Order is CANCELLED - aborting invoice generation');
+        toast.error('Cannot upload result file for cancelled order');
+        setUploadingId(null);
+        return;
+      }
+      
       // Step 2: Update status to 'completed' FIRST (Status First)
       console.log('[handleResultUpload] Step 1: Updating status to completed for orderId:', orderId);
       const { error: updateError } = await supabase
@@ -912,23 +1356,9 @@ const ManagementPortal = () => {
         (async () => {
           try {
             console.log('[handleResultUpload] Step 3: Invoice started - generating invoice for orderId:', orderId);
-            const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://kivqvwdfujsnuwfxjtcz.supabase.co';
-            // Use SERVICE_ROLE_KEY for admin access (same mechanism as emails)
-            const SERVICE_ROLE_KEY = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY || '';
             
-            if (!SERVICE_ROLE_KEY) {
-              console.warn('[handleResultUpload] SERVICE_ROLE_KEY not found, using anon key as fallback');
-            }
-            
-            const authKey = SERVICE_ROLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-            
-            const invoiceResponse = await fetch(`${supabaseUrl}/functions/v1/generate-invoice`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${authKey}`,
-              },
-              body: JSON.stringify({
+            const { data: invoiceData, error: invoiceError } = await supabase.functions.invoke('generate-invoice', {
+              body: {
                 orderId: finalOrder.id,
                 orderNumber: finalOrder.order_number || '',
                 customerName: finalOrder.customer_name || 'Customer',
@@ -944,16 +1374,15 @@ const ManagementPortal = () => {
                 year: finalOrder.year ? parseInt(finalOrder.year.toString()) : undefined,
                 ecuType: finalOrder.ecu_type || undefined,
                 vin: finalOrder.vin || undefined,
-              }),
+              },
             });
 
-            const invoiceData = await invoiceResponse.json();
-            console.log('[handleResultUpload] Invoice generation response:', invoiceResponse.status, invoiceData);
+            console.log('[handleResultUpload] Invoice generation response:', invoiceData, invoiceError);
 
-            if (!invoiceResponse.ok || invoiceData.success === false) {
+            if (invoiceError || !invoiceData || invoiceData.success === false) {
               console.error('[handleResultUpload] Invoice generation failed (non-fatal):', {
-                status: invoiceResponse.status,
-                error: invoiceData.error,
+                error: invoiceError,
+                data: invoiceData,
               });
             } else {
               console.log('[handleResultUpload] Invoice generated and sent successfully');
@@ -1032,23 +1461,9 @@ const ManagementPortal = () => {
         (async () => {
           try {
             console.log('[handleResultUpload] Step 3: Invoice started - generating invoice for orderId:', orderId);
-            const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://kivqvwdfujsnuwfxjtcz.supabase.co';
-            // Use SERVICE_ROLE_KEY for admin access (same mechanism as emails)
-            const SERVICE_ROLE_KEY = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY || '';
             
-            if (!SERVICE_ROLE_KEY) {
-              console.warn('[handleResultUpload] SERVICE_ROLE_KEY not found, using anon key as fallback');
-            }
-            
-            const authKey = SERVICE_ROLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-            
-            const invoiceResponse = await fetch(`${supabaseUrl}/functions/v1/generate-invoice`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${authKey}`,
-              },
-              body: JSON.stringify({
+            const { data: invoiceData, error: invoiceError } = await supabase.functions.invoke('generate-invoice', {
+              body: {
                 orderId: order.id,
                 orderNumber: order.order_number || '',
                 customerName: order.customer_name || 'Customer',
@@ -1064,16 +1479,15 @@ const ManagementPortal = () => {
                 year: order.year ? parseInt(order.year.toString()) : undefined,
                 ecuType: order.ecu_type || undefined,
                 vin: order.vin || undefined,
-              }),
+              },
             });
 
-            const invoiceData = await invoiceResponse.json();
-            console.log('[handleResultUpload] Invoice generation response:', invoiceResponse.status, invoiceData);
+            console.log('[handleResultUpload] Invoice generation response:', invoiceData, invoiceError);
 
-            if (!invoiceResponse.ok || invoiceData.success === false) {
+            if (invoiceError || !invoiceData || invoiceData.success === false) {
               console.error('[handleResultUpload] Invoice generation failed (non-fatal):', {
-                status: invoiceResponse.status,
-                error: invoiceData.error,
+                error: invoiceError,
+                data: invoiceData,
               });
             } else {
               console.log('[handleResultUpload] Invoice generated and sent successfully');
@@ -1229,6 +1643,15 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
     });
   };
 
+  // Fetch activity logs when detail order changes
+  useEffect(() => {
+    if (detailOrder?.id) {
+      fetchActivityLogs(detailOrder.id);
+    } else {
+      setActivityLogs([]);
+    }
+  }, [detailOrder?.id]);
+
   // Show loading while checking auth
   if (isCheckingAuth) {
     return (
@@ -1292,6 +1715,33 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
       </header>
 
       <main className="w-full max-w-[77%] mx-auto px-12 py-8">
+        {/* Financial Dashboard */}
+        {financialStats && (
+          <div className="mb-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="glass-card p-6 border border-primary/20">
+              <h3 className="text-sm font-medium text-muted-foreground mb-2">Gross Revenue</h3>
+              <p className="text-2xl font-bold text-green-400">
+                {financialStats.grossRevenue.toFixed(2)} €
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">Všetky faktúry (INV)</p>
+            </div>
+            <div className="glass-card p-6 border border-primary/20">
+              <h3 className="text-sm font-medium text-muted-foreground mb-2">Refunds</h3>
+              <p className="text-2xl font-bold text-red-400">
+                -{financialStats.refunds.toFixed(2)} €
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">Všetky dobropisy (CN)</p>
+            </div>
+            <div className="glass-card p-6 border border-primary/20 bg-primary/5">
+              <h3 className="text-sm font-medium text-muted-foreground mb-2">Net Revenue</h3>
+              <p className={`text-2xl font-bold ${financialStats.netRevenue >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {financialStats.netRevenue.toFixed(2)} €
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">Skutočný zisk</p>
+            </div>
+          </div>
+        )}
+
         {/* Revenue Header */}
         <div className="glass-card p-6 mb-8">
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
@@ -1493,7 +1943,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                               href={order.credit_note_pdf || '#'}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-xs font-mono text-red-400 hover:text-red-300 underline truncate block"
+                              className="text-xs font-mono text-red-500 hover:text-red-400 underline truncate block"
                               title="Download Credit Note PDF"
                             >
                               {order.credit_note_number}
@@ -1553,6 +2003,15 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                           >
                             <FileText className="w-4 h-4" />
                           </button>
+                          {order.status !== 'cancelled' && (
+                            <button
+                              onClick={() => openRefundModal(order)}
+                              className="p-2 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-400 transition-colors flex-shrink-0"
+                              title="Vystaviť dobropis / Issue Refund"
+                            >
+                              <RotateCcw className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -1696,7 +2155,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                             href={detailOrder.credit_note_pdf || '#'}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-2 text-red-400 hover:text-red-300 underline"
+                            className="inline-flex items-center gap-2 text-red-500 hover:text-red-400 underline"
                           >
                             <FileText className="w-4 h-4" />
                             <span className="font-mono">{detailOrder.credit_note_number}</span>
@@ -1810,6 +2269,61 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                     </h3>
                     <div className="bg-primary/10 p-4 rounded-lg">
                       <p className="text-foreground whitespace-pre-wrap">{detailOrder.internal_note}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Activity Log */}
+                {activityLogs.length > 0 && (
+                  <div className="mt-6 pt-6 border-t border-primary/20">
+                    <h3 className="text-lg font-semibold text-foreground border-b border-primary/20 pb-2 mb-4">
+                      Časová os aktivít
+                    </h3>
+                    <div className="space-y-3">
+                      {activityLogs.map((log, index) => {
+                        const actionLabels: Record<string, string> = {
+                          'INVOICE_GENERATED': 'Faktúra vystavená',
+                          'CN_GENERATED': 'Dobropis vystavený',
+                          'STATUS_CHANGED': 'Zmena statusu',
+                          'FILE_UPLOADED': 'Súbor nahraný',
+                        };
+                        
+                        const actionColors: Record<string, string> = {
+                          'INVOICE_GENERATED': 'text-green-400',
+                          'CN_GENERATED': 'text-red-400',
+                          'STATUS_CHANGED': 'text-blue-400',
+                          'FILE_UPLOADED': 'text-yellow-400',
+                        };
+                        
+                        return (
+                          <div key={log.id} className="flex items-start gap-3 pb-3 border-b border-primary/10 last:border-0">
+                            <div className="flex-shrink-0 w-2 h-2 rounded-full bg-primary mt-2" />
+                            <div className="flex-1">
+                              <div className="flex items-center justify-between">
+                                <span className={`font-medium ${actionColors[log.action] || 'text-foreground'}`}>
+                                  {actionLabels[log.action] || log.action}
+                                </span>
+                                <span className="text-xs text-muted-foreground">
+                                  {new Date(log.created_at).toLocaleString('sk-SK')}
+                                </span>
+                              </div>
+                              {log.details && Object.keys(log.details).length > 0 && (
+                                <div className="mt-1 text-sm text-muted-foreground">
+                                  {log.action === 'INVOICE_GENERATED' && log.details.invoice_number && (
+                                    <span>Faktúra: {log.details.invoice_number}</span>
+                                  )}
+                                  {log.action === 'CN_GENERATED' && log.details.credit_note_number && (
+                                    <span>Dobropis: {log.details.credit_note_number}</span>
+                                  )}
+                                  {log.action === 'STATUS_CHANGED' && (
+                                    <span>{log.details.from} → {log.details.to}</span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -1950,27 +2464,72 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
 
       {/* Cancel Order Confirmation Dialog */}
       <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent className="sm:max-w-[500px]">
           <AlertDialogHeader>
-            <AlertDialogTitle>Vytvoriť dobropis a zrušiť objednávku?</AlertDialogTitle>
+            <AlertDialogTitle>Storno objednávky a vrátenie peňazí</AlertDialogTitle>
             <AlertDialogDescription>
-              Naozaj chcete vytvoriť dobropis a zrušiť túto objednávku? Tento krok vygeneruje zápornú faktúru a odošle ju zákazníkovi na email. 
-              Suma sa automaticky odpočíta z celkových tržieb.
+              Vyplňte údaje pre vytvorenie dobropisu a storno objednávky.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="refund-amount">Suma na vrátenie (€)</Label>
+              <Input
+                id="refund-amount"
+                type="number"
+                step="0.01"
+                min="0.01"
+                placeholder="0.00"
+                value={refundAmount}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                    setRefundAmount(value);
+                  }
+                }}
+                className="text-lg font-mono"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="refund-reason">Dôvod storna</Label>
+              <Textarea
+                id="refund-reason"
+                placeholder="Zadajte dôvod storna objednávky..."
+                value={refundReason}
+                onChange={(e) => setRefundReason(e.target.value)}
+                rows={3}
+                className="resize-none"
+              />
+            </div>
+          </div>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => {
               setCancelDialogOpen(false);
               setPendingCancelOrder(null);
+              setRefundAmount('');
+              setRefundReason('');
             }}>
               Zrušiť
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={async () => {
                 if (pendingCancelOrder) {
+                  const amount = parseFloat(refundAmount);
+                  if (isNaN(amount) || amount <= 0) {
+                    toast.error('Prosím zadajte platnú sumu väčšiu ako nula');
+                    return;
+                  }
+                  
                   setCancelDialogOpen(false);
-                  await executeStatusChange(pendingCancelOrder.orderId, pendingCancelOrder.newStatus);
-                  setPendingCancelOrder(null);
+                  try {
+                    await handleRefund(pendingCancelOrder.id, amount, refundReason);
+                    setPendingCancelOrder(null);
+                    setRefundAmount('');
+                    setRefundReason('');
+                  } catch (error: any) {
+                    console.error('[CancelDialog] Refund failed:', error);
+                    toast.error(error?.message || 'Chyba pri spracovaní refundácie');
+                  }
                 }
               }}
               className="bg-red-500 hover:bg-red-600 text-white"
@@ -1980,6 +2539,98 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* NEW: Refund Wizard Modal */}
+      <Dialog open={refundModalOpen} onOpenChange={setRefundModalOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold text-foreground flex items-center gap-2">
+              <RotateCcw className="w-5 h-5 text-red-500" />
+              Refundácia objednávky {refundModalOrder?.order_number || refundModalOrder?.id.slice(0, 8).toUpperCase()}
+            </DialogTitle>
+            <DialogDescription>
+              Vyplňte údaje pre vytvorenie dobropisu. Email s prílohou bude automaticky odoslaný zákazníkovi.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            {refundModalOrder && (
+              <>
+                <div className="p-3 bg-secondary/30 rounded-lg">
+                  <p className="text-sm text-muted-foreground">Zákazník</p>
+                  <p className="font-semibold text-foreground">{refundModalOrder.customer_name}</p>
+                  <p className="text-sm text-muted-foreground mt-1">{refundModalOrder.customer_email}</p>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="refund-wizard-amount">Refund Amount (€)</Label>
+                  <Input
+                    id="refund-wizard-amount"
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    placeholder="0.00"
+                    value={refundWizardAmount}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                        setRefundWizardAmount(value);
+                      }
+                    }}
+                    className="text-lg font-mono"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Predvolená suma: {typeof refundModalOrder.total_price === 'string' 
+                      ? parseFloat(refundModalOrder.total_price).toFixed(2) 
+                      : (refundModalOrder.total_price || 0).toFixed(2)} €
+                  </p>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="refund-wizard-reason">Reason for Credit Note</Label>
+                  <Textarea
+                    id="refund-wizard-reason"
+                    placeholder="Zadajte dôvod refundácie..."
+                    value={refundWizardReason}
+                    onChange={(e) => setRefundWizardReason(e.target.value)}
+                    rows={3}
+                    className="resize-none"
+                  />
+                </div>
+              </>
+            )}
+          </div>
+          <DialogFooter>
+            <button
+              onClick={() => {
+                setRefundModalOpen(false);
+                setRefundModalOrder(null);
+                setRefundWizardAmount('');
+                setRefundWizardReason('');
+              }}
+              className="px-4 py-2 rounded-lg bg-secondary hover:bg-secondary/80 text-foreground transition-colors"
+              disabled={issuingCreditNote}
+            >
+              Zrušiť
+            </button>
+            <button
+              onClick={handleIssueCreditNote}
+              disabled={issuingCreditNote || !refundWizardAmount || !refundWizardReason.trim()}
+              className="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {issuingCreditNote ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  Spracovávam...
+                </>
+              ) : (
+                <>
+                  <RotateCcw className="w-4 h-4" />
+                  Potvrdiť a odoslať Dobropis
+                </>
+              )}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 };

@@ -28,9 +28,22 @@ export interface Order {
   invoice_url: string | null;
   credit_note_number: string | null;
   credit_note_pdf: string | null;
+  refund_reason: string | null;
+  tax_point_date: string | null;
+  refund_iban: string | null;
+  refund_amount: number | null;
   stripe_session_id: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface ActivityLog {
+  id: string;
+  order_id: string;
+  action: string;
+  details: Record<string, any>;
+  created_at: string;
+  admin_id: string | null;
 }
 
 export interface OrderInsert {
