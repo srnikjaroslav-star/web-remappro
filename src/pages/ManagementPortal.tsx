@@ -1,10 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { 
-  Download, Upload, Eye, CheckCircle, Clock, Package, 
-  RefreshCw, Search, User, Power, Save, Edit3, LogOut, FileText, X, RotateCcw
+  Download, Upload, Eye, CheckCircle,
+  RefreshCw, Search, Power, Save, Trash2, LogOut, FileText, X, RotateCcw
 } from 'lucide-react';
-import Logo from '@/components/Logo';
 import SystemStatus, { fetchSystemStatusFromDB, setSystemStatusInDB, isSystemOnline, SystemStatusMode } from '@/components/SystemStatus';
 import SmartTooltip from '@/components/SmartTooltip';
 import InternalNoteModal from '@/components/InternalNoteModal';
@@ -43,6 +42,7 @@ const ManagementPortal = () => {
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [activeRowId, setActiveRowId] = useState<string | null>(null);
   const [editingFields, setEditingFields] = useState<Record<string, { checksum_crc: string; internal_note: string; important_note: string }>>({});
   const [importantNote, setImportantNote] = useState<string>('');
   const [savingImportantNote, setSavingImportantNote] = useState<string | null>(null);
@@ -453,7 +453,7 @@ const ManagementPortal = () => {
           const refundAmount = order.refund_amount !== undefined && order.refund_amount !== null
             ? (typeof order.refund_amount === 'string' ? parseFloat(order.refund_amount) : order.refund_amount)
             : price;
-          refunds += refundAmount;
+          refunds += Math.abs(refundAmount || 0);
         }
       });
       
@@ -590,23 +590,23 @@ const ManagementPortal = () => {
           }
         } else {
           const statusLabels: Record<string, string> = {
-            'pending': 'Pending',
-            'processing': 'Processing',
-            'completed': 'Completed',
-            'paid': 'Paid',
-            'cancelled': 'Cancelled'
+            'pending': 'Čakajúce',
+            'processing': 'V Procese',
+            'completed': 'Dokončené',
+            'paid': 'Zaplatené',
+            'cancelled': 'Zrušené'
           };
-          toast.success(`Status changed to: ${statusLabels[newStatus] || newStatus}`);
+          toast.success(`Stav zmenený na: ${statusLabels[newStatus] || newStatus}`);
         }
       } else {
         const statusLabels: Record<string, string> = {
-          'pending': 'Pending',
-          'processing': 'Processing',
-          'completed': 'Completed',
-          'paid': 'Paid',
-          'cancelled': 'Cancelled'
+          'pending': 'Čakajúce',
+          'processing': 'V Procese',
+          'completed': 'Dokončené',
+          'paid': 'Zaplatené',
+          'cancelled': 'Zrušené'
         };
-        toast.success(`Status changed to: ${statusLabels[newStatus] || newStatus}`);
+        toast.success(`Stav zmenený na: ${statusLabels[newStatus] || newStatus}`);
       }
 
       await fetchOrders();
@@ -1591,6 +1591,23 @@ const ManagementPortal = () => {
     return matchesSearch && matchesStatus;
   });
 
+  const STATUS_TEXT_COLOR: Record<string, string> = {
+    all: '#e5e7eb',
+    paid: '#22c55e',
+    pending: '#f97316',
+    processing: '#06b6d4',
+    completed: '#22c55e',
+    cancelled: '#ef4444',
+  };
+
+  const STATUS_CELL_CLASS: Record<string, string> = {
+    pending: 'text-orange-500 hover:text-orange-200 hover:bg-orange-500/30 hover:shadow-[inset_0_0_18px_rgba(249,115,22,0.45)]',
+    processing: 'text-cyan-500 hover:text-cyan-200 hover:bg-cyan-500/30 hover:shadow-[inset_0_0_18px_rgba(6,182,212,0.45)]',
+    completed: 'text-green-500 hover:text-green-200 hover:bg-green-500/30 hover:shadow-[inset_0_0_18px_rgba(34,197,94,0.45)]',
+    paid: 'text-green-500 hover:text-green-200 hover:bg-green-500/30 hover:shadow-[inset_0_0_18px_rgba(34,197,94,0.45)]',
+    cancelled: 'text-red-500 hover:text-red-200 hover:bg-red-500/30 hover:shadow-[inset_0_0_18px_rgba(239,68,68,0.45)]',
+  };
+
   const getStatusClass = (status: string) => {
     switch (status) {
       case 'paid':
@@ -1665,7 +1682,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <>
       <input
         ref={fileInputRef}
         type="file"
@@ -1674,16 +1691,44 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
         accept=".bin,.ori,.mod,.ecu"
       />
 
+      <div className="max-w-[1600px] mx-auto w-full px-4 flex flex-col min-h-screen">
       {/* Header */}
-      <header className="border-b border-border/50 backdrop-blur-sm sticky top-0 z-50 bg-background/80">
-        <div className="w-full max-w-[77%] mx-auto px-12 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-6">
-            <Link to="/">
-              <Logo size="sm" />
+      <header className="w-full border-b border-border/50 backdrop-blur-sm sticky top-0 z-50 bg-background/80">
+        <div className="py-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-6 shrink-0">
+            <Link to="/" aria-label="REMAPPRO" className="inline-flex items-center gap-2 shrink-0 no-underline antialiased leading-none">
+              <span className="inline-flex items-center justify-center h-9 px-3 rounded-full border border-cyan-400/60 bg-transparent shadow-[0_0_15px_rgba(6,182,212,0.4)]">
+                <span className="text-2xl font-black leading-none tracking-tight text-cyan-400">R</span>
+                <span className="text-2xl font-black leading-none tracking-tight text-white">P</span>
+              </span>
+              <span className="text-2xl font-semibold leading-none tracking-normal text-cyan-400">REMAPPRO</span>
             </Link>
             <SystemStatus />
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-nowrap items-center justify-end gap-2">
+            <div className="relative w-52 shrink-0">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Hľadať objednávky..."
+                className="input-field h-9 w-full py-1 pl-9 pr-3 text-sm"
+              />
+            </div>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="admin-filter-select w-40 shrink-0 py-2 px-4 text-base font-normal text-left rounded-lg border border-primary/50 bg-primary/20 shadow-none"
+              style={{ color: STATUS_TEXT_COLOR[statusFilter] || STATUS_TEXT_COLOR.all }}
+            >
+              <option value="all" style={{ color: STATUS_TEXT_COLOR.all, backgroundColor: '#050505', fontSize: '16px' }}>Všetky</option>
+              <option value="paid" style={{ color: STATUS_TEXT_COLOR.paid, backgroundColor: '#050505', fontSize: '16px' }}>Zaplatené</option>
+              <option value="pending" style={{ color: STATUS_TEXT_COLOR.pending, backgroundColor: '#050505', fontSize: '16px' }}>Čakajúce</option>
+              <option value="processing" style={{ color: STATUS_TEXT_COLOR.processing, backgroundColor: '#050505', fontSize: '16px' }}>V Procese</option>
+              <option value="completed" style={{ color: STATUS_TEXT_COLOR.completed, backgroundColor: '#050505', fontSize: '16px' }}>Dokončené</option>
+              <option value="cancelled" style={{ color: STATUS_TEXT_COLOR.cancelled, backgroundColor: '#050505', fontSize: '16px' }}>Zrušené</option>
+            </select>
             <button
               onClick={cycleStatusMode}
               disabled={statusLoading}
@@ -1714,196 +1759,128 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
         </div>
       </header>
 
-      <main className="w-full max-w-[77%] mx-auto px-12 py-8">
-        {/* Financial Dashboard */}
-        {financialStats && (
-          <div className="mb-8 grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="glass-card p-6 border border-primary/20">
-              <h3 className="text-sm font-medium text-muted-foreground mb-2">Gross Revenue</h3>
-              <p className="text-2xl font-bold text-green-400">
-                {financialStats.grossRevenue.toFixed(2)} €
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">Všetky faktúry (INV)</p>
-            </div>
-            <div className="glass-card p-6 border border-primary/20">
-              <h3 className="text-sm font-medium text-muted-foreground mb-2">Refunds</h3>
-              <p className="text-2xl font-bold text-red-400">
-                -{financialStats.refunds.toFixed(2)} €
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">Všetky dobropisy (CN)</p>
-            </div>
-            <div className="glass-card p-6 border border-primary/20 bg-primary/5">
-              <h3 className="text-sm font-medium text-muted-foreground mb-2">Net Revenue</h3>
-              <p className={`text-2xl font-bold ${financialStats.netRevenue >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                {financialStats.netRevenue.toFixed(2)} €
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">Skutočný zisk</p>
-            </div>
-          </div>
-        )}
-
-        {/* Revenue Header */}
-        <div className="glass-card p-6 mb-8">
-          <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-            <span className="neon-text">Revenue Dashboard</span>
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <div className="text-center p-4 bg-blue-500/10 rounded-lg border-2 border-blue-500/50">
-              <p className="text-muted-foreground text-sm mb-1 flex items-center justify-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-blue-500"></span> Total Revenue
-              </p>
-              <p className="text-3xl font-bold text-blue-500">
-                €{orders.reduce((sum, o) => {
-                  const amount = Number(o.total_price) || 0;
-                  // For cancelled orders, subtract the amount (already negative in display)
-                  return sum + (o.status === 'cancelled' ? -Math.abs(amount) : amount);
-                }, 0).toLocaleString()}
-              </p>
-            </div>
-            <div className="text-center p-4 bg-secondary/30 rounded-lg border-2 border-white/50 shadow-[0_0_8px_rgba(255,255,255,0.15)]">
-              <p className="text-white text-sm mb-1 flex items-center justify-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-white"></span> Orders Count
-              </p>
-              <p className="text-3xl font-bold text-white">{orders.length}</p>
-            </div>
-            <div className="text-center p-4 bg-orange-500/10 rounded-lg border-2 border-orange-500/50">
-              <p className="text-muted-foreground text-sm mb-1 flex items-center justify-center gap-2">
-                <Clock className="w-4 h-4 text-orange-500" /> Pending
-              </p>
-              <p className="text-3xl font-bold text-orange-500">
-                {orders.filter((o) => o.status === 'pending').length}
-              </p>
-            </div>
-            <div className="text-center p-4 bg-emerald-500/10 rounded-lg border-2 border-emerald-500/50">
-              <p className="text-muted-foreground text-sm mb-1 flex items-center justify-center gap-2">
-                <CheckCircle className="w-4 h-4 text-emerald-500" /> Completed
-              </p>
-              <p className="text-3xl font-bold text-emerald-500">
-                {orders.filter((o) => o.status === 'completed').length}
-              </p>
-            </div>
-            <div className="text-center p-4 bg-red-500/10 rounded-lg border-2 border-red-500/50">
-              <p className="text-muted-foreground text-sm mb-1 flex items-center justify-center gap-2">
-                <X className="w-4 h-4 text-red-500" /> Cancelled
-              </p>
-              <p className="text-3xl font-bold text-red-500">
-                {orders.filter((o) => o.status === 'cancelled').length}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex flex-col md:flex-row gap-4 mb-6">
-          {/* Search */}
-          <div className="relative flex-1">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search orders..."
-              className="input-field w-full pl-12"
-            />
-          </div>
-          
-          {/* Status Filter */}
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="admin-filter-select min-w-[150px]"
-          >
-            <option value="all">All Status</option>
-            <option value="paid">Paid</option>
-            <option value="pending">Pending</option>
-            <option value="processing">Processing</option>
-            <option value="completed">Completed</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
-        </div>
-
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          <div className="glass-card p-4 border-l-4 border-l-white">
-            <p className="text-muted-foreground text-sm flex items-center gap-2">
-              <User className="w-4 h-4 text-white" /> Total Orders
+      <main className="w-full flex-1 py-6">
+        <div className="mb-6 w-full grid grid-cols-1 xl:grid-cols-5 gap-4">
+          <div className="rounded-none p-3 bg-[#0f172a] border-t-4 border-t-cyan-400 shadow-[inset_0_0_28px_rgba(34,211,238,0.14)]">
+            <p className="uppercase text-sm text-white font-extrabold tracking-wide">Celkové tržby</p>
+            <p className="text-4xl font-black text-cyan-400 mt-1 leading-none">
+              {(financialStats?.grossRevenue ?? 0).toFixed(2)} €
             </p>
-            <p className="text-2xl font-bold text-white">{orders.length}</p>
           </div>
-          <div className="glass-card p-4 border-l-4 border-l-orange-500">
-            <p className="text-muted-foreground text-sm flex items-center gap-2">
-              <Clock className="w-4 h-4 text-orange-500" /> Pending
+          <div className="rounded-none p-3 bg-[#0f172a] border-t-4 border-t-emerald-500 shadow-[inset_0_0_28px_rgba(16,185,129,0.14)]">
+            <p className="uppercase text-sm text-white font-extrabold tracking-wide">Čistý zisk</p>
+            <p className="text-4xl font-black text-emerald-400 mt-1 leading-none">
+              {(financialStats?.netRevenue ?? 0).toFixed(2)} €
             </p>
-            <p className="text-2xl font-bold text-orange-500">
+          </div>
+          <div className="rounded-none p-3 bg-[#0f172a] border-t-4 border-t-violet-500 shadow-[inset_0_0_28px_rgba(139,92,246,0.16)]">
+            <p className="uppercase text-sm text-white font-extrabold tracking-wide">Dobropisy</p>
+            <p className="text-4xl font-black text-violet-400 mt-1 leading-none">
+              -{Math.abs(financialStats?.refunds ?? 0).toFixed(2)} €
+            </p>
+          </div>
+          <div className="rounded-none p-3 bg-[#0f172a] border-t-4 border-t-orange-500 shadow-[inset_0_0_28px_rgba(249,115,22,0.14)]">
+            <p className="uppercase text-sm text-white font-extrabold tracking-wide">Čakajúce</p>
+            <p className="text-4xl font-black text-orange-400 mt-1 leading-none">
               {orders.filter((o) => o.status === 'pending').length}
             </p>
           </div>
-          <div className="glass-card p-4 border-l-4 border-l-primary">
-            <p className="text-muted-foreground text-sm flex items-center gap-2">
-              <Package className="w-4 h-4 text-primary" /> Processing
-            </p>
-            <p className="text-2xl font-bold text-primary">
-              {orders.filter((o) => o.status === 'processing').length}
-            </p>
-          </div>
-          <div className="glass-card p-4 border-l-4 border-l-emerald-500">
-            <p className="text-muted-foreground text-sm flex items-center gap-2">
-              <CheckCircle className="w-4 h-4 text-emerald-500" /> Completed
-            </p>
-            <p className="text-2xl font-bold text-emerald-500">
-              {orders.filter((o) => o.status === 'completed').length}
+          <div className="rounded-none p-3 bg-[#0f172a] border-t-4 border-t-red-500 shadow-[inset_0_0_28px_rgba(239,68,68,0.14)]">
+            <p className="uppercase text-sm text-white font-extrabold tracking-wide">Zrušené</p>
+            <p className="text-4xl font-black text-red-400 mt-1 leading-none">
+              {orders.filter((o) => o.status === 'cancelled').length}
             </p>
           </div>
         </div>
 
         {/* Orders Table */}
-        <div className="rounded-xl bg-background/40 backdrop-blur-xl border border-primary/20 shadow-[0_0_30px_rgba(59,130,246,0.15)]">
+        <div className="w-full rounded-xl bg-background/40 backdrop-blur-xl border border-primary/20 shadow-[0_0_30px_rgba(59,130,246,0.15)]">
           <div className="overflow-x-auto">
-            <table className="w-full text-base">
+            <table className="w-full text-base border-collapse">
               <thead className="sticky top-0 z-50">
                 <tr className="bg-[#0a192f] border-b border-primary/30 shadow-md">
-                  <th className="text-left p-2 text-xs font-semibold uppercase tracking-wide align-middle text-white w-1 whitespace-nowrap">ID</th>
-                  <th className="text-left p-2 text-xs font-semibold uppercase tracking-wide align-middle text-white whitespace-nowrap">Date</th>
-                  <th className="text-left p-2 text-xs font-semibold uppercase tracking-wide align-middle text-white w-full">Customer</th>
-                  <th className="text-left p-2 text-xs font-semibold uppercase tracking-wide align-middle text-white whitespace-nowrap">Price</th>
-                  <th className="text-left p-2 text-xs font-semibold uppercase tracking-wide align-middle text-white whitespace-nowrap">Status</th>
-                  <th className="text-left p-2 text-xs font-semibold uppercase tracking-wide align-middle text-white whitespace-nowrap">Invoice</th>
-                  <th className="text-right p-2 text-xs font-semibold uppercase tracking-wide align-middle text-white whitespace-nowrap sticky right-0 backdrop-blur-sm z-10">Actions</th>
+                  <th className="text-left p-2.5 border-r border-slate-500 text-sm font-bold uppercase tracking-wide align-middle text-white whitespace-nowrap">Faktúra</th>
+                  <th className="text-left p-2.5 border-r border-slate-500 text-sm font-bold uppercase tracking-wide align-middle text-white whitespace-nowrap min-w-[12rem]">ID</th>
+                  <th className="text-left p-2.5 border-r border-slate-500 text-sm font-bold uppercase tracking-wide align-middle text-white whitespace-nowrap">Dátum</th>
+                  <th className="text-left p-2.5 border-r border-slate-500 text-sm font-bold uppercase tracking-wide align-middle text-white w-full min-w-[320px]">Zákazník</th>
+                  <th className="text-left p-2.5 border-r border-slate-500 text-sm font-bold uppercase tracking-wide align-middle text-white whitespace-nowrap">Cena</th>
+                  <th className="text-left p-2.5 border-r border-slate-500 text-sm font-bold uppercase tracking-wide align-middle text-white whitespace-nowrap">Stav</th>
+                  <th className="text-center p-2.5 border-r border-slate-500 text-sm font-bold uppercase tracking-wide align-middle text-white whitespace-nowrap sticky right-0 bg-[#0a192f] z-10 min-w-[260px]">Akcie</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                 <tr>
                       <td colSpan={7} className="text-center py-12 text-muted-foreground">
-                        Loading orders...
+                        Načítavam objednávky...
                       </td>
                     </tr>
                   ) : filteredOrders.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="text-center py-12 text-muted-foreground">
-                        No orders found
+                        Žiadne objednávky
                       </td>
                     </tr>
                 ) : (
-                  filteredOrders.map((order) => (
-                    <tr key={order.id} className="align-top border-b border-gray-700/50 hover:bg-white/5 transition-colors duration-150">
-                      <td className="p-2 w-1 whitespace-nowrap">
-                        <span className="font-mono text-xs font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded inline-block">
+                  filteredOrders.map((order) => {
+                    const active = activeRowId === order.id;
+                    const cell = (edge: 'first' | 'mid' | 'last' | 'fill') => {
+                      const selected = active && edge !== 'last' ? 'bg-slate-800/40' : '';
+                      const pad = edge === 'last' || edge === 'fill' ? 'h-px p-0' : 'p-2';
+                      return `${pad} align-middle border-r border-slate-800/60 ${selected}`;
+                    };
+                    const actionCell = 'flex-1 h-full min-h-[56px] min-w-[52px] inline-flex items-center justify-center rounded-none border-0 bg-transparent transition-all duration-150';
+                    const documents: { number: string; href: string; title: string }[] = [];
+                    if (order.invoice_number) {
+                      documents.push({ number: order.invoice_number, href: order.invoice_url || '#', title: 'Zobraziť faktúru' });
+                    }
+                    if (order.credit_note_number) {
+                      documents.push({ number: order.credit_note_number, href: order.credit_note_pdf || '#', title: 'Stiahnuť dobropis' });
+                    }
+                    return (
+                    <tr
+                      key={order.id}
+                      onClick={() => setActiveRowId(order.id)}
+                      className="align-middle border-b border-slate-800/60 cursor-pointer"
+                    >
+                      <td className={`${cell('first')} whitespace-nowrap`}>
+                        {documents.length === 0 ? (
+                          <span className="text-base text-slate-500">—</span>
+                        ) : (
+                          <div className="flex flex-col items-start gap-0.5">
+                            {documents.map((doc) => (
+                              <a
+                                key={doc.number}
+                                href={doc.href}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="font-mono text-base font-bold text-red-500 hover:text-red-400 whitespace-nowrap"
+                                title={doc.title}
+                              >
+                                {doc.number}
+                              </a>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                      <td className={`${cell('mid')} whitespace-nowrap min-w-[12rem]`}>
+                        <span className="font-mono text-lg font-bold text-cyan-300 whitespace-nowrap">
                           {order.order_number || order.id.slice(0, 6).toUpperCase()}
                         </span>
                       </td>
-                      <td className="p-2 whitespace-nowrap">
-                        <p className="text-xs text-muted-foreground">
+                      <td className={`${cell('mid')} whitespace-nowrap`}>
+                        <p className="text-base font-medium text-white whitespace-nowrap">
                           {formatLocalDateTime(order.created_at)}
                         </p>
                       </td>
-                      <td className="p-2 w-full">
-                        <div className="overflow-hidden">
-                          <p className="font-medium text-xs truncate" title={order.customer_name}>{order.customer_name}</p>
-                          <p className="text-xs text-muted-foreground truncate" title={order.customer_email}>{order.customer_email}</p>
+                      <td className={`${cell('mid')} w-full min-w-[320px]`}>
+                        <div>
+                          <p className="font-semibold text-lg text-white whitespace-nowrap" title={order.customer_name}>{order.customer_name}</p>
+                          <p className="text-base text-white whitespace-nowrap" title={order.customer_email}>{order.customer_email}</p>
                         </div>
                       </td>
-                      <td className="p-2 whitespace-nowrap">
-                        <p className={`font-semibold text-xs ${
+                      <td className={`${cell('mid')} whitespace-nowrap`}>
+                        <p className={`font-bold text-lg leading-none ${
                           order.status === 'cancelled' 
                             ? 'text-red-500' 
                             : 'text-primary'
@@ -1911,111 +1888,92 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                           {getDisplayAmount(order).toFixed(2)}€
                         </p>
                       </td>
-                      <td className="p-2 whitespace-nowrap">
+                      <td className={`${cell('fill')} whitespace-nowrap min-w-[9.5rem]`}>
                         <select
                           value={order.status}
                           onChange={(e) => handleStatusChange(order.id, e.target.value)}
-                          className={`admin-status-select text-xs w-full ${getStatusClass(order.status)}`}
+                          className={`block h-full min-h-[56px] w-full cursor-pointer appearance-none rounded-none border-0 bg-transparent px-3 text-center text-base font-semibold outline-none transition-all duration-150 ${STATUS_CELL_CLASS[order.status] || STATUS_CELL_CLASS.pending}`}
                         >
-                          <option value="pending">Pending</option>
-                          <option value="processing">Processing</option>
-                          <option value="completed">Completed</option>
-                          <option value="cancelled">Cancelled</option>
+                          <option value="pending" style={{ color: STATUS_TEXT_COLOR.pending, backgroundColor: '#050505' }}>Čakajúce</option>
+                          <option value="processing" style={{ color: STATUS_TEXT_COLOR.processing, backgroundColor: '#050505' }}>V Procese</option>
+                          <option value="completed" style={{ color: STATUS_TEXT_COLOR.completed, backgroundColor: '#050505' }}>Dokončené</option>
+                          <option value="cancelled" style={{ color: STATUS_TEXT_COLOR.cancelled, backgroundColor: '#050505' }}>Zrušené</option>
                         </select>
                       </td>
-                      <td className="p-2 whitespace-nowrap">
-                        <div className="flex flex-col gap-1">
-                          {order.invoice_number ? (
-                            <a
-                              href={order.invoice_url || '#'}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-xs font-mono text-green-400 hover:text-green-300 underline truncate block"
-                              title="View Invoice PDF"
-                            >
-                              {order.invoice_number}
-                            </a>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
-                          {order.credit_note_number ? (
-                            <a
-                              href={order.credit_note_pdf || '#'}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-xs font-mono text-red-500 hover:text-red-400 underline truncate block"
-                              title="Download Credit Note PDF"
-                            >
-                              {order.credit_note_number}
-                            </a>
-                          ) : null}
-                        </div>
-                      </td>
-                      <td className="p-2 sticky right-0 bg-background/95 backdrop-blur-sm z-10">
-                        <div className="flex items-center justify-end gap-1.5 flex-shrink-0">
+                      <td className={`${cell('last')} sticky right-0 z-10 bg-[#070d16] min-w-[260px]`}>
+                        <div className="flex h-full w-full items-stretch divide-x divide-slate-700/70">
                           {order.file_url ? (
                             <button
                               onClick={() => handleDownload(order.file_url!, order.order_number || order.id.slice(0, 8), order.id)}
-                              className="p-2 rounded-lg bg-orange-500/20 hover:bg-orange-500/30 text-orange-500 transition-colors flex-shrink-0"
+                              className={`${actionCell} text-orange-400/80 hover:text-orange-200 hover:bg-orange-500/30 hover:shadow-[inset_0_0_18px_rgba(249,115,22,0.45)]`}
                               title="Stiahnuť súbor zákazníka"
                             >
-                              <Download className="w-4 h-4" />
+                              <Download className="w-5 h-5" />
                             </button>
                           ) : (
-                            <span className="p-2 rounded-lg bg-secondary/30 text-muted-foreground/50 cursor-not-allowed flex-shrink-0" title="Súbor nie je k dispozícii">
-                              <Download className="w-4 h-4" />
+                            <span className={`${actionCell} text-slate-600 cursor-not-allowed`} title="Súbor nie je k dispozícii">
+                              <Download className="w-5 h-5" />
                             </span>
                           )}
                           {order.status === 'completed' || order.result_file_url ? (
-                            <span className="p-2 rounded-lg bg-emerald-500/20 text-emerald-400 flex-shrink-0" title="Hotový súbor je nahraný">
-                              <CheckCircle className="w-4 h-4" />
+                            <span className={`${actionCell} text-emerald-400/80`} title="Hotový súbor je nahraný">
+                              <CheckCircle className="w-5 h-5" />
                             </span>
                           ) : order.invoice_number ? (
-                            <button
-                              disabled={true}
-                              className="p-2 rounded-lg bg-gray-200 text-gray-500 cursor-not-allowed flex-shrink-0"
-                              title="Súbor odoslaný"
-                            >
-                              <span className="text-xs">Súbor odoslaný</span>
-                            </button>
+                            <span className={`${actionCell} text-slate-500 cursor-not-allowed`} title="Súbor odoslaný">
+                              <CheckCircle className="w-5 h-5" />
+                            </span>
                           ) : (
                             <button
                               onClick={() => triggerUpload(order.id)}
                               disabled={uploadingId === order.id}
-                              className={`p-2 rounded-lg transition-colors flex-shrink-0 ${
+                              className={`${actionCell} ${
                                 uploadingId === order.id
-                                  ? 'bg-gray-500/20 text-gray-400 cursor-not-allowed'
-                                  : 'bg-green-500/20 hover:bg-green-500/30 text-green-500'
+                                  ? 'text-slate-500 cursor-not-allowed'
+                                  : 'text-emerald-400/80 hover:text-emerald-200 hover:bg-emerald-500/30 hover:shadow-[inset_0_0_18px_rgba(16,185,129,0.45)]'
                               }`}
                               title={uploadingId === order.id ? 'Odosielam...' : 'Nahrať hotový súbor'}
                             >
-                              {uploadingId === order.id ? (
-                                <span className="text-xs">Odosielam...</span>
-                              ) : (
-                                <Upload className="w-4 h-4" />
-                              )}
+                              <Upload className={`w-5 h-5 ${uploadingId === order.id ? 'animate-pulse' : ''}`} />
                             </button>
                           )}
                           <button
                             onClick={() => setDetailOrder(order)}
-                            className="p-2 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 transition-colors flex-shrink-0"
+                            className={`${actionCell} text-blue-400/80 hover:text-blue-200 hover:bg-blue-500/30 hover:shadow-[inset_0_0_18px_rgba(59,130,246,0.45)]`}
                             title="Zobraziť detail objednávky"
                           >
-                            <FileText className="w-4 h-4" />
+                            <FileText className="w-5 h-5" />
                           </button>
-                          {order.status !== 'cancelled' && (
-                            <button
-                              onClick={() => openRefundModal(order)}
-                              className="p-2 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-400 transition-colors flex-shrink-0"
-                              title="Vystaviť dobropis / Issue Refund"
-                            >
-                              <RotateCcw className="w-4 h-4" />
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            onClick={() => order.status !== 'cancelled' && openRefundModal(order)}
+                            disabled={order.status === 'cancelled'}
+                            className={`${actionCell} ${
+                              order.status === 'cancelled'
+                                ? 'text-slate-600 cursor-not-allowed'
+                                : 'text-amber-400/80 hover:text-amber-200 hover:bg-amber-500/30 hover:shadow-[inset_0_0_18px_rgba(245,158,11,0.45)]'
+                            }`}
+                            title="Vystaviť dobropis"
+                          >
+                            <RotateCcw className="w-5 h-5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              toast.info(
+                                `Delete pre ${order.order_number || order.id.slice(0, 8).toUpperCase()} je pripravené na CRUD napojenie.`
+                              )
+                            }
+                            className={`${actionCell} text-red-400/80 hover:text-red-200 hover:bg-red-500/30 hover:shadow-[inset_0_0_18px_rgba(239,68,68,0.5)]`}
+                            title="Zmazať objednávku"
+                          >
+                            <Trash2 className="w-5 h-5" />
+                          </button>
                         </div>
                       </td>
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -2056,9 +2014,9 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                         <p className="text-foreground">{formatLocalDateTime(detailOrder.created_at)}</p>
                       </div>
                       <div>
-                        <p className="text-sm text-muted-foreground">Status</p>
+                        <p className="text-sm text-muted-foreground">Stav</p>
                         <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-semibold ${getStatusClass(detailOrder.status)}`}>
-                          {detailOrder.status === 'pending' ? 'Pending' : detailOrder.status === 'processing' ? 'Processing' : detailOrder.status === 'completed' ? 'Completed' : detailOrder.status === 'cancelled' ? 'Cancelled' : detailOrder.status}
+                          {detailOrder.status === 'pending' ? 'Čakajúce' : detailOrder.status === 'processing' ? 'V Procese' : detailOrder.status === 'completed' ? 'Dokončené' : detailOrder.status === 'cancelled' ? 'Zrušené' : detailOrder.status === 'paid' ? 'Zaplatené' : detailOrder.status}
                         </span>
                       </div>
                       <div>
@@ -2439,28 +2397,11 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
         />
       </main>
 
-      {/* Footer */}
-      <footer className="bg-background border-t border-border/50 mt-auto">
-        <div className="w-full max-w-[77%] mx-auto px-12 py-8">
-          <div className="glass-card p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-3">
-                <h3 className="font-semibold text-foreground text-lg mb-4">Fakturačné údaje</h3>
-                <div className="space-y-2 text-sm text-muted-foreground">
-                  <p className="font-semibold text-foreground text-base">REMAPPRO</p>
-                  <p>Janka Kráľa 29</p>
-                  <p>990 01 Veľký Krtíš</p>
-                </div>
-              </div>
-            </div>
-            <div className="mt-8 pt-6 border-t border-border/50">
-              <p className="text-center text-sm text-muted-foreground">
-                Copyright © 2026 REMAPPRO Digital Solutions. All rights reserved.
-              </p>
-            </div>
-          </div>
-        </div>
+      <footer className="mt-auto w-full py-4 text-center text-xs text-gray-500">
+        <p>REMAPPRO, IČO: 41281471, DIČ: 1041196607, Janka Kráľa 29, 990 01 Veľký Krtíš, Slovakia</p>
+        <p className="mt-1">Copyright © 2026 REMAPPRO Digital Solutions. All rights reserved.</p>
       </footer>
+      </div>
 
       {/* Cancel Order Confirmation Dialog */}
       <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
@@ -2630,8 +2571,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-    </div>
+    </>
   );
 };
 

@@ -266,26 +266,26 @@
     outline: none;
   }
 
-  /* Processing: Neon Cyan (#00f2ff) */
+  /* Processing: cyan-500 (#06b6d4) */
   .status-processing {
     background-color: hsl(0 0% 2%);
-    color: hsl(185 100% 50%);
-    border: 2px solid hsl(185 100% 50%);
-    box-shadow: 0 0 8px rgba(0, 242, 255, 0.3);
+    color: #06b6d4;
+    border: 2px solid #06b6d4;
+    box-shadow: 0 0 8px rgba(6, 182, 212, 0.3);
   }
 
   .status-processing:hover,
   .status-processing:focus {
-    box-shadow: 0 0 15px rgba(0, 242, 255, 0.5);
+    box-shadow: 0 0 15px rgba(6, 182, 212, 0.5);
     outline: none;
   }
 
-  /* Completed: Emerald (#10b981) */
+  /* Completed: green-500 (#22c55e) */
   .status-completed {
     background-color: hsl(0 0% 2%) !important;
-    color: hsl(160 84% 39%) !important; /* emerald-500 */
-    border: 2px solid hsl(160 84% 39%) !important; /* emerald-500 */
-    box-shadow: 0 0 8px hsla(160, 84%, 39%, 0.3);
+    color: #22c55e !important;
+    border: 2px solid #22c55e !important;
+    box-shadow: 0 0 8px rgba(34, 197, 94, 0.3);
   }
 
   .status-completed:hover,
@@ -294,17 +294,17 @@
     outline: none;
   }
 
-  /* Paid: Orange (same as pending) */
+  /* Paid: green-500, same as completed */
   .status-paid {
     background-color: hsl(0 0% 2%) !important;
-    color: hsl(25 95% 53%) !important;
-    border: 2px solid hsl(25 95% 53%) !important;
-    box-shadow: 0 0 8px hsla(25, 95%, 53%, 0.3);
+    color: #22c55e !important;
+    border: 2px solid #22c55e !important;
+    box-shadow: 0 0 8px rgba(34, 197, 94, 0.3);
   }
 
   .status-paid:hover,
   .status-paid:focus {
-    box-shadow: 0 0 15px hsla(25, 95%, 53%, 0.5);
+    box-shadow: 0 0 15px rgba(34, 197, 94, 0.5);
     outline: none;
   }
 
@@ -322,17 +322,15 @@
     outline: none;
   }
 
-  /* Dropdown options - Deep Black with White text */
+  /* Dropdown options keep the color set on each option */
   .admin-status-select option {
-    background-color: hsl(0 0% 2%);
-    color: hsl(0 0% 98%);
+    background-color: #050505;
     padding: 10px 12px;
   }
 
   .admin-status-select option:hover,
   .admin-status-select option:checked {
     background-color: hsl(0 0% 10%);
-    color: hsl(0 0% 100%);
   }
 
   /* === ADMIN FILTER SELECT - NEON CYAN STYLE === */
@@ -355,16 +353,14 @@
   }
 
   .admin-filter-select option {
-    background-color: hsl(0 0% 2%);
-    color: hsl(0 0% 98%);
+    background-color: #050505;
     padding: 12px 16px;
     font-weight: 500;
   }
 
   .admin-filter-select option:hover,
   .admin-filter-select option:checked {
-    background-color: hsl(185 100% 50% / 0.15);
-    color: hsl(185 100% 70%);
+    background-color: hsl(0 0% 10%);
   }
 
   .table-header {
