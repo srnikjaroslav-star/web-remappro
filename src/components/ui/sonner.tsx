@@ -9,14 +9,25 @@ const Toaster = ({ ...props }: ToasterProps) => {
   return (
     <Sonner
       theme={theme as ToasterProps["theme"]}
+      position="bottom-right"
       className="toaster group"
       toastOptions={{
         classNames: {
           toast:
-            "group toast group-[.toaster]:bg-background group-[.toaster]:text-foreground group-[.toaster]:border-border group-[.toaster]:shadow-lg",
-          description: "group-[.toast]:text-muted-foreground",
-          actionButton: "group-[.toast]:bg-primary group-[.toast]:text-primary-foreground",
-          cancelButton: "group-[.toast]:bg-muted group-[.toast]:text-muted-foreground",
+            "group toast items-center gap-3 rounded-xl border px-4 py-3 shadow-lg backdrop-blur-md",
+          title: "text-sm font-semibold leading-snug !text-white",
+          description: "text-xs leading-snug !text-white/80",
+          icon: "shrink-0 [&_svg]:h-5 [&_svg]:w-5",
+          success:
+            "!bg-cyan-500/20 !border-cyan-400/70 !text-cyan-50 shadow-[0_0_24px_rgba(34,211,238,0.35)] [&_[data-icon]]:!text-cyan-300",
+          info:
+            "!bg-cyan-500/20 !border-cyan-400/70 !text-cyan-50 shadow-[0_0_24px_rgba(34,211,238,0.35)] [&_[data-icon]]:!text-cyan-300",
+          warning:
+            "!bg-orange-500/20 !border-orange-400/70 !text-orange-50 shadow-[0_0_24px_rgba(251,146,60,0.35)] [&_[data-icon]]:!text-orange-300",
+          error:
+            "!bg-red-500/20 !border-red-400/70 !text-red-50 shadow-[0_0_24px_rgba(248,113,113,0.35)] [&_[data-icon]]:!text-red-300",
+          actionButton: "!bg-white/10 !text-white",
+          cancelButton: "!bg-white/10 !text-white/80",
         },
       }}
       {...props}

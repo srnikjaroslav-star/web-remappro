@@ -240,7 +240,7 @@
   }
 
   /* === ADMIN STATUS BADGES - COLOR-CODED SYSTEM === */
-  /* Pending: Orange | Processing: Neon Cyan | Completed: Green */
+  /* Pending: Yellow | Processing: Neon Cyan | Completed: Green */
   /* All with Deep Black background, colored borders and text */
   
   .admin-status-select {
@@ -252,17 +252,17 @@
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  /* Pending: Orange (#f97316) */
+  /* Pending: yellow-400 (#facc15), border yellow-500 (#eab308) */
   .status-pending {
     background-color: hsl(0 0% 2%) !important;
-    color: hsl(25 95% 53%) !important;
-    border: 2px solid hsl(25 95% 53%) !important;
-    box-shadow: 0 0 8px hsla(25, 95%, 53%, 0.3);
+    color: #facc15 !important;
+    border: 2px solid #eab308 !important;
+    box-shadow: 0 0 8px rgba(234, 179, 8, 0.3);
   }
 
   .status-pending:hover,
   .status-pending:focus {
-    box-shadow: 0 0 15px hsla(25, 95%, 53%, 0.5);
+    box-shadow: 0 0 15px rgba(234, 179, 8, 0.5);
     outline: none;
   }
 
@@ -352,15 +352,20 @@
     outline: none;
   }
 
-  .admin-filter-select option {
-    background-color: #050505;
-    padding: 12px 16px;
-    font-weight: 500;
+  .admin-filter-select option,
+  .status-cell-select option {
+    background-color: #0a0f14;
+    color: #e5e7eb;
   }
 
   .admin-filter-select option:hover,
-  .admin-filter-select option:checked {
-    background-color: hsl(0 0% 10%);
+  .admin-filter-select option:focus,
+  .admin-filter-select option:checked,
+  .status-cell-select option:hover,
+  .status-cell-select option:focus,
+  .status-cell-select option:checked {
+    background-color: #0e3a42 !important;
+    box-shadow: inset 0 0 0 100px #0e3a42;
   }
 
   .table-header {

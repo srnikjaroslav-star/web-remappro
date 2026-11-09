@@ -1594,18 +1594,18 @@ const ManagementPortal = () => {
   const STATUS_TEXT_COLOR: Record<string, string> = {
     all: '#e5e7eb',
     paid: '#22c55e',
-    pending: '#f97316',
+    pending: '#facc15',
     processing: '#06b6d4',
     completed: '#22c55e',
     cancelled: '#ef4444',
   };
 
   const STATUS_CELL_CLASS: Record<string, string> = {
-    pending: 'text-orange-500 hover:text-orange-200 hover:bg-orange-500/30 hover:shadow-[inset_0_0_18px_rgba(249,115,22,0.45)]',
-    processing: 'text-cyan-500 hover:text-cyan-200 hover:bg-cyan-500/30 hover:shadow-[inset_0_0_18px_rgba(6,182,212,0.45)]',
-    completed: 'text-green-500 hover:text-green-200 hover:bg-green-500/30 hover:shadow-[inset_0_0_18px_rgba(34,197,94,0.45)]',
-    paid: 'text-green-500 hover:text-green-200 hover:bg-green-500/30 hover:shadow-[inset_0_0_18px_rgba(34,197,94,0.45)]',
-    cancelled: 'text-red-500 hover:text-red-200 hover:bg-red-500/30 hover:shadow-[inset_0_0_18px_rgba(239,68,68,0.45)]',
+    pending: 'text-yellow-400 bg-yellow-500/20 shadow-[inset_0_0_0_1px_rgba(250,204,21,0.55)]',
+    processing: 'text-cyan-300 bg-cyan-500/20 shadow-[inset_0_0_0_1px_rgba(34,211,238,0.6)]',
+    completed: 'text-green-400 bg-green-500/20 shadow-[inset_0_0_0_1px_rgba(74,222,128,0.55)]',
+    paid: 'text-green-400 bg-green-500/20 shadow-[inset_0_0_0_1px_rgba(74,222,128,0.55)]',
+    cancelled: 'text-red-400 bg-red-500/20 shadow-[inset_0_0_0_1px_rgba(248,113,113,0.6)]',
   };
 
   const getStatusClass = (status: string) => {
@@ -1705,26 +1705,26 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
             </Link>
             <SystemStatus />
           </div>
-          <div className="flex flex-nowrap items-center justify-end gap-2">
-            <div className="relative w-52 shrink-0">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <div className="flex flex-nowrap items-center justify-end gap-3">
+            <div className="relative w-72 shrink-0">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Hľadať objednávky..."
-                className="box-border h-[42px] w-full rounded-xl border border-[rgba(0,242,255,0.4)] bg-secondary py-2 pl-9 pr-4 text-base leading-6 text-secondary-foreground placeholder:text-muted-foreground focus:outline-none"
+                className="h-[42px] w-full rounded-xl border border-primary/50 bg-transparent py-2 pl-9 pr-4 text-base leading-6 text-foreground shadow-none placeholder:text-muted-foreground focus:outline-none"
               />
             </div>
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
               className="admin-filter-select w-40 shrink-0 py-2 px-4 text-base font-normal text-left rounded-lg border border-primary/50 bg-primary/20 shadow-none"
-              style={{ color: statusFilter === 'pending' ? '#fb923c' : (STATUS_TEXT_COLOR[statusFilter] || STATUS_TEXT_COLOR.all) }}
+              style={{ color: STATUS_TEXT_COLOR[statusFilter] || STATUS_TEXT_COLOR.all }}
             >
               <option value="all" style={{ color: STATUS_TEXT_COLOR.all, backgroundColor: '#050505', fontSize: '16px' }}>Všetky</option>
               <option value="paid" style={{ color: STATUS_TEXT_COLOR.paid, backgroundColor: '#050505', fontSize: '16px' }}>Zaplatené</option>
-              <option value="pending" className="text-orange-400" style={{ color: '#fb923c', backgroundColor: '#050505', fontSize: '16px' }}>Čakajúce</option>
+              <option value="pending" style={{ color: STATUS_TEXT_COLOR.pending, backgroundColor: '#050505', fontSize: '16px' }}>Čakajúce</option>
               <option value="processing" style={{ color: STATUS_TEXT_COLOR.processing, backgroundColor: '#050505', fontSize: '16px' }}>V Procese</option>
               <option value="completed" style={{ color: STATUS_TEXT_COLOR.completed, backgroundColor: '#050505', fontSize: '16px' }}>Dokončené</option>
               <option value="cancelled" style={{ color: STATUS_TEXT_COLOR.cancelled, backgroundColor: '#050505', fontSize: '16px' }}>Zrušené</option>
@@ -1758,7 +1758,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
         </div>
       </header>
 
-      <main className="w-full pt-2 pb-8">
+      <main className="w-full flex-1 py-6">
         <div className="mb-6 w-full grid grid-cols-1 xl:grid-cols-5 gap-4">
           <div className="rounded-none p-3 bg-[#0f172a] border-t-4 border-t-cyan-400 shadow-[inset_0_0_28px_rgba(34,211,238,0.14)]">
             <p className="uppercase text-sm text-white font-extrabold tracking-wide">Celkové tržby</p>
@@ -1778,9 +1778,9 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
               -{Math.abs(financialStats?.refunds ?? 0).toFixed(2)} €
             </p>
           </div>
-          <div className="rounded-none p-3 bg-[#0f172a] border-t-4 border-t-orange-500 shadow-[inset_0_0_28px_rgba(249,115,22,0.14)]">
+          <div className="rounded-none p-3 bg-[#0f172a] border-t-4 border-t-yellow-500 shadow-[inset_0_0_28px_rgba(234,179,8,0.16)]">
             <p className="uppercase text-sm text-white font-extrabold tracking-wide">Čakajúce</p>
-            <p className="text-4xl font-black text-orange-400 mt-1 leading-none">
+            <p className="text-4xl font-black text-yellow-400 mt-1 leading-none">
               {orders.filter((o) => o.status === 'pending').length}
             </p>
           </div>
@@ -1802,8 +1802,8 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                   <th className="text-left p-2.5 border-r border-slate-500 text-sm font-bold uppercase tracking-wide align-middle text-white whitespace-nowrap min-w-[12rem]">ID</th>
                   <th className="text-left p-2.5 border-r border-slate-500 text-sm font-bold uppercase tracking-wide align-middle text-white whitespace-nowrap">Dátum</th>
                   <th className="text-left p-2.5 border-r border-slate-500 text-sm font-bold uppercase tracking-wide align-middle text-white w-full min-w-[320px]">Zákazník</th>
-                  <th className="text-center p-2.5 border-r border-slate-500 text-sm font-bold uppercase tracking-wide align-middle text-white whitespace-nowrap min-w-[9rem]">Cena</th>
-                  <th className="text-center p-2.5 border-r border-slate-500 text-sm font-bold uppercase tracking-wide align-middle text-white whitespace-nowrap">Stav</th>
+                  <th className="text-center p-4 border-r border-slate-500 text-sm font-bold uppercase tracking-wide align-middle text-white whitespace-nowrap min-w-[8.5rem]">Cena</th>
+                  <th className="text-center p-2.5 border-r border-slate-500 text-sm font-bold uppercase tracking-wide align-middle text-white whitespace-nowrap min-w-[9.5rem]">Stav</th>
                   <th className="text-center p-2.5 border-r border-slate-500 text-sm font-bold uppercase tracking-wide align-middle text-white whitespace-nowrap sticky right-0 bg-[#0a192f] z-10 min-w-[260px]">Akcie</th>
                 </tr>
               </thead>
@@ -1825,10 +1825,9 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                     const active = activeRowId === order.id;
                     const cell = (edge: 'first' | 'mid' | 'last' | 'fill') => {
                       const selected = active && edge !== 'last' ? 'bg-slate-800/40' : '';
-                      const pad = edge === 'last' || edge === 'fill' ? 'h-px p-0' : 'px-2 py-1';
-                      return `${pad} align-middle border-r border-slate-800/60 ${selected}`;
+                      return `px-4 py-2 align-middle border-r border-slate-800/60 ${selected}`;
                     };
-                    const actionCell = 'flex-1 h-full min-h-[52px] min-w-[52px] inline-flex items-center justify-center rounded-none border-0 bg-transparent transition-all duration-150';
+                    const actionCell = 'w-12 flex-1 min-h-[48px] inline-flex items-center justify-center border-l border-slate-700/50 rounded-none transition-colors bg-cyan-950/30 hover:bg-slate-700/60';
                     const documents: { number: string; href: string; title: string }[] = [];
                     if (order.invoice_number) {
                       documents.push({ number: order.invoice_number, href: order.invoice_url || '#', title: 'Zobraziť faktúru' });
@@ -1863,23 +1862,23 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                         )}
                       </td>
                       <td className={`${cell('mid')} whitespace-nowrap min-w-[12rem]`}>
-                        <span className="font-mono text-lg font-bold text-cyan-300 whitespace-nowrap">
+                        <span className="font-mono text-lg font-bold leading-none text-cyan-300 whitespace-nowrap">
                           {order.order_number || order.id.slice(0, 6).toUpperCase()}
                         </span>
                       </td>
                       <td className={`${cell('mid')} whitespace-nowrap`}>
-                        <p className="text-base font-medium text-white whitespace-nowrap">
+                        <p className="text-base font-medium leading-none text-white whitespace-nowrap">
                           {formatLocalDateTime(order.created_at)}
                         </p>
                       </td>
                       <td className={`${cell('mid')} w-full min-w-[320px]`}>
-                        <div className="flex flex-col justify-center">
-                          <p className="font-semibold text-lg leading-tight text-cyan-300 whitespace-nowrap" title={order.customer_name}>{order.customer_name}</p>
-                          <p className="text-sm leading-tight text-white whitespace-nowrap" title={order.customer_email}>{order.customer_email}</p>
+                        <div>
+                          <p className="whitespace-nowrap text-lg font-bold leading-none text-cyan-400" title={order.customer_name}>{order.customer_name}</p>
+                          <p className="whitespace-nowrap text-xs leading-none text-white" title={order.customer_email}>{order.customer_email}</p>
                         </div>
                       </td>
-                      <td className={`${cell('mid')} whitespace-nowrap min-w-[9rem]`}>
-                        <p className={`text-center font-bold text-xl leading-none ${
+                      <td className={`min-w-[8.5rem] whitespace-nowrap border-r border-slate-800/60 p-4 text-center align-middle ${active ? 'bg-slate-800/40' : ''}`}>
+                        <p className={`flex items-center justify-center text-xl font-bold leading-none ${
                           order.status === 'cancelled' 
                             ? 'text-red-500' 
                             : 'text-primary'
@@ -1887,11 +1886,11 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                           {getDisplayAmount(order).toFixed(2)}€
                         </p>
                       </td>
-                      <td className={`${cell('fill')} whitespace-nowrap min-w-[9.5rem]`}>
+                      <td className={`h-px min-w-[9.5rem] whitespace-nowrap border-r border-slate-800/60 p-0 text-center ${active ? 'bg-slate-800/40' : ''}`}>
                         <select
                           value={order.status}
                           onChange={(e) => handleStatusChange(order.id, e.target.value)}
-                          className={`block h-full min-h-[52px] w-full cursor-pointer appearance-none rounded-none border-0 bg-transparent px-3 text-center text-base font-semibold outline-none transition-all duration-150 ${STATUS_CELL_CLASS[order.status] || STATUS_CELL_CLASS.pending}`}
+                          className={`status-cell-select flex h-full min-h-[48px] w-full cursor-pointer appearance-none items-center justify-center border-0 px-4 text-center font-bold outline-none ${STATUS_CELL_CLASS[order.status] || STATUS_CELL_CLASS.pending}`}
                         >
                           <option value="pending" style={{ color: STATUS_TEXT_COLOR.pending, backgroundColor: '#050505' }}>Čakajúce</option>
                           <option value="processing" style={{ color: STATUS_TEXT_COLOR.processing, backgroundColor: '#050505' }}>V Procese</option>
@@ -1899,12 +1898,12 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                           <option value="cancelled" style={{ color: STATUS_TEXT_COLOR.cancelled, backgroundColor: '#050505' }}>Zrušené</option>
                         </select>
                       </td>
-                      <td className={`${cell('last')} sticky right-0 z-10 bg-[#070d16] min-w-[260px]`}>
-                        <div className="flex h-full w-full items-stretch divide-x divide-slate-700/70">
+                      <td className="sticky right-0 z-10 h-px border-r border-slate-800/60 bg-[#070d16] p-0">
+                        <div className="flex h-full items-stretch justify-end gap-0 p-0">
                           {order.file_url ? (
                             <button
                               onClick={() => handleDownload(order.file_url!, order.order_number || order.id.slice(0, 8), order.id)}
-                              className={`${actionCell} text-orange-400/80 hover:text-orange-200 hover:bg-orange-500/30 hover:shadow-[inset_0_0_18px_rgba(249,115,22,0.45)]`}
+                              className={`${actionCell} text-orange-400`}
                               title="Stiahnuť súbor zákazníka"
                             >
                               <Download className="w-5 h-5" />
@@ -1915,7 +1914,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                             </span>
                           )}
                           {order.status === 'completed' || order.result_file_url ? (
-                            <span className={`${actionCell} text-emerald-400/80`} title="Hotový súbor je nahraný">
+                            <span className={`${actionCell} text-emerald-400`} title="Hotový súbor je nahraný">
                               <CheckCircle className="w-5 h-5" />
                             </span>
                           ) : order.invoice_number ? (
@@ -1929,7 +1928,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                               className={`${actionCell} ${
                                 uploadingId === order.id
                                   ? 'text-slate-500 cursor-not-allowed'
-                                  : 'text-emerald-400/80 hover:text-emerald-200 hover:bg-emerald-500/30 hover:shadow-[inset_0_0_18px_rgba(16,185,129,0.45)]'
+                                  : 'text-emerald-400'
                               }`}
                               title={uploadingId === order.id ? 'Odosielam...' : 'Nahrať hotový súbor'}
                             >
@@ -1938,7 +1937,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                           )}
                           <button
                             onClick={() => setDetailOrder(order)}
-                            className={`${actionCell} text-blue-400/80 hover:text-blue-200 hover:bg-blue-500/30 hover:shadow-[inset_0_0_18px_rgba(59,130,246,0.45)]`}
+                            className={`${actionCell} text-blue-400`}
                             title="Zobraziť detail objednávky"
                           >
                             <FileText className="w-5 h-5" />
@@ -1947,11 +1946,11 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                             type="button"
                             onClick={() => order.status !== 'cancelled' && openRefundModal(order)}
                             disabled={order.status === 'cancelled'}
-                            className={`${actionCell} ${
+                            className={
                               order.status === 'cancelled'
-                                ? 'text-slate-600 cursor-not-allowed'
-                                : 'text-amber-400/80 hover:text-amber-200 hover:bg-amber-500/30 hover:shadow-[inset_0_0_18px_rgba(245,158,11,0.45)]'
-                            }`}
+                                ? `${actionCell} cursor-not-allowed text-slate-600`
+                                : `${actionCell} text-red-500`
+                            }
                             title="Vystaviť dobropis"
                           >
                             <RotateCcw className="w-5 h-5" />
@@ -1963,7 +1962,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                                 `Delete pre ${order.order_number || order.id.slice(0, 8).toUpperCase()} je pripravené na CRUD napojenie.`
                               )
                             }
-                            className={`${actionCell} text-red-400/80 hover:text-red-200 hover:bg-red-500/30 hover:shadow-[inset_0_0_18px_rgba(239,68,68,0.5)]`}
+                            className={`${actionCell} text-red-400`}
                             title="Zmazať objednávku"
                           >
                             <Trash2 className="w-5 h-5" />
@@ -1982,115 +1981,120 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
         {/* Order Detail Modal */}
         {detailOrder && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-            <div className="glass-card max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-2xl font-bold text-foreground flex items-center gap-2">
+            <div className="max-w-5xl w-full max-h-[90vh] overflow-y-auto overflow-x-hidden rounded-xl border border-[rgba(0,242,255,0.4)] bg-[#070b10] shadow-[0_0_28px_rgba(0,242,255,0.16)]">
+              <div className="p-2">
+                <div className="mb-2 flex items-center justify-between">
+                  <h2 className="flex items-center gap-2 text-xl font-bold text-foreground">
                     <FileText className="w-6 h-6 text-primary" />
                     Detail objednávky
                   </h2>
                   <button
                     onClick={() => setDetailOrder(null)}
-                    className="p-2 rounded-lg hover:bg-secondary/50 transition-colors"
+                    className="shrink-0 rounded-lg p-2 text-muted-foreground transition-colors duration-200 hover:bg-red-500/15 hover:text-red-500"
                   >
-                    <X className="w-5 h-5 text-muted-foreground" />
+                    <X className="h-5 w-5" />
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                  {/* Základné informácie */}
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-semibold text-foreground border-b border-primary/20 pb-2">
-                      Základné informácie
-                    </h3>
-                    <div className="space-y-3">
-                      <div>
-                        <p className="text-sm text-muted-foreground">ID objednávky</p>
-                        <p className="font-mono font-semibold text-primary">{detailOrder.order_number || detailOrder.id.slice(0, 8).toUpperCase()}</p>
+                <div className="grid min-w-0 grid-cols-1 items-start gap-2 lg:grid-cols-2">
+                  <div className="flex min-w-0 flex-col gap-1">
+                    <section className="min-w-0 rounded-lg border border-[rgba(0,242,255,0.25)] bg-[#070b10] p-2.5">
+                      <h3 className="mb-1.5 border-b border-primary/20 pb-1 text-sm font-semibold text-foreground">
+                        Základné informácie
+                      </h3>
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+                        <div>
+                          <p className="text-sm text-muted-foreground">ID objednávky</p>
+                          <p className="break-all font-mono font-semibold text-primary">{detailOrder.order_number || detailOrder.id.slice(0, 8).toUpperCase()}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Dátum vytvorenia</p>
+                          <p className="break-words text-foreground">{formatLocalDateTime(detailOrder.created_at)}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Stav</p>
+                          <span className={`inline-flex items-center rounded-full px-3 py-1.5 text-sm font-semibold ${getStatusClass(detailOrder.status)}`}>
+                            {detailOrder.status === 'pending' ? 'Čakajúce' : detailOrder.status === 'processing' ? 'V Procese' : detailOrder.status === 'completed' ? 'Dokončené' : detailOrder.status === 'cancelled' ? 'Zrušené' : detailOrder.status === 'paid' ? 'Zaplatené' : detailOrder.status}
+                          </span>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Celková cena</p>
+                          <p className={`text-xl font-bold ${
+                            detailOrder.status === 'cancelled'
+                              ? 'text-red-500'
+                              : 'text-primary'
+                          }`}>
+                            {getDisplayAmount(detailOrder).toFixed(2)}€
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">Dátum vytvorenia</p>
-                        <p className="text-foreground">{formatLocalDateTime(detailOrder.created_at)}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">Stav</p>
-                        <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-semibold ${getStatusClass(detailOrder.status)}`}>
-                          {detailOrder.status === 'pending' ? 'Čakajúce' : detailOrder.status === 'processing' ? 'V Procese' : detailOrder.status === 'completed' ? 'Dokončené' : detailOrder.status === 'cancelled' ? 'Zrušené' : detailOrder.status === 'paid' ? 'Zaplatené' : detailOrder.status}
-                        </span>
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">Celková cena</p>
-                        <p className={`text-xl font-bold ${
-                          detailOrder.status === 'cancelled' 
-                            ? 'text-red-500' 
-                            : 'text-primary'
-                        }`}>
-                          {getDisplayAmount(detailOrder).toFixed(2)}€
-                        </p>
-                      </div>
-                    </div>
-                  </div>
+                    </section>
 
-                  {/* Zákazník */}
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-semibold text-foreground border-b border-primary/20 pb-2">
-                      Zákazník
-                    </h3>
-                    <div className="space-y-3">
-                      <div>
-                        <p className="text-sm text-muted-foreground">Meno</p>
-                        <p className="text-foreground font-medium">{detailOrder.customer_name}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">E-mail</p>
-                        <p className="text-foreground">{detailOrder.customer_email}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Vozidlo */}
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-semibold text-foreground border-b border-primary/20 pb-2">
-                      Vozidlo
-                    </h3>
-                    <div className="space-y-3">
-                      <div>
-                        <p className="text-sm text-muted-foreground">Značka / Model</p>
-                        <p className="text-foreground font-medium">{detailOrder.car_brand || 'Nezadané'} {detailOrder.car_model || ''}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">Palivo</p>
-                        <p className="text-foreground">{detailOrder.fuel_type || '—'}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">Rok výroby</p>
-                        <p className="text-foreground">{detailOrder.year ? detailOrder.year.toString() : '—'}</p>
-                      </div>
-                      {detailOrder.ecu_type && (
+                    <section className="min-w-0 rounded-lg border border-[rgba(0,242,255,0.25)] bg-[#070b10] p-2.5">
+                      <h3 className="mb-1.5 border-b border-primary/20 pb-1 text-sm font-semibold text-foreground">
+                        Vozidlo
+                      </h3>
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+                        <div>
+                          <p className="text-sm text-muted-foreground">Značka / Model</p>
+                          <p className="break-words font-medium text-foreground">{detailOrder.car_brand || 'Nezadané'} {detailOrder.car_model || ''}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Palivo</p>
+                          <p className="break-words text-foreground">{detailOrder.fuel_type || '—'}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Rok výroby</p>
+                          <p className="break-words text-foreground">{detailOrder.year ? detailOrder.year.toString() : '—'}</p>
+                        </div>
                         <div>
                           <p className="text-sm text-muted-foreground">Typ ECU</p>
-                          <p className="text-foreground">{detailOrder.ecu_type}</p>
+                          <p className="break-words text-foreground">{detailOrder.ecu_type || '—'}</p>
                         </div>
-                      )}
-                    </div>
+                      </div>
+                    </section>
+
+                    <section className="min-w-0 rounded-lg border border-[rgba(0,242,255,0.25)] bg-[#070b10] p-2.5">
+                      <h3 className="mb-1.5 border-b border-primary/20 pb-1 text-sm font-semibold text-foreground">
+                        Poznámka zákazníka
+                      </h3>
+                      <p className="break-words whitespace-pre-wrap text-foreground">{detailOrder.customer_note || '—'}</p>
+                    </section>
                   </div>
 
-                  {/* Služby */}
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-semibold text-foreground border-b border-primary/20 pb-2">
-                      Služby
-                    </h3>
-                    <div>
-                      <p className="text-foreground">{getServiceNames(detailOrder.service_type) || '—'}</p>
-                    </div>
-                  </div>
-                </div>
+                  <div className="flex min-w-0 flex-col gap-1">
+                    <section className="min-w-0 rounded-lg border border-[rgba(0,242,255,0.25)] bg-[#070b10] p-2.5">
+                      <h3 className="mb-1.5 border-b border-primary/20 pb-1 text-sm font-semibold text-foreground">
+                        Zákazník
+                      </h3>
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+                        <div>
+                          <p className="text-sm text-muted-foreground">Meno</p>
+                          <p className="break-words font-medium text-foreground">{detailOrder.customer_name}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">E-mail</p>
+                          <p className="break-all text-foreground">{detailOrder.customer_email}</p>
+                        </div>
+                      </div>
+                    </section>
 
-                {/* Faktúra a Dobropis */}
-                {(detailOrder.invoice_number || detailOrder.credit_note_number) && (
-                  <div className="mt-6 pt-6 border-t border-primary/20">
-                    <h3 className="text-lg font-semibold text-foreground mb-4">Faktúra a Dobropis</h3>
-                    <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-2">
+                    <section className="min-w-0 rounded-lg border border-[rgba(0,242,255,0.25)] bg-[#070b10] p-2.5">
+                      <h3 className="mb-1.5 border-b border-primary/20 pb-1 text-sm font-semibold text-foreground">
+                        Služby
+                      </h3>
+                      <p className="break-words text-foreground">{getServiceNames(detailOrder.service_type) || '—'}</p>
+                    </section>
+
+                    <section className="min-w-0 rounded-lg border border-[rgba(0,242,255,0.25)] bg-[#070b10] p-2.5">
+                      <h3 className="mb-1.5 border-b border-primary/20 pb-1 text-sm font-semibold text-foreground">
+                        Faktúra a Dobropis
+                      </h3>
+                      {!detailOrder.invoice_number && !detailOrder.credit_note_number ? (
+                        <p className="text-sm text-muted-foreground">—</p>
+                      ) : (
+                      <div className="space-y-1.5">
                       {detailOrder.invoice_number && (
                         <div>
                           <p className="text-sm text-muted-foreground mb-2">Faktúra</p>
@@ -2101,7 +2105,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                             className="inline-flex items-center gap-2 text-green-400 hover:text-green-300 underline"
                           >
                             <FileText className="w-4 h-4" />
-                            <span className="font-mono">{detailOrder.invoice_number}</span>
+                            <span className="break-all font-mono">{detailOrder.invoice_number}</span>
                           </a>
                         </div>
                       )}
@@ -2115,24 +2119,24 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                             className="inline-flex items-center gap-2 text-red-500 hover:text-red-400 underline"
                           >
                             <FileText className="w-4 h-4" />
-                            <span className="font-mono">{detailOrder.credit_note_number}</span>
+                            <span className="break-all font-mono">{detailOrder.credit_note_number}</span>
                           </a>
                         </div>
                       )}
+                      </div>
+                      )}
+                    </section>
                     </div>
-                  </div>
-                )}
 
-                {/* Súbory */}
-                <div className="mt-6 pt-6 border-t border-primary/20">
-                  <h3 className="text-lg font-semibold text-foreground mb-4">Súbory</h3>
-                  <div className="space-y-4">
-                    <div>
-                      <p className="text-sm text-muted-foreground mb-2">Súbor zákazníka</p>
+                    <section className="min-w-0 rounded-lg border border-[rgba(0,242,255,0.25)] bg-[#070b10] p-2.5">
+                      <h3 className="mb-1.5 border-b border-primary/20 pb-1 text-sm font-semibold text-foreground">Súbory</h3>
+                      <div className="grid grid-cols-2 gap-2">
+                    <div className="min-w-0">
+                      <p className="mb-1 text-xs text-muted-foreground">Súbor zákazníka</p>
                       {detailOrder.file_url ? (
                         <button
                           onClick={() => handleDownload(detailOrder.file_url!, detailOrder.order_number || detailOrder.id.slice(0, 8), detailOrder.id)}
-                          className="btn-secondary inline-flex items-center gap-2"
+                          className="flex h-9 w-full items-center justify-center gap-1.5 rounded-lg border border-primary/40 bg-transparent px-2 text-center text-xs leading-tight text-foreground"
                         >
                           <Download className="w-4 h-4" />
                           Stiahnuť súbor zákazníka
@@ -2141,13 +2145,13 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                         <p className="text-muted-foreground text-sm">Súbor nie je k dispozícii</p>
                       )}
                     </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground mb-2">Hotový súbor</p>
+                    <div className="min-w-0">
+                      <p className="mb-1 text-xs text-muted-foreground">Hotový súbor</p>
                       {detailOrder.result_file_url ? (
                         <a
                           href={detailOrder.result_file_url}
                           download
-                          className="btn-primary inline-flex items-center gap-2"
+                          className="flex h-9 w-full items-center justify-center gap-1.5 rounded-lg border border-primary/40 bg-primary/15 px-2 text-center text-xs font-medium leading-tight text-primary"
                         >
                           <Eye className="w-4 h-4" />
                           Stiahnuť hotový súbor
@@ -2157,7 +2161,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                           <p className="text-muted-foreground text-sm">Súbor už bol odoslaný</p>
                           <button
                             disabled={true}
-                            className="inline-flex items-center gap-2 bg-gray-200 text-gray-500 cursor-not-allowed"
+                            className="flex h-9 w-full cursor-not-allowed items-center justify-center rounded-lg border border-white/10 bg-secondary px-2 text-center text-xs text-muted-foreground"
                           >
                             <span>Súbor odoslaný</span>
                           </button>
@@ -2178,12 +2182,12 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                                   triggerUpload(detailOrder.id);
                                 }}
                                 disabled={uploadingId === detailOrder.id || detailOrder.invoice_number}
-                                className={`inline-flex items-center gap-2 ${
+                                className={`flex h-9 w-full items-center justify-center gap-1.5 rounded-lg px-2 text-center text-xs leading-tight ${
                                   uploadingId === detailOrder.id
-                                    ? 'bg-gray-500/20 text-gray-400 cursor-not-allowed'
+                                    ? 'cursor-not-allowed border border-white/10 bg-white/5 text-gray-400'
                                     : detailOrder.invoice_number
-                                    ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
-                                    : 'btn-primary'
+                                    ? 'cursor-not-allowed border border-white/10 bg-secondary text-muted-foreground'
+                                    : 'border border-primary/40 bg-primary/15 font-medium text-primary'
                                 }`}
                               >
                                 {uploadingId === detailOrder.id ? (
@@ -2206,37 +2210,67 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                       )}
                     </div>
                   </div>
-                </div>
+                    </section>
 
-                {/* Poznámka zákazníka */}
-                <div className="mt-6 pt-6 border-t border-primary/20">
-                  <h3 className="text-lg font-semibold text-foreground border-b border-primary/20 pb-2 mb-4">
-                    Poznámka zákazníka
-                  </h3>
-                  <div className="bg-secondary/30 p-4 rounded-lg">
-                    <p className="text-foreground whitespace-pre-wrap">{detailOrder.customer_note || '—'}</p>
+                    <section className="min-w-0 rounded-lg border border-[rgba(0,242,255,0.25)] bg-[#070b10] p-2.5">
+                      <h3 className="mb-1.5 border-b border-primary/20 pb-1 text-sm font-semibold text-foreground">
+                        CRC
+                      </h3>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <input
+                          type="text"
+                          value={getEditableValue(detailOrder, 'checksum_crc')}
+                          onChange={(e) => {
+                            handleFieldChange(detailOrder.id, 'checksum_crc', e.target.value);
+                            if (!editingFields[detailOrder.id]) {
+                              setEditingFields(prev => ({
+                                ...prev,
+                                [detailOrder.id]: { ...prev[detailOrder.id], checksum_crc: e.target.value }
+                              }));
+                            }
+                          }}
+                          placeholder="CRC..."
+                          maxLength={6}
+                          className="h-9 w-[120px] max-w-full rounded border border-gray-600 bg-secondary/50 px-3 py-2 font-mono text-sm text-white placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-primary/50"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setDetailOrder(null)}
+                          className="rounded-lg border border-transparent bg-secondary px-4 py-2 text-foreground transition-all duration-200 hover:border-cyan-400/60 hover:bg-gray-800 hover:text-white hover:shadow-[0_0_16px_rgba(0,242,255,0.22)]"
+                        >
+                          Zrušiť
+                        </button>
+                        <button
+                          onClick={() => handleSaveFields(detailOrder.id)}
+                          disabled={savingId === detailOrder.id}
+                          className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/20 px-4 py-2 text-primary transition-colors hover:bg-primary/30 disabled:cursor-not-allowed disabled:opacity-50"
+                          title="Uložiť CRC"
+                        >
+                          <Save className={`w-4 h-4 ${savingId === detailOrder.id ? 'animate-pulse' : ''}`} />
+                          Uložiť
+                        </button>
+                      </div>
+                    </section>
                   </div>
                 </div>
 
                 {/* Interná poznámka */}
                 {detailOrder.internal_note && (
-                  <div className="mt-6 pt-6 border-t border-primary/20">
-                    <h3 className="text-lg font-semibold text-foreground border-b border-primary/20 pb-2 mb-4">
+                  <section className="mt-2 min-w-0 rounded-lg border border-[rgba(0,242,255,0.25)] bg-[#070b10] p-2.5">
+                    <h3 className="mb-1.5 border-b border-primary/20 pb-1 text-sm font-semibold text-foreground">
                       Interná poznámka
                     </h3>
-                    <div className="bg-primary/10 p-4 rounded-lg">
-                      <p className="text-foreground whitespace-pre-wrap">{detailOrder.internal_note}</p>
-                    </div>
-                  </div>
+                    <p className="break-words whitespace-pre-wrap text-foreground">{detailOrder.internal_note}</p>
+                  </section>
                 )}
 
                 {/* Activity Log */}
                 {activityLogs.length > 0 && (
-                  <div className="mt-6 pt-6 border-t border-primary/20">
-                    <h3 className="text-lg font-semibold text-foreground border-b border-primary/20 pb-2 mb-4">
+                  <section className="mt-2 min-w-0 rounded-lg border border-[rgba(0,242,255,0.25)] bg-[#070b10] p-2.5">
+                    <h3 className="mb-1.5 border-b border-primary/20 pb-1 text-sm font-semibold text-foreground">
                       Časová os aktivít
                     </h3>
-                    <div className="space-y-3">
+                    <div className="space-y-1.5">
                       {activityLogs.map((log, index) => {
                         const actionLabels: Record<string, string> = {
                           'INVOICE_GENERATED': 'Faktúra vystavená',
@@ -2255,17 +2289,17 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                         return (
                           <div key={log.id} className="flex items-start gap-3 pb-3 border-b border-primary/10 last:border-0">
                             <div className="flex-shrink-0 w-2 h-2 rounded-full bg-primary mt-2" />
-                            <div className="flex-1">
-                              <div className="flex items-center justify-between">
-                                <span className={`font-medium ${actionColors[log.action] || 'text-foreground'}`}>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                                <span className={`break-words font-medium ${actionColors[log.action] || 'text-foreground'}`}>
                                   {actionLabels[log.action] || log.action}
                                 </span>
-                                <span className="text-xs text-muted-foreground">
+                                <span className="shrink-0 text-xs text-muted-foreground">
                                   {new Date(log.created_at).toLocaleString('sk-SK')}
                                 </span>
                               </div>
                               {log.details && Object.keys(log.details).length > 0 && (
-                                <div className="mt-1 text-sm text-muted-foreground">
+                                <div className="mt-1 break-words text-sm text-muted-foreground">
                                   {log.action === 'INVOICE_GENERATED' && log.details.invoice_number && (
                                     <span>Faktúra: {log.details.invoice_number}</span>
                                   )}
@@ -2282,50 +2316,14 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                         );
                       })}
                     </div>
-                  </div>
+                  </section>
                 )}
 
-                {/* CRC */}
-                <div className="mt-6 pt-6 border-t border-primary/20">
-                  <h3 className="text-lg font-semibold text-foreground border-b border-primary/20 pb-2 mb-4">
-                    CRC
-                  </h3>
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="text"
-                      value={getEditableValue(detailOrder, 'checksum_crc')}
-                      onChange={(e) => {
-                        handleFieldChange(detailOrder.id, 'checksum_crc', e.target.value);
-                        // Automaticky aktivovať tlačidlo pri zmene
-                        if (!editingFields[detailOrder.id]) {
-                          setEditingFields(prev => ({
-                            ...prev,
-                            [detailOrder.id]: { ...prev[detailOrder.id], checksum_crc: e.target.value }
-                          }));
-                        }
-                      }}
-                      placeholder="CRC..."
-                      maxLength={6}
-                      className="w-[120px] h-9 bg-secondary/50 border border-gray-600 rounded px-3 py-2 text-sm text-white placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-primary/50 font-mono"
-                    />
-                    <button
-                      onClick={() => handleSaveFields(detailOrder.id)}
-                      disabled={savingId === detailOrder.id}
-                      className="px-4 py-2 bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                      title="Uložiť CRC"
-                    >
-                      <Save className={`w-4 h-4 ${savingId === detailOrder.id ? 'animate-pulse' : ''}`} />
-                      Uložiť
-                    </button>
-                  </div>
-                </div>
-
-                {/* Important Message */}
-                <div className="mt-6 pt-6 border-t border-primary/20">
-                  <h3 className="text-lg font-semibold text-foreground border-b border-primary/20 pb-2 mb-4">
+                <section className="mt-1 w-full min-w-0 rounded-lg border border-[rgba(0,242,255,0.25)] bg-[#070b10] p-2.5">
+                  <h3 className="mb-1.5 border-b border-primary/20 pb-1 text-sm font-semibold text-foreground">
                     *IMPORTANT*
                   </h3>
-                  <div className="space-y-3">
+                  <div className="space-y-1.5">
                     <textarea
                       value={importantNote}
                       onChange={(e) => {
@@ -2336,15 +2334,23 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                         }
                       }}
                       placeholder="Enter important message for customer email..."
-                      rows={4}
+                      rows={2}
                       maxLength={500}
-                      className="w-full bg-secondary/50 border border-gray-600 rounded-lg px-4 py-3 text-sm text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none"
+                      className="h-8 w-full resize-none rounded-lg border border-gray-600 bg-secondary/50 px-3 py-1 text-sm text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/50"
                     />
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs text-muted-foreground">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <p className="min-w-0 flex-1 break-words text-xs text-muted-foreground">
                         This message will appear in the customer email after file completion notification.
                       </p>
-                      <button
+                      <div className="flex shrink-0 items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setDetailOrder(null)}
+                          className="rounded-lg border border-transparent bg-secondary px-4 py-2 text-foreground transition-all duration-200 hover:border-cyan-400/60 hover:bg-gray-800 hover:text-white hover:shadow-[0_0_16px_rgba(0,242,255,0.22)]"
+                        >
+                          Zrušiť
+                        </button>
+                        <button
                         onClick={() => handleSaveImportantNote(detailOrder.id)}
                         disabled={savingImportantNote === detailOrder.id || (savedImportantNote !== null && importantNote === savedImportantNote)}
                         className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
@@ -2370,10 +2376,11 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                             Uložiť poznámku
                           </>
                         )}
-                      </button>
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
+                </section>
               </div>
             </div>
           </div>
@@ -2396,7 +2403,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
         />
       </main>
 
-      <footer className="w-full py-4 text-center text-xs text-gray-500">
+      <footer className="mt-auto w-full py-4 text-center text-xs text-gray-500">
         <p>REMAPPRO, IČO: 41281471, DIČ: 1041196607, Janka Kráľa 29, 990 01 Veľký Krtíš, Slovakia</p>
         <p className="mt-1">Copyright © 2026 REMAPPRO Digital Solutions. All rights reserved.</p>
       </footer>
@@ -2404,7 +2411,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
 
       {/* Cancel Order Confirmation Dialog */}
       <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
-        <AlertDialogContent className="sm:max-w-[500px]">
+        <AlertDialogContent className="max-h-[90vh] overflow-y-auto border border-[rgba(0,242,255,0.45)] bg-[#070b10] shadow-[0_0_28px_rgba(0,242,255,0.22)] sm:max-w-[500px]">
           <AlertDialogHeader>
             <AlertDialogTitle>Storno objednávky a vrátenie peňazí</AlertDialogTitle>
             <AlertDialogDescription>
@@ -2427,7 +2434,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                     setRefundAmount(value);
                   }
                 }}
-                className="text-lg font-mono"
+                className="h-12 font-mono text-xl leading-none [appearance:textfield] md:text-xl [&::-webkit-inner-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
               />
             </div>
             <div className="grid gap-2">
@@ -2482,9 +2489,9 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
 
       {/* NEW: Refund Wizard Modal */}
       <Dialog open={refundModalOpen} onOpenChange={setRefundModalOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="max-h-[90vh] overflow-y-auto overflow-x-hidden border border-[rgba(0,242,255,0.45)] bg-[#070b10] shadow-[0_0_28px_rgba(0,242,255,0.22)] sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle className="text-xl font-bold text-foreground flex items-center gap-2">
+            <DialogTitle className="flex items-start gap-2 break-words pr-8 text-xl font-bold leading-snug text-foreground">
               <RotateCcw className="w-5 h-5 text-red-500" />
               Refundácia objednávky {refundModalOrder?.order_number || refundModalOrder?.id.slice(0, 8).toUpperCase()}
             </DialogTitle>
@@ -2495,10 +2502,10 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
           <div className="grid gap-4 py-4">
             {refundModalOrder && (
               <>
-                <div className="p-3 bg-secondary/30 rounded-lg">
-                  <p className="text-sm text-muted-foreground">Zákazník</p>
-                  <p className="font-semibold text-foreground">{refundModalOrder.customer_name}</p>
-                  <p className="text-sm text-muted-foreground mt-1">{refundModalOrder.customer_email}</p>
+                <div className="rounded-lg border border-[rgba(0,242,255,0.35)] bg-gradient-to-r from-cyan-500/15 to-secondary/40 px-3 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-cyan-300">Zákazník</p>
+                  <p className="break-words font-semibold text-foreground">{refundModalOrder.customer_name}</p>
+                  <p className="break-all text-sm text-white/80">{refundModalOrder.customer_email}</p>
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="refund-wizard-amount">Refund Amount (€)</Label>
@@ -2515,7 +2522,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                         setRefundWizardAmount(value);
                       }
                     }}
-                    className="text-lg font-mono"
+                    className="h-12 font-mono text-xl leading-none [appearance:textfield] md:text-xl [&::-webkit-inner-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                   />
                   <p className="text-xs text-muted-foreground">
                     Predvolená suma: {typeof refundModalOrder.total_price === 'string' 
@@ -2537,7 +2544,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
               </>
             )}
           </div>
-          <DialogFooter>
+          <DialogFooter className="flex-wrap gap-2">
             <button
               onClick={() => {
                 setRefundModalOpen(false);
@@ -2545,7 +2552,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                 setRefundWizardAmount('');
                 setRefundWizardReason('');
               }}
-              className="px-4 py-2 rounded-lg bg-secondary hover:bg-secondary/80 text-foreground transition-colors"
+              className="rounded-lg border border-transparent bg-secondary px-4 py-2 text-foreground transition-all duration-200 hover:border-cyan-400/60 hover:bg-gray-800 hover:text-white hover:shadow-[0_0_16px_rgba(0,242,255,0.22)]"
               disabled={issuingCreditNote}
             >
               Zrušiť
