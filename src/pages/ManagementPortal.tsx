@@ -1713,18 +1713,18 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Hľadať objednávky..."
-                className="input-field h-9 w-full py-1 pl-9 pr-3 text-sm"
+                className="box-border h-[42px] w-full rounded-xl border border-[rgba(0,242,255,0.4)] bg-secondary py-2 pl-9 pr-4 text-base leading-6 text-secondary-foreground placeholder:text-muted-foreground focus:outline-none"
               />
             </div>
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
               className="admin-filter-select w-40 shrink-0 py-2 px-4 text-base font-normal text-left rounded-lg border border-primary/50 bg-primary/20 shadow-none"
-              style={{ color: STATUS_TEXT_COLOR[statusFilter] || STATUS_TEXT_COLOR.all }}
+              style={{ color: statusFilter === 'pending' ? '#fb923c' : (STATUS_TEXT_COLOR[statusFilter] || STATUS_TEXT_COLOR.all) }}
             >
               <option value="all" style={{ color: STATUS_TEXT_COLOR.all, backgroundColor: '#050505', fontSize: '16px' }}>Všetky</option>
               <option value="paid" style={{ color: STATUS_TEXT_COLOR.paid, backgroundColor: '#050505', fontSize: '16px' }}>Zaplatené</option>
-              <option value="pending" style={{ color: STATUS_TEXT_COLOR.pending, backgroundColor: '#050505', fontSize: '16px' }}>Čakajúce</option>
+              <option value="pending" className="text-orange-400" style={{ color: '#fb923c', backgroundColor: '#050505', fontSize: '16px' }}>Čakajúce</option>
               <option value="processing" style={{ color: STATUS_TEXT_COLOR.processing, backgroundColor: '#050505', fontSize: '16px' }}>V Procese</option>
               <option value="completed" style={{ color: STATUS_TEXT_COLOR.completed, backgroundColor: '#050505', fontSize: '16px' }}>Dokončené</option>
               <option value="cancelled" style={{ color: STATUS_TEXT_COLOR.cancelled, backgroundColor: '#050505', fontSize: '16px' }}>Zrušené</option>
@@ -1743,7 +1743,6 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
               <Power className={`w-4 h-4 ${statusLoading ? 'animate-spin' : ''}`} />
               {statusLoading ? 'Updating...' : statusMode === 'online' ? 'Force ONLINE' : statusMode === 'offline' ? 'Force OFFLINE' : 'Auto (Schedule)'}
             </button>
-            <span className="text-sm text-muted-foreground">Admin Portal</span>
             <button onClick={fetchOrders} className="btn-secondary py-2 px-4 flex items-center gap-2">
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
               Refresh
@@ -1759,7 +1758,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
         </div>
       </header>
 
-      <main className="w-full flex-1 py-6">
+      <main className="w-full pt-2 pb-8">
         <div className="mb-6 w-full grid grid-cols-1 xl:grid-cols-5 gap-4">
           <div className="rounded-none p-3 bg-[#0f172a] border-t-4 border-t-cyan-400 shadow-[inset_0_0_28px_rgba(34,211,238,0.14)]">
             <p className="uppercase text-sm text-white font-extrabold tracking-wide">Celkové tržby</p>
@@ -1803,8 +1802,8 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                   <th className="text-left p-2.5 border-r border-slate-500 text-sm font-bold uppercase tracking-wide align-middle text-white whitespace-nowrap min-w-[12rem]">ID</th>
                   <th className="text-left p-2.5 border-r border-slate-500 text-sm font-bold uppercase tracking-wide align-middle text-white whitespace-nowrap">Dátum</th>
                   <th className="text-left p-2.5 border-r border-slate-500 text-sm font-bold uppercase tracking-wide align-middle text-white w-full min-w-[320px]">Zákazník</th>
-                  <th className="text-left p-2.5 border-r border-slate-500 text-sm font-bold uppercase tracking-wide align-middle text-white whitespace-nowrap">Cena</th>
-                  <th className="text-left p-2.5 border-r border-slate-500 text-sm font-bold uppercase tracking-wide align-middle text-white whitespace-nowrap">Stav</th>
+                  <th className="text-center p-2.5 border-r border-slate-500 text-sm font-bold uppercase tracking-wide align-middle text-white whitespace-nowrap min-w-[9rem]">Cena</th>
+                  <th className="text-center p-2.5 border-r border-slate-500 text-sm font-bold uppercase tracking-wide align-middle text-white whitespace-nowrap">Stav</th>
                   <th className="text-center p-2.5 border-r border-slate-500 text-sm font-bold uppercase tracking-wide align-middle text-white whitespace-nowrap sticky right-0 bg-[#0a192f] z-10 min-w-[260px]">Akcie</th>
                 </tr>
               </thead>
@@ -1826,10 +1825,10 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                     const active = activeRowId === order.id;
                     const cell = (edge: 'first' | 'mid' | 'last' | 'fill') => {
                       const selected = active && edge !== 'last' ? 'bg-slate-800/40' : '';
-                      const pad = edge === 'last' || edge === 'fill' ? 'h-px p-0' : 'p-2';
+                      const pad = edge === 'last' || edge === 'fill' ? 'h-px p-0' : 'px-2 py-1';
                       return `${pad} align-middle border-r border-slate-800/60 ${selected}`;
                     };
-                    const actionCell = 'flex-1 h-full min-h-[56px] min-w-[52px] inline-flex items-center justify-center rounded-none border-0 bg-transparent transition-all duration-150';
+                    const actionCell = 'flex-1 h-full min-h-[52px] min-w-[52px] inline-flex items-center justify-center rounded-none border-0 bg-transparent transition-all duration-150';
                     const documents: { number: string; href: string; title: string }[] = [];
                     if (order.invoice_number) {
                       documents.push({ number: order.invoice_number, href: order.invoice_url || '#', title: 'Zobraziť faktúru' });
@@ -1874,13 +1873,13 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                         </p>
                       </td>
                       <td className={`${cell('mid')} w-full min-w-[320px]`}>
-                        <div>
-                          <p className="font-semibold text-lg text-white whitespace-nowrap" title={order.customer_name}>{order.customer_name}</p>
-                          <p className="text-base text-white whitespace-nowrap" title={order.customer_email}>{order.customer_email}</p>
+                        <div className="flex flex-col justify-center">
+                          <p className="font-semibold text-lg leading-tight text-cyan-300 whitespace-nowrap" title={order.customer_name}>{order.customer_name}</p>
+                          <p className="text-sm leading-tight text-white whitespace-nowrap" title={order.customer_email}>{order.customer_email}</p>
                         </div>
                       </td>
-                      <td className={`${cell('mid')} whitespace-nowrap`}>
-                        <p className={`font-bold text-lg leading-none ${
+                      <td className={`${cell('mid')} whitespace-nowrap min-w-[9rem]`}>
+                        <p className={`text-center font-bold text-xl leading-none ${
                           order.status === 'cancelled' 
                             ? 'text-red-500' 
                             : 'text-primary'
@@ -1892,7 +1891,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                         <select
                           value={order.status}
                           onChange={(e) => handleStatusChange(order.id, e.target.value)}
-                          className={`block h-full min-h-[56px] w-full cursor-pointer appearance-none rounded-none border-0 bg-transparent px-3 text-center text-base font-semibold outline-none transition-all duration-150 ${STATUS_CELL_CLASS[order.status] || STATUS_CELL_CLASS.pending}`}
+                          className={`block h-full min-h-[52px] w-full cursor-pointer appearance-none rounded-none border-0 bg-transparent px-3 text-center text-base font-semibold outline-none transition-all duration-150 ${STATUS_CELL_CLASS[order.status] || STATUS_CELL_CLASS.pending}`}
                         >
                           <option value="pending" style={{ color: STATUS_TEXT_COLOR.pending, backgroundColor: '#050505' }}>Čakajúce</option>
                           <option value="processing" style={{ color: STATUS_TEXT_COLOR.processing, backgroundColor: '#050505' }}>V Procese</option>
@@ -2397,7 +2396,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
         />
       </main>
 
-      <footer className="mt-auto w-full py-4 text-center text-xs text-gray-500">
+      <footer className="w-full py-4 text-center text-xs text-gray-500">
         <p>REMAPPRO, IČO: 41281471, DIČ: 1041196607, Janka Kráľa 29, 990 01 Veľký Krtíš, Slovakia</p>
         <p className="mt-1">Copyright © 2026 REMAPPRO Digital Solutions. All rights reserved.</p>
       </footer>
