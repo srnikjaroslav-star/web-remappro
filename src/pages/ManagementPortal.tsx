@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -1719,7 +1720,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="admin-filter-select w-40 shrink-0 py-2 px-4 text-base font-normal text-left rounded-lg border border-primary/50 bg-primary/20 shadow-none"
+              className="admin-filter-select w-40 shrink-0 py-2 px-4 text-base font-normal text-left rounded-lg border border-teal-500/30 bg-teal-950/40 shadow-none"
               style={{ color: STATUS_TEXT_COLOR[statusFilter] || STATUS_TEXT_COLOR.all }}
             >
               <option value="all" style={{ color: STATUS_TEXT_COLOR.all, backgroundColor: '#050505', fontSize: '16px' }}>Všetky</option>
@@ -1758,8 +1759,8 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
         </div>
       </header>
 
-      <main className="w-full flex-1 py-6">
-        <div className="mb-6 w-full grid grid-cols-1 xl:grid-cols-5 gap-4">
+      <main className="w-full pt-3">
+        <div className="mb-3 w-full grid grid-cols-1 xl:grid-cols-5 gap-4">
           <div className="rounded-none p-3 bg-[#0f172a] border-t-4 border-t-cyan-400 shadow-[inset_0_0_28px_rgba(34,211,238,0.14)]">
             <p className="uppercase text-sm text-white font-extrabold tracking-wide">Celkové tržby</p>
             <p className="text-4xl font-black text-cyan-400 mt-1 leading-none">
@@ -1793,7 +1794,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
         </div>
 
         {/* Orders Table */}
-        <div className="w-full rounded-xl bg-background/40 backdrop-blur-xl border border-primary/20 shadow-[0_0_30px_rgba(59,130,246,0.15)]">
+        <div className="h-fit w-full shrink-0 rounded-xl bg-background/40 backdrop-blur-xl border border-primary/20 shadow-[0_0_30px_rgba(59,130,246,0.15)]">
           <div className="overflow-x-auto">
             <table className="w-full text-base border-collapse">
               <thead className="sticky top-0 z-50">
@@ -1827,7 +1828,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                       const selected = active && edge !== 'last' ? 'bg-slate-800/40' : '';
                       return `px-4 py-2 align-middle border-r border-slate-800/60 ${selected}`;
                     };
-                    const actionCell = 'w-12 flex-1 min-h-[48px] inline-flex items-center justify-center border-l border-slate-700/50 rounded-none transition-colors bg-cyan-950/30 hover:bg-slate-700/60';
+                    const actionCell = 'w-12 flex-1 min-h-[48px] inline-flex items-center justify-center border-l border-slate-700/50 rounded-none bg-cyan-950/30 transition-all duration-200';
                     const documents: { number: string; href: string; title: string }[] = [];
                     if (order.invoice_number) {
                       documents.push({ number: order.invoice_number, href: order.invoice_url || '#', title: 'Zobraziť faktúru' });
@@ -1903,7 +1904,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                           {order.file_url ? (
                             <button
                               onClick={() => handleDownload(order.file_url!, order.order_number || order.id.slice(0, 8), order.id)}
-                              className={`${actionCell} text-orange-400`}
+                              className={`${actionCell} text-yellow-500 hover:bg-yellow-500/20 hover:border-yellow-500/40`}
                               title="Stiahnuť súbor zákazníka"
                             >
                               <Download className="w-5 h-5" />
@@ -1914,7 +1915,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                             </span>
                           )}
                           {order.status === 'completed' || order.result_file_url ? (
-                            <span className={`${actionCell} text-emerald-400`} title="Hotový súbor je nahraný">
+                            <span className={`${actionCell} text-emerald-500 hover:bg-emerald-500/20 hover:border-emerald-500/40`} title="Hotový súbor je nahraný">
                               <CheckCircle className="w-5 h-5" />
                             </span>
                           ) : order.invoice_number ? (
@@ -1928,7 +1929,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                               className={`${actionCell} ${
                                 uploadingId === order.id
                                   ? 'text-slate-500 cursor-not-allowed'
-                                  : 'text-emerald-400'
+                                  : 'text-emerald-500 hover:bg-emerald-500/20 hover:border-emerald-500/40'
                               }`}
                               title={uploadingId === order.id ? 'Odosielam...' : 'Nahrať hotový súbor'}
                             >
@@ -1937,7 +1938,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                           )}
                           <button
                             onClick={() => setDetailOrder(order)}
-                            className={`${actionCell} text-blue-400`}
+                            className={`${actionCell} text-cyan-400 hover:bg-cyan-500/20 hover:border-cyan-500/40`}
                             title="Zobraziť detail objednávky"
                           >
                             <FileText className="w-5 h-5" />
@@ -1949,7 +1950,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                             className={
                               order.status === 'cancelled'
                                 ? `${actionCell} cursor-not-allowed text-slate-600`
-                                : `${actionCell} text-red-500`
+                                : `${actionCell} text-red-500 hover:bg-red-500/20 hover:border-red-500/40`
                             }
                             title="Vystaviť dobropis"
                           >
@@ -1962,7 +1963,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                                 `Delete pre ${order.order_number || order.id.slice(0, 8).toUpperCase()} je pripravené na CRUD napojenie.`
                               )
                             }
-                            className={`${actionCell} text-red-400`}
+                            className={`${actionCell} text-red-500 hover:bg-red-500/20 hover:border-red-500/40`}
                             title="Zmazať objednávku"
                           >
                             <Trash2 className="w-5 h-5" />
@@ -2403,7 +2404,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
         />
       </main>
 
-      <footer className="mt-auto w-full py-4 text-center text-xs text-gray-500">
+      <footer className="mt-8 w-full py-4 text-center text-xs text-gray-500">
         <p>REMAPPRO, IČO: 41281471, DIČ: 1041196607, Janka Kráľa 29, 990 01 Veľký Krtíš, Slovakia</p>
         <p className="mt-1">Copyright © 2026 REMAPPRO Digital Solutions. All rights reserved.</p>
       </footer>
@@ -2489,16 +2490,22 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
 
       {/* NEW: Refund Wizard Modal */}
       <Dialog open={refundModalOpen} onOpenChange={setRefundModalOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto overflow-x-hidden border border-[rgba(0,242,255,0.45)] bg-[#070b10] shadow-[0_0_28px_rgba(0,242,255,0.22)] sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle className="flex items-start gap-2 break-words pr-8 text-xl font-bold leading-snug text-foreground">
-              <RotateCcw className="w-5 h-5 text-red-500" />
-              Refundácia objednávky {refundModalOrder?.order_number || refundModalOrder?.id.slice(0, 8).toUpperCase()}
-            </DialogTitle>
-            <DialogDescription>
-              Vyplňte údaje pre vytvorenie dobropisu. Email s prílohou bude automaticky odoslaný zákazníkovi.
-            </DialogDescription>
-          </DialogHeader>
+        <DialogContent hideCloseButton className="max-h-[90vh] overflow-y-auto overflow-x-hidden border border-[rgba(0,242,255,0.45)] bg-[#070b10] shadow-[0_0_28px_rgba(0,242,255,0.22)] sm:max-w-[500px]">
+          <div className="flex items-start justify-between gap-3">
+            <DialogHeader className="min-w-0 flex-1">
+              <DialogTitle className="flex items-start gap-2 break-words text-xl font-bold leading-snug text-foreground">
+                <RotateCcw className="w-5 h-5 text-red-500" />
+                Refundácia objednávky {refundModalOrder?.order_number || refundModalOrder?.id.slice(0, 8).toUpperCase()}
+              </DialogTitle>
+              <DialogDescription>
+                Vyplňte údaje pre vytvorenie dobropisu. Email s prílohou bude automaticky odoslaný zákazníkovi.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogClose className="shrink-0 rounded-lg p-2 text-muted-foreground transition-colors duration-200 hover:bg-red-500/15 hover:text-red-500">
+              <X className="h-5 w-5" />
+              <span className="sr-only">Zavrieť</span>
+            </DialogClose>
+          </div>
           <div className="grid gap-4 py-4">
             {refundModalOrder && (
               <>
