@@ -32,6 +32,8 @@ import { toast } from 'sonner';
 import { SERVICES } from '@/data/services';
 import { loadServiceCatalog, lookupServiceName } from '@/lib/serviceCatalog';
 import ClientCredits from '@/components/ClientCredits';
+import AdminServices from '@/components/AdminServices';
+import OpeningHours from '@/components/OpeningHours';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -63,7 +65,7 @@ const ManagementPortal = () => {
   const [refundIban, setRefundIban] = useState<string>('');
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [financialStats, setFinancialStats] = useState<{ grossRevenue: number; refunds: number; netRevenue: number } | null>(null);
-  const [section, setSection] = useState<'orders' | 'clients'>('orders');
+  const [section, setSection] = useState<'orders' | 'clients' | 'services' | 'hours'>('orders');
   
   // NEW: Refund Wizard Modal State
   const [refundModalOpen, setRefundModalOpen] = useState(false);
@@ -1770,7 +1772,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
       </header>
 
       <div className="w-full flex-grow pt-3">
-        <div className="mb-3 inline-flex items-center rounded-lg border border-primary/30 bg-black/40 p-0.5 text-sm font-semibold">
+        <div className="mb-3 inline-flex flex-wrap items-center rounded-lg border border-primary/30 bg-black/40 p-0.5 text-sm font-semibold">
           <button
             type="button"
             onClick={() => setSection('orders')}
@@ -1785,8 +1787,22 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
           >
             Klienti
           </button>
+          <button
+            type="button"
+            onClick={() => setSection('services')}
+            className={`rounded-md px-3 py-1.5 transition-colors ${section === 'services' ? 'bg-primary/15 text-primary shadow-[0_0_12px_rgba(0,242,255,0.35)]' : 'text-muted-foreground hover:text-foreground'}`}
+          >
+            Služby
+          </button>
+          <button
+            type="button"
+            onClick={() => setSection('hours')}
+            className={`rounded-md px-3 py-1.5 transition-colors ${section === 'hours' ? 'bg-primary/15 text-primary shadow-[0_0_12px_rgba(0,242,255,0.35)]' : 'text-muted-foreground hover:text-foreground'}`}
+          >
+            Otváracie hodiny
+          </button>
         </div>
-        {section === 'clients' ? <ClientCredits /> : (
+        {section === 'clients' ? <ClientCredits /> : section === 'services' ? <AdminServices /> : section === 'hours' ? <OpeningHours /> : (
         <>
         <div className="mb-3 w-full grid grid-cols-1 xl:grid-cols-5 gap-4">
           <div className="rounded-none p-3 bg-[#0f172a] border-t-4 border-t-cyan-400 shadow-[inset_0_0_28px_rgba(34,211,238,0.14)]">

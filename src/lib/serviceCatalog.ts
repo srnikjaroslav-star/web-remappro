@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { TranslationKey } from '@/i18n/translations';
+import { supabase } from '@/lib/supabase';
 
 const CATALOG_URL =
   import.meta.env.VITE_CATALOG_SUPABASE_URL || 'https://huswisewblkfcozdgvrq.supabase.co';
@@ -12,9 +13,12 @@ export type CatalogService = {
   name: string;
   price: number;
   category: string;
+  description: string;
 };
 
 const CATEGORY_ORDER = ['Emission Control', 'Engine Functions', 'Performance', 'Security'];
+
+export const catalogCategories = [...CATEGORY_ORDER];
 
 const CATEGORY_HINTS: Record<string, TranslationKey> = {
   'Emission Control': 'catEmissionHint',
@@ -59,9 +63,20 @@ const normalize = (rows: unknown): CatalogService[] => {
     const category = typeof record.category === 'string' ? record.category.trim() : '';
     const price = typeof record.price === 'number' ? record.price : Number(record.price);
     if (!id || !name || !category || !Number.isFinite(price) || unique.has(id)) continue;
-    unique.set(id, { id, name, price, category });
+    unique.set(id, { id, name, price, category, description: '' });
   }
   return [...unique.values()];
+};
+
+const loadDescriptions = async () => {
+  const { data, error } = await supabase.from('service_details').select('service_id, description');
+  const descriptions = new Map<string, string>();
+  if (error || !Array.isArray(data)) return descriptions;
+  for (const row of data) {
+    const id = typeof row.service_id === 'string' ? row.service_id : '';
+    if (id) descriptions.set(id, typeof row.description === 'string' ? row.description : '');
+  }
+  return descriptions;
 };
 
 export const groupCatalog = (services: CatalogService[]) => {
@@ -91,7 +106,11 @@ export const loadServiceCatalog = async (): Promise<CatalogService[]> => {
     .order('name', { ascending: true });
 
   if (error) throw error;
-  const services = normalize(data);
+  const descriptions = await loadDescriptions();
+  const services = normalize(data).map((service) => ({
+    ...service,
+    description: descriptions.get(service.id) ?? '',
+  }));
   rememberNames(services);
   return services;
 };
@@ -101,8 +120,13 @@ export const subscribeServiceCatalog = (onChange: () => void) => {
     .channel('client-service-catalog')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'services' }, onChange)
     .subscribe();
+  const details = supabase
+    .channel('service-details-catalog')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'service_details' }, onChange)
+    .subscribe();
 
   return () => {
     client().removeChannel(channel);
+    supabase.removeChannel(details);
   };
 };

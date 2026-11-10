@@ -44,3 +44,6 @@ verify_jwt = true
 
 [functions.manage-clients]
 verify_jwt = true
+
+[functions.manage-services]
+verify_jwt = true

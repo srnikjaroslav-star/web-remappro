@@ -989,7 +989,12 @@ const OrderPage = () => {
                                 >
                                   {selected && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
                                 </span>
-                                <span className="min-w-0 flex-1 truncate text-sm font-medium">{service.name}</span>
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate text-sm font-medium">{service.name}</span>
+                                  {service.description && (
+                                    <span className="block truncate text-[11px] leading-tight text-muted-foreground">{service.description}</span>
+                                  )}
+                                </span>
                                 <span className="shrink-0 text-sm font-semibold tabular-nums text-primary">
                                   {formatServicePrice(service.price)}€
                                 </span>
