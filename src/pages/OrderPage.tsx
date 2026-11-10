@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
+import MyOrders from '@/components/MyOrders';
 import SystemStatus from '@/components/SystemStatus';
 import { useLanguage } from '@/i18n/LanguageContext';
 import type { TranslationKey } from '@/i18n/translations';
@@ -23,6 +24,7 @@ import {
 import { supabase } from '@/lib/supabase';
 import {
   AlertTriangle,
+  ArrowLeft,
   Calendar,
   Car,
   Check,
@@ -32,6 +34,7 @@ import {
   File,
   Fuel,
   Gauge,
+  List,
   Loader2,
   LogOut,
   Search,
@@ -103,8 +106,9 @@ const OrderPage = () => {
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [creditBalance, setCreditBalance] = useState<number | null>(null);
   const [profileName, setProfileName] = useState('');
+  const [portalView, setPortalView] = useState<'new' | 'orders'>('new');
   const [loginOpen, setLoginOpen] = useState(false);
-  const [authMode, setAuthMode] = useState<'sign-in' | 'sign-up'>('sign-in');
+  const [authMode, setAuthMode] = useState<'sign-in' | 'sign-up' | 'reset'>('sign-in');
   const [loginFirstName, setLoginFirstName] = useState('');
   const [loginLastName, setLoginLastName] = useState('');
   const [loginEmail, setLoginEmail] = useState('');
@@ -159,6 +163,7 @@ const OrderPage = () => {
       if (!user) {
         setProfileName('');
         setCustomer({ name: '', email: '' });
+        setPortalView('new');
         return;
       }
       setCustomer((current) => ({
@@ -381,6 +386,27 @@ const OrderPage = () => {
     toast.success(t('signUpConfirm'));
   };
 
+  const sendReset = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setLoginError('');
+    const email = loginEmail.trim();
+    if (!email) {
+      setLoginError(t('forgotPasswordFailed'));
+      return;
+    }
+    setLoginBusy(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/`,
+    });
+    setLoginBusy(false);
+    if (error) {
+      setLoginError(t('forgotPasswordFailed'));
+      return;
+    }
+    setAuthMode('sign-in');
+    toast.success(t('forgotPasswordSent'));
+  };
+
   const signOut = async () => {
     await supabase.auth.signOut();
     setCreditBalance(null);
@@ -554,7 +580,7 @@ const OrderPage = () => {
 
       <div className="relative z-10 flex w-full flex-grow flex-col">
         <header className="sticky top-0 z-50 w-full border-b border-primary/25 bg-background/80 backdrop-blur-sm">
-          <div className="mx-auto flex w-full max-w-[1600px] items-center justify-between gap-3 px-4 py-3 lg:px-8">
+          <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between lg:px-8">
             <div className="flex shrink-0 items-center gap-6">
               <Link to="/" aria-label="REMAPPRO" className="inline-flex shrink-0 items-center gap-2 no-underline antialiased leading-none">
                 <span className="inline-flex h-9 items-center justify-center rounded-full border border-cyan-400/60 bg-transparent px-3 shadow-[0_0_15px_rgba(6,182,212,0.4)]">
@@ -565,7 +591,7 @@ const OrderPage = () => {
               </Link>
               <SystemStatus />
             </div>
-            <div className="flex items-center justify-end gap-3">
+            <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
               <div
                 role="group"
                 aria-label={t('language')}
@@ -626,6 +652,21 @@ const OrderPage = () => {
                   {t('signIn')}
                 </button>
               )}
+              {authUser && (
+                <button
+                  type="button"
+                  onClick={() => setPortalView('orders')}
+                  aria-pressed={portalView === 'orders'}
+                  className={`inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border px-3 text-sm font-bold transition-colors ${
+                    portalView === 'orders'
+                      ? 'border-primary bg-primary/25 text-primary shadow-[0_0_18px_rgba(0,242,255,0.55)]'
+                      : 'border-primary/70 bg-primary/15 text-primary shadow-[0_0_16px_rgba(0,242,255,0.4)] hover:bg-primary/25'
+                  }`}
+                >
+                  <List className="h-4 w-4" />
+                  {t('myOrders')}
+                </button>
+              )}
               <Link to="/track" className="btn-secondary flex items-center gap-2 px-4 py-2 text-sm">
                 <Search className="h-4 w-4" />
                 <span className="hidden sm:inline">{t('trackOrder')}</span>
@@ -635,6 +676,23 @@ const OrderPage = () => {
         </header>
 
         <div className="mx-auto w-full max-w-[1600px] flex-grow px-4 pb-6 pt-2 lg:px-8">
+          {portalView === 'orders' && authUser ? (
+            <div className="space-y-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <h1 className="text-2xl font-bold tracking-tight md:text-3xl">{t('myOrders')}</h1>
+                <button
+                  type="button"
+                  onClick={() => setPortalView('new')}
+                  className="inline-flex h-10 items-center justify-center gap-2 self-start rounded-lg border border-primary/70 bg-primary/15 px-4 text-sm font-bold text-primary shadow-[0_0_16px_rgba(0,242,255,0.4)] transition-colors hover:bg-primary/25"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  {t('backToNewOrder')}
+                </button>
+              </div>
+              <MyOrders email={authUser.email ?? ''} />
+            </div>
+          ) : (
+          <>
           <div className="mb-3 flex flex-row flex-wrap items-baseline gap-x-4">
             <h1 className="text-2xl font-bold tracking-tight md:text-3xl">{t('newOrder')}</h1>
             <p className="text-sm text-muted-foreground">{t('newOrderSubtitle')}</p>
@@ -1072,6 +1130,8 @@ const OrderPage = () => {
               </div>
             </aside>
           </div>
+          </>
+          )}
         </div>
       </div>
       {loginOpen && (
@@ -1080,13 +1140,13 @@ const OrderPage = () => {
           onClick={() => setLoginOpen(false)}
         >
           <form
-            onSubmit={authMode === 'sign-up' ? signUp : signIn}
+            onSubmit={authMode === 'sign-up' ? signUp : authMode === 'reset' ? sendReset : signIn}
             onClick={(event) => event.stopPropagation()}
             className="order-panel w-full max-w-sm p-5"
           >
             <div className="mb-4 flex items-center justify-between gap-3">
               <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-primary">
-                {authMode === 'sign-up' ? t('signUpTitle') : t('signInTitle')}
+                {authMode === 'sign-up' ? t('signUpTitle') : authMode === 'reset' ? t('forgotPasswordTitle') : t('signInTitle')}
               </h2>
               <button
                 type="button"
@@ -1139,36 +1199,50 @@ const OrderPage = () => {
                 className="input-field w-full !px-3 !py-2 text-sm"
               />
             </label>
-            <label className="mb-4 block">
-              <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t('signInPassword')}</span>
-              <input
-                type="password"
-                value={loginPassword}
-                onChange={(event) => setLoginPassword(event.target.value)}
-                autoComplete={authMode === 'sign-up' ? 'new-password' : 'current-password'}
-                required
-                minLength={6}
-                disabled={loginBusy}
-                className="input-field w-full !px-3 !py-2 text-sm"
-              />
-            </label>
+            {authMode !== 'reset' && (
+              <label className="mb-4 block">
+                <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t('signInPassword')}</span>
+                <input
+                  type="password"
+                  value={loginPassword}
+                  onChange={(event) => setLoginPassword(event.target.value)}
+                  autoComplete={authMode === 'sign-up' ? 'new-password' : 'current-password'}
+                  required
+                  minLength={6}
+                  disabled={loginBusy}
+                  className="input-field w-full !px-3 !py-2 text-sm"
+                />
+              </label>
+            )}
             {loginError && <p className="mb-3 text-xs text-red-400">{loginError}</p>}
             <button
               type="submit"
               disabled={loginBusy}
               className="btn-primary flex min-h-[44px] w-full items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {loginBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : authMode === 'sign-up' ? t('signUp') : t('signIn')}
+              {loginBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : authMode === 'sign-up' ? t('signUp') : authMode === 'reset' ? t('forgotPasswordSend') : t('signIn')}
             </button>
+            {authMode === 'sign-in' && (
+              <button
+                type="button"
+                onClick={() => {
+                  setLoginError('');
+                  setAuthMode('reset');
+                }}
+                className="mt-3 w-full text-center text-xs font-semibold text-primary/80 transition-colors hover:text-primary"
+              >
+                {t('forgotPassword')}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => {
                 setLoginError('');
-                setAuthMode((current) => (current === 'sign-in' ? 'sign-up' : 'sign-in'));
+                setAuthMode(authMode === 'sign-in' ? 'sign-up' : 'sign-in');
               }}
               className="mt-3 w-full text-center text-xs text-muted-foreground transition-colors hover:text-primary"
             >
-              {authMode === 'sign-in' ? t('signUpSwitch') : t('signInSwitch')}
+              {authMode === 'sign-in' ? t('signUpSwitch') : authMode === 'reset' ? t('backToSignIn') : t('signInSwitch')}
             </button>
           </form>
         </div>

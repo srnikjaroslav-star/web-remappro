@@ -2,8 +2,10 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useState } from "react";
 import { HashRouter, Routes, Route, useLocation } from "react-router-dom";
 import Footer from "@/components/Footer";
+import PasswordRecovery from "@/components/PasswordRecovery";
 import { LanguageProvider } from "@/i18n/LanguageContext";
 import OrderPage from "./pages/OrderPage";
 // OPRAVENÝ IMPORT: Mieri priamo na súbor v pages
@@ -21,9 +23,26 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
+const isRecoveryLink = () => {
+  const raw = window.location.hash.replace(/^#/, '');
+  return new URLSearchParams(raw).get('type') === 'recovery';
+};
+
 const AppShell = () => {
+  const [recovery, setRecovery] = useState(isRecoveryLink);
   const { pathname } = useLocation();
   const showFooter = pathname !== "/login" && pathname !== "/track" && pathname !== "/sprava-29-vk";
+
+  if (recovery) {
+    return (
+      <PasswordRecovery
+        onDone={() => {
+          window.location.hash = '#/';
+          setRecovery(false);
+        }}
+      />
+    );
+  }
 
   return (
     <div className="flex min-h-screen flex-col bg-background">

@@ -1,0 +1,196 @@
+import { useEffect, useState } from 'react';
+import { Download } from 'lucide-react';
+import { useLanguage } from '@/i18n/LanguageContext';
+import type { TranslationKey } from '@/i18n/translations';
+import { SERVICES } from '@/data/services';
+import { loadServiceCatalog, lookupServiceName } from '@/lib/serviceCatalog';
+import { supabase } from '@/lib/supabase';
+
+type ClientOrder = {
+  id: string;
+  order_number: string | null;
+  created_at: string;
+  car_brand: string | null;
+  car_model: string | null;
+  fuel_type: string | null;
+  year: string | number | null;
+  ecu_type: string | null;
+  service_type: string | string[] | null;
+  total_price: number | string | null;
+  status: string;
+  result_file_url: string | null;
+  customer_note: string | null;
+  customer_email: string | null;
+};
+
+const STATUS_KEY: Record<string, TranslationKey> = {
+  pending: 'statusPending',
+  processing: 'statusProcessing',
+  completed: 'statusDone',
+  cancelled: 'statusCancelled',
+  paid: 'statusPaid',
+};
+
+const STATUS_CLASS: Record<string, string> = {
+  pending: 'text-amber-300',
+  processing: 'text-primary',
+  completed: 'text-emerald-400',
+  cancelled: 'text-red-400',
+  paid: 'text-cyan-300',
+};
+
+const serviceLabel = (id: string) =>
+  lookupServiceName(id) || SERVICES.find((service) => service.id === id)?.name || id;
+
+const serviceNames = (value: ClientOrder['service_type']) => {
+  if (!value) return '';
+  if (Array.isArray(value)) return value.map(serviceLabel).filter(Boolean).join(', ');
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) return parsed.map((id) => serviceLabel(String(id))).filter(Boolean).join(', ');
+  } catch {
+    return value;
+  }
+  return value;
+};
+
+const engineLine = (note: string | null) => {
+  const line = String(note ?? '').split('\n').map((part) => part.trim()).find(Boolean) ?? '';
+  return line.startsWith('Motor:') ? line : '';
+};
+
+const money = (value: number | string | null) => {
+  const amount = Number(value ?? 0);
+  return `${amount.toLocaleString('sk-SK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
+};
+
+const MyOrders = ({ email }: { email: string }) => {
+  const { t } = useLanguage();
+  const [orders, setOrders] = useState<ClientOrder[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    const address = email.trim();
+    if (!address) {
+      setOrders([]);
+      setLoading(false);
+      return;
+    }
+    let active = true;
+    const load = async () => {
+      setFailed(false);
+      await loadServiceCatalog().catch(() => undefined);
+      const { data, error } = await supabase
+        .from('orders')
+        .select('id, order_number, created_at, car_brand, car_model, fuel_type, year, ecu_type, service_type, total_price, status, result_file_url, customer_note, customer_email')
+        .ilike('customer_email', address.replace(/[%_]/g, (char) => `\\${char}`))
+        .order('created_at', { ascending: false });
+      if (!active) return;
+      if (error) {
+        setFailed(true);
+        setLoading(false);
+        return;
+      }
+      const own = ((data ?? []) as ClientOrder[]).filter(
+        (order) => String(order.customer_email ?? '').toLowerCase() === address.toLowerCase(),
+      );
+      setOrders(own);
+      setLoading(false);
+    };
+    setLoading(true);
+    load();
+    const channel = supabase
+      .channel(`my-orders-${address}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+        load();
+      })
+      .subscribe();
+    return () => {
+      active = false;
+      supabase.removeChannel(channel);
+    };
+  }, [email]);
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-primary/25 bg-black/45 shadow-[0_0_30px_hsl(185_100%_50%/0.08)] backdrop-blur-xl">
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-base">
+          <thead>
+            <tr className="border-b border-primary/30 bg-[#0a192f]">
+              {[t('myOrdersDate'), t('myOrdersId'), t('myOrdersSpec'), t('myOrdersPrice'), t('myOrdersStatus'), t('myOrdersFile')].map((label) => (
+                <th key={label} className="whitespace-nowrap border-r border-slate-500 p-2.5 text-left align-middle text-sm font-bold uppercase tracking-wide text-white last:text-center">
+                  {label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan={6} className="py-12 text-center text-muted-foreground">{t('myOrdersLoading')}</td>
+              </tr>
+            ) : failed ? (
+              <tr>
+                <td colSpan={6} className="py-12 text-center text-red-400">{t('myOrdersError')}</td>
+              </tr>
+            ) : orders.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="py-12 text-center text-muted-foreground">{t('myOrdersEmpty')}</td>
+              </tr>
+            ) : orders.map((order) => {
+              const vehicle = [order.car_brand, order.car_model].filter(Boolean).join(' ');
+              const details = [order.year, order.fuel_type, order.ecu_type].filter(Boolean).join(' · ');
+              const motor = engineLine(order.customer_note);
+              const services = serviceNames(order.service_type);
+              const cell = 'border-r border-slate-800/60 px-4 py-3 align-middle';
+              return (
+                <tr key={order.id} className="border-b border-slate-800/60 align-middle">
+                  <td className={`${cell} whitespace-nowrap text-sm text-white`}>
+                    {new Date(order.created_at).toLocaleString('sk-SK', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  </td>
+                  <td className={`${cell} whitespace-nowrap font-mono text-lg font-bold leading-none text-cyan-300`}>
+                    {order.order_number || order.id.slice(0, 8).toUpperCase()}
+                  </td>
+                  <td className={`${cell} min-w-[18rem]`}>
+                    <p className="text-base font-bold leading-none text-cyan-400">{vehicle || '—'}</p>
+                    {(details || motor) && (
+                      <p className="mt-1 text-xs leading-none text-white/80">{[details, motor].filter(Boolean).join(' · ')}</p>
+                    )}
+                    {services && <p className="mt-1.5 text-xs leading-snug text-primary/80">{services}</p>}
+                  </td>
+                  <td className={`${cell} whitespace-nowrap text-center`}>
+                    <p className="text-xl font-bold leading-none text-primary">{money(order.total_price)}</p>
+                  </td>
+                  <td className={`${cell} whitespace-nowrap`}>
+                    <span className={`text-sm font-bold uppercase tracking-wide ${STATUS_CLASS[order.status] || 'text-white'}`}>
+                      {STATUS_KEY[order.status] ? t(STATUS_KEY[order.status]) : order.status}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-center align-middle">
+                    {order.status === 'completed' && order.result_file_url ? (
+                      <a
+                        href={order.result_file_url}
+                        download
+                        className="inline-flex h-9 items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-3 text-xs font-bold uppercase tracking-wide text-primary transition-colors hover:bg-primary/20"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        {t('downloadFile')}
+                      </a>
+                    ) : (
+                      <span className="text-xs text-slate-500">
+                        {order.status === 'completed' ? t('filePending') : '—'}
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+export default MyOrders;
