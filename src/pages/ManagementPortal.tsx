@@ -30,6 +30,7 @@ import { supabase } from '@/lib/supabase';
 import { Order, ActivityLog } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { SERVICES } from '@/data/services';
+import { loadServiceCatalog, lookupServiceName } from '@/lib/serviceCatalog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -1635,15 +1636,22 @@ const ManagementPortal = () => {
     return amount;
   };
 
+  useEffect(() => {
+    loadServiceCatalog()
+      .then(() => setOrders((current) => [...current]))
+      .catch(() => undefined);
+  }, []);
+
 const getServiceNames = (serviceIds: string[] | string | null) => {
     if (!serviceIds) return '';
+    const label = (id: string) => lookupServiceName(id) || SERVICES.find((s) => s.id === id)?.name || id;
     if (Array.isArray(serviceIds)) {
-      return serviceIds.map((id: string) => SERVICES.find((s) => s.id === id)?.name || id).filter(Boolean).join(', ');
+      return serviceIds.map((id: string) => label(id)).filter(Boolean).join(', ');
     }
     // Try to parse as JSON, otherwise treat as plain text
     try {
       const ids = JSON.parse(serviceIds);
-      return ids.map((id: string) => SERVICES.find((s) => s.id === id)?.name || id).filter(Boolean).join(', ');
+      return ids.map((id: string) => label(id)).filter(Boolean).join(', ');
     } catch {
       // Already a plain text service name(s), return as-is
       return serviceIds;

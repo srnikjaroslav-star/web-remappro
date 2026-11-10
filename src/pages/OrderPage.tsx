@@ -1,10 +1,17 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import SystemStatus from '@/components/SystemStatus';
 import { useLanguage } from '@/i18n/LanguageContext';
-import { serviceTranslationKey, type TranslationKey } from '@/i18n/translations';
-import { SERVICES, Service } from '@/data/services';
+import type { TranslationKey } from '@/i18n/translations';
+import {
+  categoryHint,
+  formatServicePrice,
+  groupCatalog,
+  loadServiceCatalog,
+  subscribeServiceCatalog,
+  type CatalogService,
+} from '@/lib/serviceCatalog';
 import { redirectToCheckout, generateOrderId } from '@/lib/stripe';
 import { supabase } from '@/lib/supabase';
 import {
@@ -21,7 +28,6 @@ import {
   Gauge,
   Loader2,
   Search,
-  Shield,
   Upload,
   X,
 } from 'lucide-react';
@@ -65,12 +71,6 @@ interface FieldErrors {
   consent?: TranslationKey;
 }
 
-const SERVICE_GROUPS: { category: Service['category']; title: TranslationKey; hint: TranslationKey }[] = [
-  { category: 'stage', title: 'groupStage', hint: 'groupStageHint' },
-  { category: 'removal', title: 'groupRemoval', hint: 'groupRemovalHint' },
-  { category: 'modification', title: 'groupMods', hint: 'groupModsHint' },
-];
-
 const isFilled = (value: string | number | undefined) => {
   if (typeof value === 'number') return value > 0;
   return Boolean(value && value.trim().length > 0);
@@ -104,18 +104,45 @@ const OrderPage = () => {
     ecuType: '',
   });
   const [services, setServices] = useState<string[]>([]);
+  const [catalog, setCatalog] = useState<CatalogService[]>([]);
+  const [catalogStatus, setCatalogStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [customerNote, setCustomerNote] = useState('');
   const [customer, setCustomer] = useState({ name: '', email: '' });
 
   const dragDepth = useRef(0);
 
+  useEffect(() => {
+    let active = true;
+    const refresh = () => {
+      loadServiceCatalog()
+        .then((next) => {
+          if (!active) return;
+          setCatalog(next);
+          setCatalogStatus('ready');
+          setServices((current) => current.filter((id) => next.some((service) => service.id === id)));
+        })
+        .catch(() => {
+          if (!active) return;
+          setCatalogStatus((current) => (current === 'ready' ? current : 'error'));
+        });
+    };
+    refresh();
+    const unsubscribe = subscribeServiceCatalog(refresh);
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, []);
+
+  const catalogGroups = useMemo(() => groupCatalog(catalog), [catalog]);
+
   const selectedItems = useMemo(
     () =>
       services
-        .map((id) => SERVICES.find((service) => service.id === id))
-        .filter((service): service is Service => Boolean(service)),
-    [services],
+        .map((id) => catalog.find((service) => service.id === id))
+        .filter((service): service is CatalogService => Boolean(service)),
+    [services, catalog],
   );
 
   const totalPrice = selectedItems.reduce((total, service) => total + service.price, 0);
@@ -313,10 +340,6 @@ const OrderPage = () => {
                 <Search className="h-4 w-4" />
                 <span className="hidden sm:inline">{t('trackOrder')}</span>
               </Link>
-              <Link to="/login" className="btn-secondary flex items-center gap-2 px-4 py-2 text-sm">
-                <Shield className="h-4 w-4" />
-                <span className="hidden sm:inline">{t('admin')}</span>
-              </Link>
             </div>
           </div>
         </header>
@@ -410,7 +433,7 @@ const OrderPage = () => {
                         if (!Number.isNaN(parsed)) setVehicleField('year', parsed);
                       }}
                       placeholder="2019"
-                      className={fieldClass(isFilled(vehicle.year), Boolean(errors.year))}
+                      className={`${fieldClass(isFilled(vehicle.year), Boolean(errors.year))} [appearance:textfield] [&::-webkit-outer-spin-button]:m-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none`}
                     />
                     {errors.year && <p className="mt-1 text-xs text-red-400">{t(errors.year)}</p>}
                   </label>
@@ -558,24 +581,42 @@ const OrderPage = () => {
             <aside className="sticky top-16 z-20 min-w-0 self-start lg:col-span-4">
               <div className="order-panel flex flex-col border-t-2 border-t-primary">
                 <div className="flex items-center justify-between border-b border-primary/15 px-4 py-3">
-                  <div>
-                    <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-primary">{t('servicesCheckout')}</h2>
-                    <p className="mt-0.5 text-xs text-muted-foreground">{t('selected', { count: selectedItems.length })}</p>
+                  <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-primary">{t('servicesCheckout')}</h2>
+                  <p className="shrink-0 text-3xl font-bold leading-none tabular-nums neon-text">{totalPrice}€</p>
+                </div>
+
+                <div className="order-counters px-3 pt-3">
+                  <div className="flex min-w-0 items-center justify-between gap-2 rounded-xl border border-primary/45 bg-black/50 px-3 py-2.5 shadow-[0_0_18px_rgba(0,242,255,0.14),inset_0_1px_0_rgba(0,242,255,0.18)]">
+                    <p className="truncate text-[11px] font-semibold uppercase tracking-[0.14em] text-primary/80">{t('selected')}</p>
+                    <p className="text-2xl font-bold leading-none tabular-nums neon-text">{selectedItems.length}</p>
                   </div>
-                  <p className="text-lg font-bold tabular-nums neon-text">{totalPrice}€</p>
+                  <div className="flex min-w-0 items-center justify-between gap-2 rounded-xl border border-primary/45 bg-black/50 px-3 py-2.5 shadow-[0_0_18px_rgba(0,242,255,0.14),inset_0_1px_0_rgba(0,242,255,0.18)]">
+                    <p className="truncate text-[11px] font-semibold uppercase tracking-[0.14em] text-primary/80">{t('available')}</p>
+                    <p className="text-2xl font-bold leading-none tabular-nums neon-text">
+                      {catalogStatus === 'ready' ? catalog.length : '—'}
+                    </p>
+                  </div>
                 </div>
 
                 <div className="order-services-scroll max-h-[50vh] space-y-4 overflow-y-auto px-3 py-3">
-                  {SERVICE_GROUPS.map((group) => {
-                    const items = SERVICES.filter((service) => service.category === group.category);
+                  {catalogStatus === 'loading' && (
+                    <p className="px-1 text-sm text-muted-foreground">{t('catalogLoading')}</p>
+                  )}
+                  {catalogStatus === 'error' && (
+                    <p className="px-1 text-sm text-red-400">{t('catalogError')}</p>
+                  )}
+                  {catalogGroups.map((group) => {
+                    const hint = categoryHint(group.category);
                     return (
                       <div key={group.category}>
-                        <div className="mb-2 flex items-baseline justify-between px-1">
-                          <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-foreground">{t(group.title)}</h3>
-                          <span className="text-[11px] text-muted-foreground">{t(group.hint)}</span>
+                        <div className="mb-2 flex items-baseline justify-between gap-3 border-b border-primary/35 px-1 pb-1">
+                          <h3 className="border-l-2 border-primary pl-2 text-xs font-bold uppercase tracking-[0.16em] neon-text">{group.category}</h3>
+                          <span className="shrink-0 text-[11px] text-muted-foreground">
+                            {hint ? t(hint) : group.items.length}
+                          </span>
                         </div>
                         <div className="space-y-1.5">
-                          {items.map((service) => {
+                          {group.items.map((service) => {
                             const selected = services.includes(service.id);
                             return (
                               <button
@@ -583,6 +624,7 @@ const OrderPage = () => {
                                 type="button"
                                 role="checkbox"
                                 aria-checked={selected}
+                                title={service.name}
                                 onClick={() => toggleService(service.id)}
                                 className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-all ${
                                   selected
@@ -599,13 +641,15 @@ const OrderPage = () => {
                                 >
                                   {selected && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
                                 </span>
-                                <span className="min-w-0 flex-1 truncate text-sm font-medium">{t(serviceTranslationKey(service.id))}</span>
-                                <span className="shrink-0 text-sm font-semibold tabular-nums text-primary">{service.price}€</span>
+                                <span className="min-w-0 flex-1 truncate text-sm font-medium">{service.name}</span>
+                                <span className="shrink-0 text-sm font-semibold tabular-nums text-primary">
+                                  {formatServicePrice(service.price)}€
+                                </span>
                               </button>
                             );
                           })}
                         </div>
-                        {group.category === 'removal' && (
+                        {group.category === 'Emission Control' && (
                           <p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] leading-relaxed text-amber-100">
                             {t('offroadDisclaimer')}
                           </p>
