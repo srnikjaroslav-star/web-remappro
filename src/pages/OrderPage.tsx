@@ -492,7 +492,7 @@ const OrderPage = () => {
       </div>
 
       <div className="relative z-10 flex w-full flex-grow flex-col">
-        <header className="sticky top-0 z-50 w-full border-b border-border/50 bg-background/80 backdrop-blur-sm">
+        <header className="sticky top-0 z-50 w-full border-b border-primary/25 bg-background/80 backdrop-blur-sm">
           <div className="mx-auto flex w-full max-w-[1600px] items-center justify-between gap-3 px-4 py-3 lg:px-8">
             <div className="flex shrink-0 items-center gap-6">
               <Link to="/" aria-label="REMAPPRO" className="inline-flex shrink-0 items-center gap-2 no-underline antialiased leading-none">
@@ -530,15 +530,15 @@ const OrderPage = () => {
                 })}
               </div>
               {authUser ? (
-                <div className="inline-flex max-w-full items-center gap-3 rounded-lg border border-primary/45 bg-black/50 px-3 py-1">
-                  <span className="max-w-[16rem] truncate text-base font-semibold leading-none text-foreground" title={accountLabel || undefined}>
+                <div className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-primary/40 bg-black/50 px-2 py-0.5">
+                  <span className="max-w-[9rem] truncate text-sm font-semibold leading-none text-foreground" title={accountLabel || undefined}>
                     {accountLabel || '—'}
                   </span>
-                  <span className="h-6 w-px shrink-0 bg-primary/35" aria-hidden="true" />
+                  <span className="h-4 w-px shrink-0 bg-primary/35" aria-hidden="true" />
                   <button
                     type="button"
                     onClick={showCreditBalance}
-                    className="shrink-0 text-2xl font-black leading-none tabular-nums neon-text"
+                    className="shrink-0 text-lg font-black leading-none tabular-nums neon-text"
                     aria-label={t('creditBalance')}
                   >
                     {creditBalance === null ? '—' : `${formatServicePrice(creditBalance)}€`}
@@ -546,9 +546,9 @@ const OrderPage = () => {
                   <button
                     type="button"
                     onClick={signOut}
-                    className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg border border-primary/50 bg-primary/10 px-4 text-sm font-semibold text-primary transition-colors hover:bg-primary/20"
+                    className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-primary/50 bg-primary/10 px-2.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20"
                   >
-                    <LogOut className="h-4 w-4" />
+                    <LogOut className="h-3.5 w-3.5" />
                     {t('signOut')}
                   </button>
                 </div>
