@@ -38,3 +38,9 @@ verify_jwt = false
 
 [functions.generate-invoice]
 verify_jwt = false
+
+[functions.pay-with-credits]
+verify_jwt = true
+
+[functions.manage-clients]
+verify_jwt = true

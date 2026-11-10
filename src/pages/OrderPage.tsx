@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { User } from '@supabase/supabase-js';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import SystemStatus from '@/components/SystemStatus';
@@ -12,7 +13,6 @@ import {
   subscribeServiceCatalog,
   type CatalogService,
 } from '@/lib/serviceCatalog';
-import { redirectToCheckout, generateOrderId } from '@/lib/stripe';
 import { supabase } from '@/lib/supabase';
 import {
   AlertTriangle,
@@ -22,11 +22,11 @@ import {
   CheckCircle2,
   Coins,
   Cpu,
-  CreditCard,
   File,
   Fuel,
   Gauge,
   Loader2,
+  LogOut,
   Search,
   Upload,
   X,
@@ -82,6 +82,17 @@ const fieldClass = (filled: boolean, hasError: boolean) => {
   return 'input-field w-full !px-3 !py-2 text-sm';
 };
 
+const profileDisplayName = (first?: string | null, last?: string | null) =>
+  [first, last].map((part) => String(part ?? '').trim()).filter(Boolean).join(' ');
+
+const splitProfileName = (value: string) => {
+  const parts = value.trim().split(/\s+/).filter(Boolean);
+  return {
+    first_name: parts[0] ?? '',
+    last_name: parts.slice(1).join(' '),
+  };
+};
+
 const formatSize = (bytes: number) => {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -92,7 +103,15 @@ const OrderPage = () => {
   const { language, setLanguage, t } = useLanguage();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState<'card' | 'credits' | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [authUser, setAuthUser] = useState<User | null>(null);
+  const [creditBalance, setCreditBalance] = useState<number | null>(null);
+  const [profileName, setProfileName] = useState('');
+  const [loginOpen, setLoginOpen] = useState(false);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [loginBusy, setLoginBusy] = useState(false);
   const [legalConsentAgreed, setLegalConsentAgreed] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [vehicle, setVehicle] = useState<VehicleData>({
@@ -134,6 +153,178 @@ const OrderPage = () => {
       unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    const applyAccount = (user: User | null) => {
+      if (!user) {
+        setProfileName('');
+        return;
+      }
+      setCustomer((current) => ({
+        name: current.name,
+        email: current.email || user.email || '',
+      }));
+    };
+    supabase.auth.getSession().then(({ data }) => {
+      if (!active) return;
+      const user = data.session?.user ?? null;
+      setAuthUser(user);
+      applyAccount(user);
+    });
+    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
+      const user = session?.user ?? null;
+      setAuthUser(user);
+      applyAccount(user);
+    });
+    return () => {
+      active = false;
+      subscription.subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!authUser) return;
+    let active = true;
+    const loadProfile = async () => {
+      const { data } = await supabase
+        .from('client_profiles')
+        .select('first_name, last_name')
+        .eq('user_id', authUser.id)
+        .maybeSingle();
+      let name = profileDisplayName(data?.first_name, data?.last_name);
+      if (!name && authUser.email) {
+        const { data: order } = await supabase
+          .from('orders')
+          .select('customer_name')
+          .eq('customer_email', authUser.email.toLowerCase())
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        name = String(order?.customer_name ?? '').trim();
+        if (name) {
+          const parts = splitProfileName(name);
+          await supabase.from('client_profiles').upsert({
+            user_id: authUser.id,
+            first_name: parts.first_name,
+            last_name: parts.last_name,
+            updated_at: new Date().toISOString(),
+          });
+        }
+      }
+      if (!active) return;
+      setProfileName(name);
+      setCustomer((current) => ({
+        name: current.name || name,
+        email: current.email || authUser.email || '',
+      }));
+    };
+    loadProfile();
+    return () => {
+      active = false;
+    };
+  }, [authUser]);
+
+  useEffect(() => {
+    if (!authUser || !customer.name.trim()) return;
+    const parts = splitProfileName(customer.name);
+    const nextName = profileDisplayName(parts.first_name, parts.last_name);
+    const handle = window.setTimeout(() => {
+      supabase
+        .from('client_profiles')
+        .upsert({
+          user_id: authUser.id,
+          first_name: parts.first_name,
+          last_name: parts.last_name,
+          updated_at: new Date().toISOString(),
+        })
+        .then(({ error }) => {
+          if (!error) setProfileName(nextName);
+        });
+    }, 400);
+    return () => window.clearTimeout(handle);
+  }, [authUser, customer.name]);
+
+  useEffect(() => {
+    if (!authUser) {
+      setCreditBalance(null);
+      return;
+    }
+    let active = true;
+    supabase
+      .from('credit_accounts')
+      .select('balance')
+      .eq('user_id', authUser.id)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (!active) return;
+        if (error || !data) {
+          setCreditBalance(0);
+          return;
+        }
+        setCreditBalance(Number(data.balance));
+      });
+    return () => {
+      active = false;
+    };
+  }, [authUser]);
+
+  useEffect(() => {
+    if (!authUser) return;
+    const channel = supabase
+      .channel(`credit-account-${authUser.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'credit_accounts', filter: `user_id=eq.${authUser.id}` },
+        (payload) => {
+          const next = Number((payload.new as { balance?: number }).balance);
+          if (Number.isFinite(next)) setCreditBalance(next);
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [authUser]);
+
+  useEffect(() => {
+    if (!loginOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setLoginOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [loginOpen]);
+
+  const accountLabel = profileName;
+
+  const showCreditBalance = () => {
+    document.getElementById('order-credit-balance')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
+  const signIn = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setLoginError('');
+    setLoginBusy(true);
+    const { error } = await supabase.auth.signInWithPassword({
+      email: loginEmail.trim(),
+      password: loginPassword,
+    });
+    setLoginBusy(false);
+    if (error) {
+      setLoginError(t('signInFailed'));
+      return;
+    }
+    setLoginPassword('');
+    setLoginOpen(false);
+    toast.success(t('signInSuccess'));
+  };
+
+  const signOut = async () => {
+    await supabase.auth.signOut();
+    setCreditBalance(null);
+    setProfileName('');
+  };
 
   const catalogGroups = useMemo(() => groupCatalog(catalog), [catalog]);
 
@@ -208,16 +399,24 @@ const OrderPage = () => {
     .filter(Boolean)
     .join('\n');
 
-  const uploadAndPayByCard = async () => {
+  const payWithCredits = async () => {
     const nextErrors = validate();
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) {
       toast.error(t('toastCheckFields'));
       return;
     }
+    if (!authUser) {
+      toast.error(t('creditAuthRequired'));
+      return;
+    }
+    if (creditBalance !== null && creditBalance < totalPrice) {
+      toast.error(t('creditInsufficient'));
+      return;
+    }
     if (!selectedFile) return;
 
-    setIsSubmitting('card');
+    setIsSubmitting(true);
     try {
       toast.loading(t('toastUploading'), { id: 'upload' });
       const fileName = `${Date.now()}-${selectedFile.name}`;
@@ -228,65 +427,59 @@ const OrderPage = () => {
       if (uploadError || !uploadData?.path) {
         toast.dismiss('upload');
         toast.error(`${t('toastUploadFailed')}: ${uploadError?.message || t('toastUploadSaved')}`);
-        setIsSubmitting(null);
+        setIsSubmitting(false);
+        return;
+      }
+      toast.dismiss('upload');
+
+      if (customer.name.trim()) {
+        await supabase.auth.updateUser({ data: { full_name: customer.name.trim() } }).catch(() => undefined);
+      }
+
+      const invoked = await supabase.functions.invoke('pay-with-credits', {
+        body: {
+          serviceIds: services,
+          customerName: customer.name,
+          customerEmail: customer.email,
+          brand: vehicle.brand,
+          model: vehicle.model,
+          fuelType: vehicle.fuelType,
+          year: vehicle.year,
+          ecuType: vehicle.ecuType,
+          fileUrl: uploadData.path,
+          customerNote: composedNote,
+          legalConsent: legalConsentAgreed,
+        },
+      });
+
+      let data = invoked.data as { ok?: boolean; code?: string; balance?: number; orderNumber?: string } | null;
+      if (invoked.error && !data) {
+        try {
+          data = await (invoked.error as { context?: Response }).context?.json();
+        } catch {
+          data = null;
+        }
+      }
+      const error = invoked.error;
+      const code = data?.code;
+      if (error || !data?.ok) {
+        if (code === 'INSUFFICIENT_CREDITS') toast.error(t('creditInsufficient'));
+        else if (code === 'NO_ACCOUNT') toast.error(t('creditNoAccount'));
+        else if (code === 'NOT_AUTHENTICATED') toast.error(t('creditAuthRequired'));
+        else toast.error(t('creditPayFailed'));
+        setIsSubmitting(false);
         return;
       }
 
-      const uploadedFileName = uploadData.path;
+      setCreditBalance(Number(data.balance));
+      setServices([]);
+      toast.success(t('creditPaid', { order: data.orderNumber }));
+      setIsSubmitting(false);
+    } catch {
       toast.dismiss('upload');
-      toast.success(t('toastUploaded'));
-
-      const orderId = generateOrderId();
-      const vehiclePayload = {
-        brand: vehicle.brand,
-        model: vehicle.model,
-        fuelType: vehicle.fuelType,
-        year: vehicle.year,
-        ecuType: vehicle.ecuType,
-        engineDisplacement: vehicle.engine,
-        enginePower: '',
-      };
-
-      sessionStorage.setItem(
-        'pendingOrder',
-        JSON.stringify({
-          orderId,
-          customer,
-          vehicle: vehiclePayload,
-          services,
-          fileUrl: uploadedFileName,
-          customerNote: composedNote,
-          totalPrice,
-          legalConsent: legalConsentAgreed,
-        }),
-      );
-
-      await redirectToCheckout({
-        items: selectedItems.map((service) => ({ name: service.name, price: service.price })),
-        orderId,
-        customerEmail: customer.email,
-        customerName: customer.name,
-        customerNote: composedNote,
-        vehicle: vehiclePayload,
-        fileUrl: uploadedFileName,
-        services,
-        legalConsent: legalConsentAgreed,
-      });
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : t('toastPayFailed');
-      toast.error(message);
-      setIsSubmitting(null);
+      toast.error(t('creditPayFailed'));
+      setIsSubmitting(false);
     }
-  };
-
-  const payWithCredits = () => {
-    const nextErrors = validate();
-    setErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0) {
-      toast.error(t('toastCheckFields'));
-      return;
-    }
-    toast.error(t('toastCredits'));
   };
 
   return (
@@ -336,6 +529,41 @@ const OrderPage = () => {
                   );
                 })}
               </div>
+              {authUser ? (
+                <div className="inline-flex max-w-full items-center gap-3 rounded-lg border border-primary/45 bg-black/50 px-3 py-1">
+                  <span className="max-w-[16rem] truncate text-base font-semibold leading-none text-foreground" title={accountLabel || undefined}>
+                    {accountLabel || '—'}
+                  </span>
+                  <span className="h-6 w-px shrink-0 bg-primary/35" aria-hidden="true" />
+                  <button
+                    type="button"
+                    onClick={showCreditBalance}
+                    className="shrink-0 text-2xl font-black leading-none tabular-nums neon-text"
+                    aria-label={t('creditBalance')}
+                  >
+                    {creditBalance === null ? '—' : `${formatServicePrice(creditBalance)}€`}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={signOut}
+                    className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg border border-primary/50 bg-primary/10 px-4 text-sm font-semibold text-primary transition-colors hover:bg-primary/20"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    {t('signOut')}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLoginError('');
+                    setLoginOpen(true);
+                  }}
+                  className="inline-flex h-8 items-center rounded-lg border border-border/60 bg-black/40 px-2.5 text-xs font-semibold text-muted-foreground transition-colors hover:text-primary"
+                >
+                  {t('signIn')}
+                </button>
+              )}
               <Link to="/track" className="btn-secondary flex items-center gap-2 px-4 py-2 text-sm">
                 <Search className="h-4 w-4" />
                 <span className="hidden sm:inline">{t('trackOrder')}</span>
@@ -756,49 +984,91 @@ const OrderPage = () => {
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={payWithCredits}
-                      disabled={isSubmitting !== null}
-                      aria-label={t('payCreditsAria')}
-                      className="btn-secondary flex min-h-[52px] flex-col items-center justify-center gap-0.5 !px-2 !py-2 text-center text-primary disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide">
-                        <Coins className="h-3.5 w-3.5" />
-                        {t('pay')}
-                      </span>
-                      <span className="text-sm font-bold leading-none">{t('payCredits')}</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={uploadAndPayByCard}
-                      disabled={isSubmitting !== null}
-                      aria-label={t('payCardAria')}
-                      className="btn-primary flex min-h-[52px] flex-col items-center justify-center gap-0.5 !px-2 !py-2 text-center disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {isSubmitting === 'card' ? (
-                        <Loader2 className="h-5 w-5 animate-spin" />
-                      ) : (
-                        <>
-                          <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide">
-                            <CreditCard className="h-3.5 w-3.5" />
-                            {t('payCard')}
-                          </span>
-                          <span className="text-sm font-bold leading-none">{t('stripe')}</span>
-                        </>
-                      )}
-                    </button>
+                  <div id="order-credit-balance" className="flex items-center justify-between gap-3 rounded-xl border border-primary/35 bg-black/40 px-3 py-2">
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary/80">{t('creditBalance')}</span>
+                    <span className={`text-lg font-bold leading-none tabular-nums ${creditBalance !== null && creditBalance < totalPrice ? 'text-amber-300' : 'neon-text'}`}>
+                      {creditBalance === null ? '—' : `${formatServicePrice(creditBalance)}€`}
+                    </span>
                   </div>
-                  <p className="text-center text-[10px] text-muted-foreground">
-                    {t('promoHint')}
-                  </p>
+                  <button
+                    type="button"
+                    onClick={payWithCredits}
+                    disabled={isSubmitting}
+                    aria-label={t('payCreditsAria')}
+                    className="btn-primary flex min-h-[52px] w-full items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isSubmitting ? (
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    ) : (
+                      <>
+                        <Coins className="h-4 w-4" />
+                        <span className="text-sm font-bold uppercase tracking-wide">{t('payCreditsAria')}</span>
+                      </>
+                    )}
+                  </button>
                 </div>
               </div>
             </aside>
           </div>
         </div>
       </div>
+      {loginOpen && (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setLoginOpen(false)}
+        >
+          <form
+            onSubmit={signIn}
+            onClick={(event) => event.stopPropagation()}
+            className="order-panel w-full max-w-sm p-5"
+          >
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-primary">{t('signInTitle')}</h2>
+              <button
+                type="button"
+                onClick={() => setLoginOpen(false)}
+                aria-label={t('close')}
+                className="text-muted-foreground hover:text-primary"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <label className="mb-3 block">
+              <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t('email')}</span>
+              <input
+                type="email"
+                value={loginEmail}
+                onChange={(event) => setLoginEmail(event.target.value)}
+                autoComplete="email"
+                required
+                autoFocus
+                disabled={loginBusy}
+                className="input-field w-full !px-3 !py-2 text-sm"
+              />
+            </label>
+            <label className="mb-4 block">
+              <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t('signInPassword')}</span>
+              <input
+                type="password"
+                value={loginPassword}
+                onChange={(event) => setLoginPassword(event.target.value)}
+                autoComplete="current-password"
+                required
+                disabled={loginBusy}
+                className="input-field w-full !px-3 !py-2 text-sm"
+              />
+            </label>
+            {loginError && <p className="mb-3 text-xs text-red-400">{loginError}</p>}
+            <button
+              type="submit"
+              disabled={loginBusy}
+              className="btn-primary flex min-h-[44px] w-full items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {loginBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : t('signIn')}
+            </button>
+          </form>
+        </div>
+      )}
     </div>
   );
 };

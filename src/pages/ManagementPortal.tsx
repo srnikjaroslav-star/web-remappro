@@ -31,6 +31,7 @@ import { Order, ActivityLog } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { SERVICES } from '@/data/services';
 import { loadServiceCatalog, lookupServiceName } from '@/lib/serviceCatalog';
+import ClientCredits from '@/components/ClientCredits';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -62,6 +63,7 @@ const ManagementPortal = () => {
   const [refundIban, setRefundIban] = useState<string>('');
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [financialStats, setFinancialStats] = useState<{ grossRevenue: number; refunds: number; netRevenue: number } | null>(null);
+  const [section, setSection] = useState<'orders' | 'clients'>('orders');
   
   // NEW: Refund Wizard Modal State
   const [refundModalOpen, setRefundModalOpen] = useState(false);
@@ -1768,6 +1770,24 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
       </header>
 
       <div className="w-full flex-grow pt-3">
+        <div className="mb-3 inline-flex items-center rounded-lg border border-primary/30 bg-black/40 p-0.5 text-sm font-semibold">
+          <button
+            type="button"
+            onClick={() => setSection('orders')}
+            className={`rounded-md px-3 py-1.5 transition-colors ${section === 'orders' ? 'bg-primary/15 text-primary shadow-[0_0_12px_rgba(0,242,255,0.35)]' : 'text-muted-foreground hover:text-foreground'}`}
+          >
+            Objednávky
+          </button>
+          <button
+            type="button"
+            onClick={() => setSection('clients')}
+            className={`rounded-md px-3 py-1.5 transition-colors ${section === 'clients' ? 'bg-primary/15 text-primary shadow-[0_0_12px_rgba(0,242,255,0.35)]' : 'text-muted-foreground hover:text-foreground'}`}
+          >
+            Klienti
+          </button>
+        </div>
+        {section === 'clients' ? <ClientCredits /> : (
+        <>
         <div className="mb-3 w-full grid grid-cols-1 xl:grid-cols-5 gap-4">
           <div className="rounded-none p-3 bg-[#0f172a] border-t-4 border-t-cyan-400 shadow-[inset_0_0_28px_rgba(34,211,238,0.14)]">
             <p className="uppercase text-sm text-white font-extrabold tracking-wide">Celkové tržby</p>
@@ -1986,6 +2006,8 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
             </table>
           </div>
         </div>
+        </>
+        )}
 
         {/* Order Detail Modal */}
         {detailOrder && (
