@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { RefreshCw, Search } from 'lucide-react';
 import { toast } from 'sonner';
+import { accountDisplayName } from '@/lib/profileName';
 import { supabase } from '@/lib/supabase';
 
 type ClientAccount = {
@@ -51,7 +52,8 @@ const ClientCredits = () => {
     const needle = query.trim().toLowerCase();
     if (!needle) return clients;
     return clients.filter((client) =>
-      client.email.toLowerCase().includes(needle) || client.name.toLowerCase().includes(needle),
+      client.email.toLowerCase().includes(needle) ||
+      accountDisplayName(client).toLowerCase().includes(needle),
     );
   }, [clients, query]);
 
@@ -120,8 +122,9 @@ const ClientCredits = () => {
             ) : visible.map((client) => {
               const busy = adjustingId === client.id;
               const active = selectedId === client.id;
+              const label = accountDisplayName(client);
               const cell = `border-r border-slate-800/60 px-4 py-2 align-middle ${active ? 'bg-slate-800/40' : ''}`;
-              const actionButton = 'inline-flex min-h-12 min-w-[7.5rem] items-center justify-center rounded-none border-l border-slate-700/50 bg-cyan-950/30 px-4 text-sm font-bold uppercase tracking-wide transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-60';
+              const actionButton = 'inline-flex min-h-12 min-w-[7.25rem] flex-1 items-center justify-center border-0 bg-transparent px-4 text-sm font-bold uppercase tracking-wide transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-60';
               return (
                 <tr
                   key={client.id}
@@ -132,13 +135,13 @@ const ClientCredits = () => {
                     <p className="whitespace-nowrap text-xs leading-none text-white">{client.email || '—'}</p>
                   </td>
                   <td className={`${cell} w-full min-w-[16rem]`}>
-                    <p className="whitespace-nowrap text-lg font-bold leading-none text-cyan-400">{client.name || '—'}</p>
+                    <p className="whitespace-nowrap text-lg font-bold leading-none text-cyan-400">{label || '—'}</p>
                   </td>
                   <td className={`min-w-[8.5rem] whitespace-nowrap border-r border-slate-800/60 p-4 text-center align-middle ${active ? 'bg-slate-800/40' : ''}`}>
                     <p className="flex items-center justify-center text-xl font-bold leading-none text-primary">{money(client.balance)}</p>
                   </td>
-                  <td className="sticky right-0 z-10 h-px border-r border-slate-800/60 bg-[#070d16] p-0" onClick={(event) => event.stopPropagation()}>
-                    <div className="flex h-full min-h-12 items-stretch justify-end">
+                  <td className="sticky right-0 z-10 border-r border-slate-800/60 bg-[#070d16] px-3 py-2 align-middle" onClick={(event) => event.stopPropagation()}>
+                    <div className="flex h-12 items-stretch overflow-hidden rounded-md border border-primary/35 bg-cyan-950/35 shadow-[0_0_16px_rgba(0,242,255,0.08)]">
                       <input
                         type="text"
                         inputMode="decimal"
@@ -146,13 +149,13 @@ const ClientCredits = () => {
                         onChange={(event) => setDrafts((current) => ({ ...current, [client.id]: event.target.value }))}
                         placeholder="0,00"
                         disabled={busy}
-                        className="w-24 rounded-none border-0 border-l border-slate-700/50 bg-transparent px-3 text-center text-base font-bold tabular-nums text-foreground placeholder:text-slate-500 focus:outline-none disabled:opacity-60"
+                        className="w-32 shrink-0 border-0 bg-transparent px-3 text-center text-xl font-bold leading-none tabular-nums text-primary placeholder:font-bold placeholder:text-primary focus:outline-none disabled:opacity-60"
                       />
                       <button
                         type="button"
                         disabled={busy}
                         onClick={() => adjust(client, 'add')}
-                        className={`${actionButton} text-cyan-300 hover:border-cyan-500/40 hover:bg-cyan-500/20`}
+                        className={`${actionButton} text-cyan-300 hover:bg-cyan-500/20`}
                       >
                         Pripísať
                       </button>
@@ -160,7 +163,7 @@ const ClientCredits = () => {
                         type="button"
                         disabled={busy}
                         onClick={() => adjust(client, 'subtract')}
-                        className={`${actionButton} text-red-400 hover:border-red-500/40 hover:bg-red-500/20`}
+                        className={`${actionButton} text-red-400 hover:bg-red-500/15`}
                       >
                         Odrátať
                       </button>

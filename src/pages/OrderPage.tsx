@@ -13,6 +13,13 @@ import {
   subscribeServiceCatalog,
   type CatalogService,
 } from '@/lib/serviceCatalog';
+import {
+  accountDisplayName,
+  companyFromMetadata,
+  joinProfileName,
+  metadataProfileName,
+  splitProfileName,
+} from '@/lib/profileName';
 import { supabase } from '@/lib/supabase';
 import {
   AlertTriangle,
@@ -82,17 +89,6 @@ const fieldClass = (filled: boolean, hasError: boolean) => {
   return 'input-field w-full !px-3 !py-2 text-sm';
 };
 
-const profileDisplayName = (first?: string | null, last?: string | null) =>
-  [first, last].map((part) => String(part ?? '').trim()).filter(Boolean).join(' ');
-
-const splitProfileName = (value: string) => {
-  const parts = value.trim().split(/\s+/).filter(Boolean);
-  return {
-    first_name: parts[0] ?? '',
-    last_name: parts.slice(1).join(' '),
-  };
-};
-
 const formatSize = (bytes: number) => {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -108,6 +104,9 @@ const OrderPage = () => {
   const [creditBalance, setCreditBalance] = useState<number | null>(null);
   const [profileName, setProfileName] = useState('');
   const [loginOpen, setLoginOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<'sign-in' | 'sign-up'>('sign-in');
+  const [loginFirstName, setLoginFirstName] = useState('');
+  const [loginLastName, setLoginLastName] = useState('');
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
@@ -159,11 +158,12 @@ const OrderPage = () => {
     const applyAccount = (user: User | null) => {
       if (!user) {
         setProfileName('');
+        setCustomer({ name: '', email: '' });
         return;
       }
       setCustomer((current) => ({
         name: current.name,
-        email: current.email || user.email || '',
+        email: user.email || current.email,
       }));
     };
     supabase.auth.getSession().then(({ data }) => {
@@ -185,50 +185,52 @@ const OrderPage = () => {
 
   useEffect(() => {
     if (!authUser) return;
+    const user = authUser;
     let active = true;
     const loadProfile = async () => {
       const { data } = await supabase
         .from('client_profiles')
         .select('first_name, last_name')
-        .eq('user_id', authUser.id)
+        .eq('user_id', user.id)
         .maybeSingle();
-      let name = profileDisplayName(data?.first_name, data?.last_name);
-      if (!name && authUser.email) {
+      const stored = joinProfileName(data?.first_name, data?.last_name);
+      let name = stored || metadataProfileName(user.user_metadata);
+      if (!name && user.email) {
         const { data: order } = await supabase
           .from('orders')
           .select('customer_name')
-          .eq('customer_email', authUser.email.toLowerCase())
+          .eq('customer_email', user.email.toLowerCase())
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle();
         name = String(order?.customer_name ?? '').trim();
-        if (name) {
-          const parts = splitProfileName(name);
-          await supabase.from('client_profiles').upsert({
-            user_id: authUser.id,
-            first_name: parts.first_name,
-            last_name: parts.last_name,
-            updated_at: new Date().toISOString(),
-          });
-        }
+      }
+      if (name && name !== stored) {
+        const parts = splitProfileName(name);
+        await supabase.from('client_profiles').upsert({
+          user_id: user.id,
+          first_name: parts.first_name,
+          last_name: parts.last_name,
+          updated_at: new Date().toISOString(),
+        });
       }
       if (!active) return;
       setProfileName(name);
       setCustomer((current) => ({
-        name: current.name || name,
-        email: current.email || authUser.email || '',
+        name: name || current.name,
+        email: user.email || current.email,
       }));
     };
     loadProfile();
     return () => {
       active = false;
     };
-  }, [authUser]);
+  }, [authUser?.id]);
 
   useEffect(() => {
     if (!authUser || !customer.name.trim()) return;
     const parts = splitProfileName(customer.name);
-    const nextName = profileDisplayName(parts.first_name, parts.last_name);
+    const nextName = joinProfileName(parts.first_name, parts.last_name);
     const handle = window.setTimeout(() => {
       supabase
         .from('client_profiles')
@@ -296,7 +298,11 @@ const OrderPage = () => {
     return () => window.removeEventListener('keydown', onKey);
   }, [loginOpen]);
 
-  const accountLabel = profileName;
+  const accountLabel = accountDisplayName({
+    name: profileName,
+    email: authUser?.email,
+    company: companyFromMetadata(authUser?.user_metadata),
+  });
 
   const showCreditBalance = () => {
     document.getElementById('order-credit-balance')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -318,6 +324,61 @@ const OrderPage = () => {
     setLoginPassword('');
     setLoginOpen(false);
     toast.success(t('signInSuccess'));
+  };
+
+  const signUp = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setLoginError('');
+    const first = loginFirstName.trim();
+    const last = loginLastName.trim();
+    if (!first || !last) {
+      setLoginError(t('signUpNameRequired'));
+      return;
+    }
+    setLoginBusy(true);
+    const email = loginEmail.trim();
+    const fullName = joinProfileName(first, last);
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password: loginPassword,
+      options: {
+        emailRedirectTo: window.location.origin,
+        data: {
+          first_name: first,
+          last_name: last,
+          full_name: fullName,
+        },
+      },
+    });
+    const alreadyExists = Boolean(data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0)
+      || /already registered|already exists/i.test(error?.message ?? '');
+    if (error || alreadyExists) {
+      setLoginBusy(false);
+      setLoginError(alreadyExists ? t('signUpExists') : t('signUpFailed'));
+      return;
+    }
+    if (data.session && data.user) {
+      await supabase.from('client_profiles').upsert({
+        user_id: data.user.id,
+        first_name: first,
+        last_name: last,
+        updated_at: new Date().toISOString(),
+      });
+      setProfileName(fullName);
+      setCustomer((current) => ({
+        name: fullName,
+        email: email || current.email,
+      }));
+      setLoginPassword('');
+      setLoginOpen(false);
+      setLoginBusy(false);
+      toast.success(t('signUpSuccess'));
+      return;
+    }
+    setLoginBusy(false);
+    setLoginPassword('');
+    setAuthMode('sign-in');
+    toast.success(t('signUpConfirm'));
   };
 
   const signOut = async () => {
@@ -557,6 +618,7 @@ const OrderPage = () => {
                   type="button"
                   onClick={() => {
                     setLoginError('');
+                    setAuthMode('sign-in');
                     setLoginOpen(true);
                   }}
                   className="inline-flex h-8 items-center rounded-lg border border-border/60 bg-black/40 px-2.5 text-xs font-semibold text-muted-foreground transition-colors hover:text-primary"
@@ -1018,12 +1080,14 @@ const OrderPage = () => {
           onClick={() => setLoginOpen(false)}
         >
           <form
-            onSubmit={signIn}
+            onSubmit={authMode === 'sign-up' ? signUp : signIn}
             onClick={(event) => event.stopPropagation()}
             className="order-panel w-full max-w-sm p-5"
           >
             <div className="mb-4 flex items-center justify-between gap-3">
-              <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-primary">{t('signInTitle')}</h2>
+              <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-primary">
+                {authMode === 'sign-up' ? t('signUpTitle') : t('signInTitle')}
+              </h2>
               <button
                 type="button"
                 onClick={() => setLoginOpen(false)}
@@ -1033,6 +1097,35 @@ const OrderPage = () => {
                 <X className="h-4 w-4" />
               </button>
             </div>
+            {authMode === 'sign-up' && (
+              <div className="mb-3 grid grid-cols-2 gap-2">
+                <label className="block">
+                  <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t('signUpFirstName')}</span>
+                  <input
+                    type="text"
+                    value={loginFirstName}
+                    onChange={(event) => setLoginFirstName(event.target.value)}
+                    autoComplete="given-name"
+                    required
+                    autoFocus
+                    disabled={loginBusy}
+                    className="input-field w-full !px-3 !py-2 text-sm"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t('signUpLastName')}</span>
+                  <input
+                    type="text"
+                    value={loginLastName}
+                    onChange={(event) => setLoginLastName(event.target.value)}
+                    autoComplete="family-name"
+                    required
+                    disabled={loginBusy}
+                    className="input-field w-full !px-3 !py-2 text-sm"
+                  />
+                </label>
+              </div>
+            )}
             <label className="mb-3 block">
               <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t('email')}</span>
               <input
@@ -1041,7 +1134,7 @@ const OrderPage = () => {
                 onChange={(event) => setLoginEmail(event.target.value)}
                 autoComplete="email"
                 required
-                autoFocus
+                autoFocus={authMode === 'sign-in'}
                 disabled={loginBusy}
                 className="input-field w-full !px-3 !py-2 text-sm"
               />
@@ -1052,8 +1145,9 @@ const OrderPage = () => {
                 type="password"
                 value={loginPassword}
                 onChange={(event) => setLoginPassword(event.target.value)}
-                autoComplete="current-password"
+                autoComplete={authMode === 'sign-up' ? 'new-password' : 'current-password'}
                 required
+                minLength={6}
                 disabled={loginBusy}
                 className="input-field w-full !px-3 !py-2 text-sm"
               />
@@ -1064,7 +1158,17 @@ const OrderPage = () => {
               disabled={loginBusy}
               className="btn-primary flex min-h-[44px] w-full items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {loginBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : t('signIn')}
+              {loginBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : authMode === 'sign-up' ? t('signUp') : t('signIn')}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setLoginError('');
+                setAuthMode((current) => (current === 'sign-in' ? 'sign-up' : 'sign-in'));
+              }}
+              className="mt-3 w-full text-center text-xs text-muted-foreground transition-colors hover:text-primary"
+            >
+              {authMode === 'sign-in' ? t('signUpSwitch') : t('signInSwitch')}
             </button>
           </form>
         </div>

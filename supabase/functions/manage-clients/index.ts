@@ -72,11 +72,15 @@ Deno.serve(async (req) => {
       const clients = users
         .map((user) => {
           const meta = user.user_metadata ?? {};
-          const name = profileNames.get(user.id) || String(meta.full_name || meta.name || "").trim();
+          const stored = profileNames.get(user.id)
+            || [meta.first_name, meta.last_name].map((part) => String(part ?? "").trim()).filter(Boolean).join(" ")
+            || String(meta.full_name || meta.name || "").trim();
+          const company = String(meta.company || meta.company_name || meta.firma || "").trim();
+          const local = String(user.email ?? "").split("@")[0]?.trim() ?? "";
           return {
             id: user.id,
             email: user.email ?? "",
-            name,
+            name: stored || company || local,
             balance: balances.get(user.id) ?? 0,
             createdAt: user.created_at ?? null,
           };
