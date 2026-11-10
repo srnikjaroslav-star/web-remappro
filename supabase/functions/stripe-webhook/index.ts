@@ -177,12 +177,16 @@ serve(async (req) => {
       const vinRaw = session.metadata?.vin || "";
       const vin = vinRaw.trim() ? vinRaw.trim().toUpperCase() : null;
       
-      // Parse services from metadata
+      // Parse services from metadata (JSON array or comma-separated names)
       let serviceTypes: string[] = [];
-      try {
-        serviceTypes = session.metadata?.services ? JSON.parse(session.metadata.services) : [];
-      } catch {
-        serviceTypes = session.metadata?.services ? [session.metadata.services] : [];
+      const servicesRaw = session.metadata?.services || "";
+      if (servicesRaw) {
+        try {
+          const parsed = JSON.parse(servicesRaw);
+          serviceTypes = Array.isArray(parsed) ? parsed.map((item) => String(item)) : [String(parsed)];
+        } catch {
+          serviceTypes = servicesRaw.split(",").map((item: string) => item.trim()).filter(Boolean);
+        }
       }
       
       console.log("=== STRIPE WEBHOOK DEBUG ===");
@@ -208,6 +212,20 @@ serve(async (req) => {
       const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
       const supabase = createClient(supabaseUrl, supabaseKey);
 
+      const { data: existingOrder } = await supabase
+        .from("orders")
+        .select("id, order_number")
+        .eq("stripe_session_id", sessionId)
+        .maybeSingle();
+
+      if (existingOrder) {
+        console.log("Order already stored for session:", sessionId, existingOrder.order_number);
+        return new Response(JSON.stringify({ received: true, order_number: existingOrder.order_number }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
       // Generate unique order number with random suffix for uniqueness
       const timestamp = Date.now().toString(36).toUpperCase();
       const randomSuffix = Math.random().toString(36).substring(2, 5).toUpperCase();
@@ -229,7 +247,7 @@ serve(async (req) => {
         vin: vin,  // VIN column - null if not provided
         service_type: serviceTypes.length > 0 ? serviceTypes : null,
         total_price: parseFloat(amountTotal),
-        status: "paid",
+        status: "processing",
         legal_consent: legalConsent,
         customer_note: customerNote || null,
         stripe_session_id: sessionId,

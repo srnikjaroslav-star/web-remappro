@@ -111,6 +111,7 @@ export const redirectToCheckout = async (options: any) => {
       fuel_type: fuelType, // From vehicleData.fuelType - maps to fuel_type in DB
       year: year > 0 ? String(year) : '', // From vehicleData.year - must be string for Stripe metadata - maps to year in DB
       file_url: options.fileUrl || '', // uploadedFileName - maps to file_url in DB
+      legal_consent: options.legalConsent ? 'true' : 'false',
     };
     
     console.log('[redirectToCheckout] Metadata to send:', JSON.stringify(metadata, null, 2));

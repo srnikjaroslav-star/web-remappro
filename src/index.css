@@ -84,6 +84,36 @@
     @apply bg-background text-foreground font-sans antialiased;
     font-family: 'Inter', sans-serif;
   }
+
+  html,
+  body {
+    scrollbar-color: #00f2ff #0b0f19;
+    scrollbar-width: thin;
+  }
+
+  html::-webkit-scrollbar,
+  body::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  html::-webkit-scrollbar-track,
+  body::-webkit-scrollbar-track {
+    background: #0b0f19;
+  }
+
+  html::-webkit-scrollbar-thumb,
+  body::-webkit-scrollbar-thumb {
+    background: #00f2ff;
+    border-radius: 4px;
+    box-shadow: 0 0 8px #00f2ff;
+  }
+
+  html::-webkit-scrollbar-thumb:hover,
+  body::-webkit-scrollbar-thumb:hover {
+    background: #67f8ff;
+    box-shadow: 0 0 12px #00f2ff;
+  }
 }
 
 @layer components {
@@ -375,6 +405,60 @@
 
   .table-row {
     @apply border-b border-border/50 transition-colors duration-200 hover:bg-secondary/30;
+  }
+
+  /* Order page: WinOLS-style hex dump, kept under readable UI */
+  .order-hex-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  .order-hex-layer pre {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    padding: 1.25rem 1.5rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11px;
+    line-height: 1.7;
+    letter-spacing: 0.045em;
+    color: hsl(185 100% 50%);
+    opacity: 0.04;
+    white-space: pre;
+  }
+
+  .order-panel {
+    @apply rounded-xl border border-primary/25 backdrop-blur-xl;
+    background: hsl(0 0% 4% / 0.86);
+    box-shadow: 0 0 30px hsl(185 100% 50% / 0.08), inset 0 1px 0 hsl(185 100% 50% / 0.12);
+  }
+
+  .order-services-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(185 42% 32%) transparent;
+  }
+
+  .order-services-scroll::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .order-services-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .order-services-scroll::-webkit-scrollbar-thumb {
+    background: hsl(185 42% 32%);
+    border-radius: 999px;
+  }
+
+  .order-services-scroll::-webkit-scrollbar-thumb:hover {
+    background: hsl(185 70% 42%);
   }
 }
 

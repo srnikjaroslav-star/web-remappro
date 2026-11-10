@@ -3,8 +3,6 @@ import { useEffect } from 'react';
 import { ArrowRight, Zap, ShieldCheck, Gauge, Cpu, Settings } from 'lucide-react';
 import Logo from '@/components/Logo';
 import SystemStatus from '@/components/SystemStatus';
-import Footer from '@/components/Footer';
-
 interface ServiceContent {
   title: string;
   slug: string;
@@ -283,7 +281,7 @@ const ServiceDetail = () => {
 
   if (!service) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="flex w-full flex-grow items-center justify-center bg-background">
         <div className="text-center">
           <h1 className="text-3xl font-bold mb-4">Service Not Found</h1>
           <Link to="/" className="btn-primary inline-flex items-center gap-2">
@@ -296,7 +294,7 @@ const ServiceDetail = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background overflow-hidden">
+    <div className="relative flex w-full flex-grow flex-col bg-background">
       {/* Ambient Background */}
       <div className="fixed inset-0 pointer-events-none">
         <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-primary/5 rounded-full blur-[120px]" />
@@ -417,8 +415,6 @@ const ServiceDetail = () => {
         </div>
       </section>
 
-      {/* Footer */}
-      <Footer />
     </div>
   );
 };

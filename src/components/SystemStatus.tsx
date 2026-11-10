@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useLanguage } from '@/i18n/LanguageContext';
 
 export type SystemStatusMode = 'auto' | 'online' | 'offline';
 
@@ -68,6 +69,7 @@ export const isSystemOnline = (mode: SystemStatusMode): boolean => {
 };
 
 const SystemStatus = () => {
+  const { t } = useLanguage();
   const [mode, setMode] = useState<SystemStatusMode>('auto');
   const [isOnline, setIsOnline] = useState(() => isSystemOnline('auto'));
   const [loading, setLoading] = useState(true);
@@ -135,7 +137,7 @@ const SystemStatus = () => {
     return (
       <div className="flex items-center gap-2 text-sm">
         <span className="w-2.5 h-2.5 rounded-full bg-gray-500 animate-pulse" />
-        <span className="text-muted-foreground">Loading...</span>
+        <span className="text-muted-foreground">{t('statusLoading')}</span>
       </div>
     );
   }
@@ -150,10 +152,10 @@ const SystemStatus = () => {
         }`}
       />
       <span className={isOnline ? 'text-green-500' : 'text-red-500 font-bold'}>
-        {isOnline ? 'ONLINE' : 'OFFLINE'}
+        {isOnline ? t('statusOnline') : t('statusOffline')}
       </span>
       {mode !== 'auto' && (
-        <span className={`text-xs ${isOnline ? 'text-muted-foreground/60' : 'text-red-400/60'}`}>(Manual)</span>
+        <span className={`text-xs ${isOnline ? 'text-muted-foreground/60' : 'text-red-400/60'}`}>{t('statusManual')}</span>
       )}
     </div>
   );

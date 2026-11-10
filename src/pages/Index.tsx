@@ -3,7 +3,6 @@ import { useState, useEffect } from 'react';
 import { ArrowRight, Zap, Shield, Clock, Car, ChevronRight, Gauge, Settings, Cpu, ShieldCheck, Wrench, X } from 'lucide-react';
 import Logo from '@/components/Logo';
 import SystemStatus from '@/components/SystemStatus';
-import Footer from '@/components/Footer';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 
 interface ServiceData {
@@ -132,7 +131,7 @@ const Index = () => {
   const currentService = selectedService ? serviceData[selectedService] : null;
 
   return (
-    <div className="min-h-screen bg-background overflow-hidden">
+    <div className="relative flex w-full flex-grow flex-col bg-background">
       {/* Ambient Background */}
       <div className="fixed inset-0 pointer-events-none">
         <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-primary/5 rounded-full blur-[120px]" />
@@ -488,8 +487,6 @@ const Index = () => {
         </SheetContent>
       </Sheet>
 
-      {/* Footer */}
-      <Footer />
     </div>
   );
 };

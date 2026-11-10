@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Zap, ShoppingCart, Loader2 } from 'lucide-react';
 import Logo from '@/components/Logo';
-import Footer from '@/components/Footer';
 import { SERVICES, Service } from '@/data/services';
 import { redirectToCheckout, generateOrderId } from '@/lib/stripe';
 import { toast } from 'sonner';
@@ -51,7 +50,7 @@ const PricingPage = () => {
   );
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="relative flex w-full flex-grow flex-col bg-background">
       {/* Ambient Background */}
       <div className="fixed inset-0 pointer-events-none">
         <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-primary/5 rounded-full blur-[120px]" />
@@ -121,8 +120,6 @@ const PricingPage = () => {
         </div>
       </section>
 
-      {/* Footer */}
-      <Footer />
     </div>
   );
 };

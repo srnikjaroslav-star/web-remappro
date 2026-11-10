@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Search, Mail, Hash, Clock, Package, CheckCircle, Download, AlertCircle, ArrowLeft } from 'lucide-react';
 import Logo from '@/components/Logo';
-import Footer from '@/components/Footer';
 import { supabase, Order } from '@/integrations/supabase/client';
 import { SERVICES } from '@/data/services';
 
@@ -75,7 +74,7 @@ const CheckOrderPage = () => {
   const selectedServices = getSelectedServices();
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="flex w-full flex-grow flex-col bg-background">
       {/* Header */}
       <header className="border-b border-border/50 backdrop-blur-sm sticky top-0 z-50 bg-background/80">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
@@ -89,7 +88,7 @@ const CheckOrderPage = () => {
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-12 max-w-xl">
+      <div className="container mx-auto max-w-xl flex-grow px-4 py-12">
         {/* Title */}
         <div className="text-center mb-10">
           <h1 className="text-3xl font-bold mb-2">Check Your Order</h1>
@@ -302,10 +301,7 @@ const CheckOrderPage = () => {
             )}
           </div>
         )}
-      </main>
-
-      {/* Footer */}
-      <Footer />
+      </div>
     </div>
   );
 };

@@ -1759,7 +1759,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
         </div>
       </header>
 
-      <main className="w-full pt-3">
+      <div className="w-full flex-grow pt-3">
         <div className="mb-3 w-full grid grid-cols-1 xl:grid-cols-5 gap-4">
           <div className="rounded-none p-3 bg-[#0f172a] border-t-4 border-t-cyan-400 shadow-[inset_0_0_28px_rgba(34,211,238,0.14)]">
             <p className="uppercase text-sm text-white font-extrabold tracking-wide">Celkové tržby</p>
@@ -2402,7 +2402,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
           }}
           isSaving={savingId === noteModalOrder?.id}
         />
-      </main>
+      </div>
 
       <footer className="mt-8 w-full py-4 text-center text-xs text-gray-500">
         <p>REMAPPRO, IČO: 41281471, DIČ: 1041196607, Janka Kráľa 29, 990 01 Veľký Krtíš, Slovakia</p>

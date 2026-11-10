@@ -1,108 +1,30 @@
-import Logo from "./Logo";
+import { Link } from 'react-router-dom';
+import { useLanguage } from '@/i18n/LanguageContext';
+import type { TranslationKey } from '@/i18n/translations';
 
-const Footer = () => {
+const legalLinks: { to: string; label: TranslationKey }[] = [
+  { to: '/terms', label: 'footerTerms' },
+  { to: '/privacy', label: 'footerPrivacy' },
+  { to: '/refunds', label: 'footerRefunds' },
+];
+
+const Footer = ({ className = '' }: { className?: string }) => {
+  const { t } = useLanguage();
+
   return (
-    <footer className="bg-background border-t border-border/50 mt-auto">
-      <div className="container mx-auto px-4 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-          {/* Brand & Contact */}
-          <div className="space-y-4">
-            <Logo />
-            <div className="space-y-3 text-sm text-muted-foreground">
-              <p className="font-semibold text-foreground">REMAPPRO Digital Solutions</p>
-              <a 
-                href="mailto:info@remappro.eu" 
-                className="block hover:text-primary transition-colors"
-              >
-                info@remappro.eu
-              </a>
-              <p>Slovakia, European Union</p>
-            </div>
-          </div>
-
-          {/* Quick Links */}
-          <div className="space-y-4">
-            <h3 className="font-semibold text-foreground">Quick Links</h3>
-            <ul className="space-y-2 text-sm text-muted-foreground">
-              <li>
-                <a href="/" className="hover:text-primary transition-colors">
-                  Home
-                </a>
-              </li>
-              <li>
-                <a href="/about" className="hover:text-primary transition-colors">
-                  O nás & Služby
-                </a>
-              </li>
-              <li>
-                <a href="/pricing" className="hover:text-primary transition-colors">
-                  Pricing
-                </a>
-              </li>
-              <li>
-                <a href="/order" className="hover:text-primary transition-colors">
-                  Order
-                </a>
-              </li>
-              <li>
-                <a href="/track" className="hover:text-primary transition-colors">
-                  Track Order
-                </a>
-              </li>
-            </ul>
-          </div>
-
-          {/* Services */}
-          <div className="space-y-4">
-            <h3 className="font-semibold text-foreground">Services</h3>
-            <ul className="space-y-2 text-sm text-muted-foreground">
-              <li>
-                <a href="/pricing" className="hover:text-primary transition-colors">
-                  Stage 1 Tuning
-                </a>
-              </li>
-              <li>
-                <a href="/pricing" className="hover:text-primary transition-colors">
-                  DPF/EGR Removal
-                </a>
-              </li>
-              <li>
-                <a href="/pricing" className="hover:text-primary transition-colors">
-                  Pop &amp; Bangs
-                </a>
-              </li>
-            </ul>
-          </div>
-
-          {/* Legal */}
-          <div className="space-y-4">
-            <h3 className="font-semibold text-foreground">Legal</h3>
-            <ul className="space-y-2 text-sm text-muted-foreground">
-              <li>
-                <a href="/terms" className="hover:text-primary transition-colors">
-                  Terms &amp; Conditions
-                </a>
-              </li>
-              <li>
-                <a href="/privacy" className="hover:text-primary transition-colors">
-                  Privacy Policy
-                </a>
-              </li>
-              <li>
-                <a href="/refunds" className="hover:text-primary transition-colors">
-                  Refund Policy
-                </a>
-              </li>
-            </ul>
-          </div>
-        </div>
-
-        {/* Copyright */}
-        <div className="mt-12 pt-8 border-t border-border/50">
-          <p className="text-center text-sm text-muted-foreground">
-            Copyright © 2026 REMAPPRO Digital Solutions. All rights reserved.
-          </p>
-        </div>
+    <footer className={`border-t border-border/50 bg-background ${className}`}>
+      <div className="flex w-full flex-row flex-wrap items-center justify-between gap-x-6 gap-y-2 px-4 py-4 text-sm text-muted-foreground sm:px-6 lg:px-8">
+        <p>{t('footerCopyright')}</p>
+        <nav className="flex flex-row items-center gap-2">
+          {legalLinks.map((link, index) => (
+            <span key={link.to} className="flex items-center gap-2">
+              {index > 0 && <span aria-hidden="true">|</span>}
+              <Link to={link.to} className="transition-colors hover:text-primary">
+                {t(link.label)}
+              </Link>
+            </span>
+          ))}
+        </nav>
       </div>
     </footer>
   );

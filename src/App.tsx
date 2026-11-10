@@ -2,8 +2,9 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { HashRouter, Routes, Route } from "react-router-dom";
-import Index from "./pages/Index";
+import { HashRouter, Routes, Route, useLocation } from "react-router-dom";
+import Footer from "@/components/Footer";
+import { LanguageProvider } from "@/i18n/LanguageContext";
 import OrderPage from "./pages/OrderPage";
 // OPRAVENÝ IMPORT: Mieri priamo na súbor v pages
 import TrackPage from "./pages/TrackPage";
@@ -20,17 +21,16 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <HashRouter>
-        <Routes>
-          {/* Domovská stránka */}
-          <Route path="/" element={<Index />} />
+const AppShell = () => {
+  const { pathname } = useLocation();
+  const showFooter = pathname !== "/login" && pathname !== "/track" && pathname !== "/sprava-29-vk";
 
-          {/* Stránka pre novú objednávku */}
+  return (
+    <div className="flex min-h-screen flex-col bg-background">
+      <main className="flex w-full flex-grow flex-col">
+        <Routes>
+          {/* Koreň aplikácie je objednávkový formulár. */}
+          <Route path="/" element={<OrderPage />} />
           <Route path="/order" element={<OrderPage />} />
 
           {/* TRACKING: Toto je kľúčová cesta pre tvoj link z emailu */}
@@ -46,14 +46,27 @@ const App = () => (
           <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="/refunds" element={<RefundsPage />} />
 
-          {/* Service Detail Pages - Dynamic Routing */}
           <Route path="/services/:serviceSlug" element={<ServiceDetail />} />
-          <Route path="/service/:serviceSlug" element={<Index />} />
 
           {/* 404 - Stránka nenájdená */}
           <Route path="*" element={<NotFound />} />
         </Routes>
-      </HashRouter>
+      </main>
+      {showFooter && <Footer />}
+    </div>
+  );
+};
+
+const App = () => (
+  <QueryClientProvider client={queryClient}>
+    <TooltipProvider>
+      <Toaster />
+      <Sonner />
+      <LanguageProvider>
+        <HashRouter>
+          <AppShell />
+        </HashRouter>
+      </LanguageProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );

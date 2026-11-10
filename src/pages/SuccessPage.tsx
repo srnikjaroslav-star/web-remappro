@@ -2,8 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { CheckCircle, Home, Loader2, Search } from 'lucide-react';
 import Logo from '@/components/Logo';
-import Footer from '@/components/Footer';
-import { supabase, Order } from '@/integrations/supabase/client';
+import { supabase, Order, SUPABASE_URL, SUPABASE_ANON_KEY } from '@/integrations/supabase/client';
 
 const SuccessPage = () => {
   const [searchParams] = useSearchParams();
@@ -11,59 +10,99 @@ const SuccessPage = () => {
   const [order, setOrder] = useState<Order | null>(null);
 
   useEffect(() => {
-    const fetchOrderBySession = async () => {
-      const sessionId = searchParams.get('session_id');
-      
-      if (!sessionId) {
+    const sessionId = searchParams.get('session_id');
+    if (!sessionId) {
+      console.error('[SuccessPage] Chýba session_id. Stripe nevrátil identifikátor platby, preto sa objednávka nedá uložiť.');
+      setIsLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadOrder = async () => {
+      try {
+      console.log('[SuccessPage] Ukladám objednávku pre session:', sessionId);
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/confirm-checkout`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({ sessionId }),
+      });
+      const body = await response.json().catch(() => null);
+      console.log('[SuccessPage] confirm-checkout odpoveď:', response.status, body);
+
+      if (!response.ok) {
+        console.error('[SuccessPage] Zápis objednávky zlyhal:', {
+          status: response.status,
+          error: body?.error || body?.message || response.statusText,
+          code: body?.code ?? null,
+          details: body?.details ?? null,
+          hint: body?.hint ?? null,
+          body,
+        });
+      }
+
+      let saved = false;
+
+      if (!cancelled && response.ok && body?.order) {
+        console.log('[SuccessPage] Objednávka uložená:', body.order.order_number, 'created:', body.created);
+        setOrder(body.order as Order);
+        saved = true;
         setIsLoading(false);
         return;
       }
 
-      // Poll for the order with exponential backoff
       let attempts = 0;
-      const maxAttempts = 10;
+      const maxAttempts = 8;
       let delay = 1000;
-      
-      while (attempts < maxAttempts) {
-        console.log(`[SuccessPage] Attempt ${attempts + 1}: Fetching order by session_id: ${sessionId}`);
-        
-        const { data, error } = await supabase
+
+      while (attempts < maxAttempts && !cancelled) {
+        const { data: existing, error: readError } = await supabase
           .from('orders')
           .select('*')
           .eq('stripe_session_id', sessionId)
           .maybeSingle();
 
-        if (data && !error) {
-          console.log('[SuccessPage] Order found:', data.order_number);
-          setOrder(data as Order);
+        if (readError) {
+          console.error('[SuccessPage] Čítanie objednávky zlyhalo:', readError.message, readError);
           break;
         }
-        
-        if (error) {
-          console.error('[SuccessPage] Supabase error:', error);
+
+        if (existing) {
+          if (!cancelled) setOrder(existing as Order);
+          saved = true;
+          break;
         }
-        
+
         attempts++;
         if (attempts < maxAttempts) {
-          console.log(`[SuccessPage] Order not found yet, waiting ${delay}ms...`);
-          await new Promise(resolve => setTimeout(resolve, delay));
-          delay = Math.min(delay * 1.5, 5000); // Exponential backoff, max 5s
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          delay = Math.min(delay * 1.5, 5000);
         }
       }
 
-      if (!order && attempts >= maxAttempts) {
-        console.warn('[SuccessPage] Max attempts reached, order not found');
+      if (!cancelled && !saved) {
+        console.error('[SuccessPage] Objednávka sa do tabuľky orders neuložila. Príčina je v hláške confirm-checkout vyššie.');
       }
-
-      setIsLoading(false);
+      if (!cancelled) setIsLoading(false);
+      } catch (error) {
+        console.error('[SuccessPage] Zápis objednávky zlyhal:', error);
+        if (!cancelled) setIsLoading(false);
+      }
     };
 
-    fetchOrderBySession();
+    loadOrder();
+    return () => {
+      cancelled = true;
+    };
   }, [searchParams]);
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="flex w-full flex-grow items-center justify-center bg-background">
         <div className="text-center">
           <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto mb-4" />
           <p className="text-lg text-muted-foreground">Processing your order...</p>
@@ -77,7 +116,7 @@ const SuccessPage = () => {
   const customerEmail = order?.customer_email;
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="relative flex w-full flex-grow flex-col bg-background">
       {/* Ambient Background */}
       <div className="fixed inset-0 pointer-events-none">
         <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-primary/5 rounded-full blur-[120px]" />
@@ -92,7 +131,7 @@ const SuccessPage = () => {
       </header>
 
       {/* Success Content */}
-      <main className="flex-1 flex items-center justify-center relative">
+      <div className="relative flex flex-grow items-center justify-center">
         <div className="container mx-auto px-4">
           <div className="glass-card max-w-lg mx-auto p-12 text-center">
             <div className="w-20 h-20 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-6">
@@ -142,10 +181,7 @@ const SuccessPage = () => {
             </div>
           </div>
         </div>
-      </main>
-
-      {/* Footer */}
-      <Footer />
+      </div>
     </div>
   );
 };

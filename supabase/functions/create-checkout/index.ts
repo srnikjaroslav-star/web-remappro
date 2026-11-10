@@ -66,7 +66,7 @@ Deno.serve(async (req) => {
     }
 
     const origin = req.headers.get('origin') || '';
-    const finalSuccessUrl = successUrl || (origin ? `${origin}/success` : '');
+    const finalSuccessUrl = successUrl || (origin ? `${origin}/#/success?session_id={CHECKOUT_SESSION_ID}` : '');
     const finalCancelUrl = cancelUrl || (origin ? `${origin}/order` : '');
 
     if (!finalSuccessUrl || !finalCancelUrl) {
@@ -118,6 +118,7 @@ Deno.serve(async (req) => {
       year: metadata?.year ? String(metadata.year) : '', // String(vehicleData.year) - Stripe requires string, not number!
       file_url: metadata?.file_url || '', // uploadedFileName
       ecu_type: metadata?.ecu_type || '',
+      legal_consent: metadata?.legal_consent || '',
     };
     
     console.log('=== SESSION METADATA TO CREATE ===');
