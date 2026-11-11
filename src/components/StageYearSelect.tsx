@@ -70,8 +70,8 @@ const StageYearSelect = ({ label, value, options, onChange }: StageYearSelectPro
         aria-expanded={open}
         aria-label={label}
         onClick={toggle}
-        className={`flex h-7 w-full min-w-0 items-center justify-between gap-2 rounded-md border bg-[#0b132b] px-2 text-left text-xs text-white outline-none ${
-          chosen ? 'border-primary' : 'border-primary/40'
+        className={`flex h-7 w-full min-w-0 items-center justify-between gap-2 rounded-md border border-primary bg-primary/25 px-2 text-left text-xs outline-none shadow-[0_0_18px_rgba(0,242,255,0.55)] ${
+          chosen ? 'text-foreground' : 'text-muted-foreground'
         }`}
       >
         <span className="truncate">{chosen ? `${chosen.years} – ${formatCredits(chosen.price)}` : '—'}</span>
@@ -83,7 +83,7 @@ const StageYearSelect = ({ label, value, options, onChange }: StageYearSelectPro
           role="listbox"
           aria-label={label}
           style={{ top: menu.top, left: menu.left, width: menu.width }}
-          className="fixed z-[80] max-h-52 overflow-auto rounded-md border border-primary/45 bg-[#0b132b] py-1 shadow-[0_0_18px_rgba(0,242,255,0.2)]"
+          className="fixed z-[120] max-h-52 overflow-auto rounded-md border border-primary bg-background py-1 shadow-[0_0_18px_rgba(0,242,255,0.55)]"
         >
           <li>
             <button
@@ -91,7 +91,7 @@ const StageYearSelect = ({ label, value, options, onChange }: StageYearSelectPro
               role="option"
               aria-selected={!chosen}
               onClick={() => choose('')}
-              className="block w-full px-2 py-1.5 text-left text-xs text-white/80 hover:bg-cyan-400/15"
+              className="block w-full px-2 py-1.5 text-left text-xs text-muted-foreground hover:bg-primary/10 hover:text-foreground"
             >
               —
             </button>
@@ -105,8 +105,8 @@ const StageYearSelect = ({ label, value, options, onChange }: StageYearSelectPro
                   role="option"
                   aria-selected={active}
                   onClick={() => choose(option.id)}
-                  className={`block w-full px-2 py-1.5 text-left text-xs text-white hover:bg-cyan-400/15 ${
-                    active ? 'bg-cyan-400/15 text-cyan-100' : ''
+                  className={`block w-full px-2 py-1.5 text-left text-xs text-foreground hover:bg-primary/10 ${
+                    active ? 'bg-primary/10' : ''
                   }`}
                 >
                   {`${option.years} – ${formatCredits(option.price)}`}
