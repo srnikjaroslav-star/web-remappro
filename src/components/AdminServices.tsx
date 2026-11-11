@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, Pencil, Plus, RefreshCw, Search, Trash2, X } from 'lucide-react';
+import { Check, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { catalogCategories, loadServiceCatalog, subscribeServiceCatalog, type CatalogService } from '@/lib/serviceCatalog';
 import { supabase } from '@/lib/supabase';
@@ -24,6 +24,15 @@ const emptyDraft = (): Draft => ({
 const credits = (price: number) =>
   `${price.toLocaleString('sk-SK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} CR`;
 
+const categoryTone: Record<string, { text: string; color: string }> = {
+  'Emission Control': { text: 'text-cyan-400', color: '#22d3ee' },
+  'Engine Functions': { text: 'text-lime-400', color: '#a3e635' },
+  Performance: { text: 'text-amber-400', color: '#fbbf24' },
+  Security: { text: 'text-fuchsia-400', color: '#e879f9' },
+};
+
+const categoryTextClass = (category: string) => categoryTone[category]?.text ?? 'text-white';
+
 const readInvoke = async <T,>(result: { data: T | null; error: unknown }) => {
   if (result.data) return result.data;
   try {
@@ -40,6 +49,7 @@ const AdminServices = () => {
   const [services, setServices] = useState<CatalogService[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -78,9 +88,10 @@ const AdminServices = () => {
       return index === -1 ? catalogCategories.length : index;
     };
     return services
+      .filter((service) => !categoryFilter || service.category === categoryFilter)
       .filter((service) => !needle || [service.name, service.category, service.description].join(' ').toLowerCase().includes(needle))
       .sort((a, b) => rank(a.category) - rank(b.category) || a.name.localeCompare(b.name, 'sk'));
-  }, [query, services]);
+  }, [categoryFilter, query, services]);
 
   const beginEdit = (service: CatalogService) => {
     setConfirmId(null);
@@ -208,15 +219,24 @@ const AdminServices = () => {
       )}
 
       <div className="h-fit w-full shrink-0 rounded-xl border border-primary/20 bg-background/40 shadow-[0_0_30px_rgba(59,130,246,0.15)] backdrop-blur-xl">
-        <div className="flex items-center justify-end gap-3 border-b border-primary/30 bg-[#0a192f] px-4 py-2.5">
-          <div className="mr-auto flex min-w-0 items-center gap-3">
-            <p className="text-sm font-bold uppercase tracking-wide text-white">{loading ? 'Služby' : `${services.length} služieb`}</p>
-            <button type="button" onClick={() => setCreating(true)} className="inline-flex h-[42px] shrink-0 items-center gap-2 rounded-md border border-primary/70 bg-primary/15 px-4 text-sm font-bold uppercase tracking-wide text-primary shadow-[0_0_16px_rgba(0,242,255,0.28)] transition-colors hover:bg-primary/25">
+        <div className="flex items-center justify-end gap-3 border-b border-primary/30 bg-[#0a192f] py-2.5 pl-0 pr-8">
+          <div className="mr-auto flex min-w-0 items-center">
+            <button type="button" onClick={() => setCreating(true)} className="ml-4 inline-flex h-[42px] shrink-0 items-center gap-2 rounded-md border border-primary/70 bg-primary/15 px-4 text-sm font-bold uppercase tracking-wide text-primary shadow-[0_0_16px_rgba(0,242,255,0.28)] transition-colors hover:bg-primary/25">
               <Plus className="h-4 w-4" />
               Pridať službu
             </button>
           </div>
-          <div className="relative w-72 shrink-0">
+          <div className="relative w-[25.171875rem] shrink-0">
+            <span className="absolute right-full top-0 mr-3 inline-flex h-[42px] items-center gap-1.5 whitespace-nowrap rounded-md border border-primary/70 bg-primary/15 px-2.5 shadow-[0_0_16px_rgba(0,242,255,0.28)]" aria-label={loading ? 'Služby' : `${services.length} služieb`}>
+              {loading ? (
+                <span className="text-sm font-bold uppercase tracking-wide text-primary">Služby</span>
+              ) : (
+                <>
+                  <span className="text-2xl font-black leading-none tabular-nums text-cyan-400">{services.length}</span>
+                  <span className="text-[10px] font-bold uppercase leading-none tracking-wide text-primary/80">služieb</span>
+                </>
+              )}
+            </span>
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
@@ -226,19 +246,28 @@ const AdminServices = () => {
               className="h-[42px] w-full rounded-none border border-primary/50 bg-transparent py-2 pl-9 pr-4 text-base leading-6 text-foreground shadow-none placeholder:text-muted-foreground focus:outline-none"
             />
           </div>
-          <button type="button" onClick={reload} className="btn-secondary flex items-center gap-2 rounded-none px-4 py-2 text-base">
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            Obnoviť
-          </button>
+          <select
+            value={categoryFilter}
+            onChange={(event) => setCategoryFilter(event.target.value)}
+            aria-label="Filtrovať kategóriu"
+            className={`h-[42px] w-[15.5rem] shrink-0 rounded-none border border-primary/50 bg-[#0a192f] px-3 text-base leading-6 shadow-none focus:outline-none ${categoryFilter ? categoryTextClass(categoryFilter) : 'text-foreground'}`}
+          >
+            <option value="" className="bg-[#050505] text-white">Všetky kategórie</option>
+            {catalogCategories.map((category) => (
+              <option key={category} value={category} className="bg-[#050505]" style={{ color: categoryTone[category].color }}>
+                {category}
+              </option>
+            ))}
+          </select>
         </div>
-        <div className="overflow-x-auto">
+        <div className="max-h-[calc(100vh-18.5rem)] overflow-auto">
           <table className="w-full border-collapse text-base">
-            <thead className="sticky top-0 z-50">
+            <thead>
               <tr className="border-b border-primary/30 bg-[#0a192f] shadow-md">
-                <th className="w-full min-w-[18rem] whitespace-nowrap border-r border-slate-500 p-2.5 text-left align-middle text-sm font-bold uppercase tracking-wide text-white">Služba</th>
-                <th className="whitespace-nowrap border-r border-slate-500 p-2.5 text-left align-middle text-sm font-bold uppercase tracking-wide text-white">Kategória</th>
-                <th className="min-w-[8.5rem] whitespace-nowrap border-r border-slate-500 p-4 text-center align-middle text-sm font-bold uppercase tracking-wide text-white">Kredity</th>
-                <th className="sticky right-0 z-10 min-w-[16rem] whitespace-nowrap border-r border-slate-500 bg-[#0a192f] p-2.5 text-center align-middle text-sm font-bold uppercase tracking-wide text-white">Akcie</th>
+                <th className="sticky top-0 z-20 w-full min-w-[18rem] whitespace-nowrap border-r border-slate-500 bg-[#0a192f] p-2.5 text-left align-middle text-sm font-bold uppercase tracking-wide text-white">Služba</th>
+                <th className="sticky top-0 z-20 whitespace-nowrap border-r border-slate-500 bg-[#0a192f] p-2.5 text-left align-middle text-sm font-bold uppercase tracking-wide text-white">Kategória</th>
+                <th className="sticky top-0 z-20 min-w-[8.5rem] whitespace-nowrap border-r border-slate-500 bg-[#0a192f] p-4 text-center align-middle text-sm font-bold uppercase tracking-wide text-white">Kredity</th>
+                <th className="sticky top-0 right-0 z-30 min-w-[16rem] whitespace-nowrap border-r border-slate-500 bg-[#0a192f] p-2.5 text-center align-middle text-sm font-bold uppercase tracking-wide text-white">Akcie</th>
               </tr>
             </thead>
             <tbody>
@@ -278,12 +307,16 @@ const AdminServices = () => {
                             value={editDraft.category}
                             onChange={(event) => setEditDraft((current) => ({ ...current, category: event.target.value }))}
                             aria-label="Kategória"
-                            className="h-12 w-full min-w-0 rounded-md border border-primary/50 bg-black/50 pl-1.5 pr-1 text-sm font-normal text-white focus:border-primary focus:outline-none focus:shadow-[0_0_12px_rgba(0,242,255,0.35)]"
+                            className={`h-12 w-full min-w-0 rounded-md border border-primary/50 bg-black/50 pl-1.5 pr-1 text-sm font-normal focus:border-primary focus:outline-none focus:shadow-[0_0_12px_rgba(0,242,255,0.35)] ${categoryTextClass(editDraft.category)}`}
                           >
-                            {categories.map((category) => <option key={category} value={category} className="bg-[#050505]">{category}</option>)}
+                            {categories.map((category) => (
+                              <option key={category} value={category} className="bg-[#050505]" style={{ color: categoryTone[category]?.color ?? '#fafafa' }}>
+                                {category}
+                              </option>
+                            ))}
                           </select>
                         </div>
-                      ) : <span className="whitespace-nowrap">{service.category}</span>}
+                      ) : <span className={`whitespace-nowrap ${categoryTextClass(service.category)}`}>{service.category}</span>}
                     </td>
                     <td className={`${cell} text-center`}>
                       {editing ? (
