@@ -14,6 +14,16 @@ import {
   type SystemStatusMode,
 } from '@/components/SystemStatus';
 
+const dayTone: Record<DayKey, string> = {
+  mon: 'bg-[#0a192f] text-primary',
+  tue: 'bg-[#0a192f] text-primary',
+  wed: 'bg-[#0a192f] text-primary',
+  thu: 'bg-[#0a192f] text-primary',
+  fri: 'bg-[#0a192f] text-primary',
+  sat: 'bg-[#1a1c10] text-yellow-300',
+  sun: 'bg-[#1c1014] text-red-400',
+};
+
 const DAY_LABELS: Record<DayKey, string> = {
   mon: 'Pondelok',
   tue: 'Utorok',
@@ -348,10 +358,10 @@ const OpeningHours = () => {
                 const cell = 'border-r border-slate-800/60 px-4 py-2 align-middle';
                 return (
                   <tr key={key} className="border-b border-slate-800/60">
-                    <td className={cell}>
-                      <p className="text-lg font-bold leading-none text-cyan-400">{DAY_LABELS[key]}</p>
+                    <td className={`border-b border-b-slate-800/60 border-r border-r-slate-500 px-4 py-2 align-middle ${dayTone[key]}`}>
+                      <p className="text-lg font-bold leading-none">{DAY_LABELS[key]}</p>
                     </td>
-                    <td className={`${cell} text-center`}>
+                    <td className={`${cell} bg-[#101828] text-center`}>
                       <button
                         type="button"
                         onClick={() => updateDay(key, { open: !day.open })}
@@ -364,7 +374,7 @@ const OpeningHours = () => {
                         {day.open ? 'Otvorené' : 'Zatvorené'}
                       </button>
                     </td>
-                    <td className={`${cell} text-center`}>
+                    <td className={`${cell} bg-[#0e1c28] text-center`}>
                       <TimeField
                         value={day.from}
                         disabled={!day.open}
@@ -372,7 +382,7 @@ const OpeningHours = () => {
                         onChange={(from) => updateDay(key, { from })}
                       />
                     </td>
-                    <td className={`${cell} text-center`}>
+                    <td className={`${cell} bg-[#0c1822] text-center`}>
                       <TimeField
                         value={day.to}
                         disabled={!day.open}
