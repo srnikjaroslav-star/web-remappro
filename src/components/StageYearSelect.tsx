@@ -28,15 +28,35 @@ const StageYearSelect = ({ label, value, options, onChange }: StageYearSelectPro
       if (event.key === 'Escape') setOpen(false);
     };
     const closeMenu = () => setOpen(false);
-    const scroller = document.querySelector('.order-services-scroll');
+    const menuFrom = (target: EventTarget | null) => {
+      if (!(target instanceof Node)) return null;
+      const menu = document.querySelector('[data-stage-menu]');
+      return menu && menu.contains(target) ? menu : null;
+    };
+    const onScroll = (event: Event) => {
+      if (menuFrom(event.target)) return;
+      closeMenu();
+    };
+    const onWheel = (event: WheelEvent) => {
+      const menu = menuFrom(event.target);
+      if (menu) {
+        const canScroll = menu.scrollHeight > menu.clientHeight + 1;
+        const atTop = menu.scrollTop <= 0 && event.deltaY < 0;
+        const atBottom = menu.scrollTop + menu.clientHeight >= menu.scrollHeight - 1 && event.deltaY > 0;
+        if (canScroll && !atTop && !atBottom) return;
+      }
+      closeMenu();
+    };
     document.addEventListener('mousedown', close);
     document.addEventListener('keydown', onKey);
-    scroller?.addEventListener('scroll', closeMenu);
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('wheel', onWheel, { capture: true, passive: true });
     window.addEventListener('resize', closeMenu);
     return () => {
       document.removeEventListener('mousedown', close);
       document.removeEventListener('keydown', onKey);
-      scroller?.removeEventListener('scroll', closeMenu);
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('wheel', onWheel, { capture: true });
       window.removeEventListener('resize', closeMenu);
     };
   }, [open]);

@@ -746,7 +746,7 @@ const OrderPage = () => {
                   {t('myOrders')}
                 </button>
               )}
-              <Link to="/track" className="btn-secondary flex items-center gap-2 px-4 py-2 text-sm">
+              <Link to="/track" className="flex items-center gap-2 rounded-xl border border-primary/70 bg-primary/15 px-4 py-2 text-sm font-medium text-primary shadow-[0_0_16px_rgba(0,242,255,0.4)] transition-colors hover:bg-primary/25">
                 <Search className="h-4 w-4" />
                 <span className="hidden sm:inline">{t('trackOrder')}</span>
               </Link>
@@ -1097,7 +1097,7 @@ const OrderPage = () => {
             <aside className="sticky top-16 z-20 min-w-0 self-start lg:col-span-4">
               <div className="order-panel flex flex-col border-t-2 border-t-primary">
                 <div className="flex items-center justify-between border-b border-primary/15 px-4 py-3">
-                  <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-primary">{t('servicesCheckout')}</h2>
+                  <h2 className="text-xl font-semibold uppercase tracking-[0.16em] text-primary">{t('servicesCheckout')}</h2>
                   <p className="shrink-0 text-3xl font-bold leading-none tabular-nums neon-text">{totalPrice}€</p>
                 </div>
 
