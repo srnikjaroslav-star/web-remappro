@@ -42,7 +42,7 @@ const readInvoke = async <T,>(result: { data: T | null; error: unknown }) => {
   }
 };
 
-const fieldClass = 'h-11 w-full rounded-md border border-primary/50 bg-transparent px-3 text-sm text-foreground focus:outline-none';
+const fieldClass = 'h-11 w-full rounded-md border border-primary/70 bg-[#0a192f] px-3 text-sm text-foreground shadow-[0_0_16px_rgba(0,242,255,0.28)] focus:border-primary focus:outline-none focus:shadow-[0_0_16px_rgba(0,242,255,0.45)]';
 const inlineClass = 'h-12 w-full min-w-0 rounded-md border border-primary/50 bg-black/50 px-2.5 text-foreground focus:border-primary focus:outline-none focus:shadow-[0_0_12px_rgba(0,242,255,0.35)]';
 
 const AdminServices = () => {
@@ -181,10 +181,9 @@ const AdminServices = () => {
             onClick={(event) => event.stopPropagation()}
           >
             <div className="mb-3 flex items-center justify-between gap-3">
-              <h2 id="new-service-title" className="text-sm font-bold uppercase tracking-[0.16em] text-primary">Nová služba</h2>
-              <button type="button" onClick={closeCreate} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-primary/35 px-3 text-xs font-bold uppercase tracking-wide text-white/80 transition-colors hover:bg-white/10 hover:text-white">
-                <X className="h-3.5 w-3.5" />
-                Zrušiť
+              <h2 id="new-service-title" className="text-2xl font-black uppercase leading-none tracking-[0.16em] text-primary">Nová služba</h2>
+              <button type="button" onClick={closeCreate} aria-label="Zavrieť" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-red-400/45 bg-[#0a192f] text-xl leading-none text-red-400 shadow-[0_0_12px_rgba(248,113,113,0.28)] transition-colors hover:border-red-400 hover:bg-red-500/15 hover:shadow-[0_0_16px_rgba(248,113,113,0.5)]">
+                ×
               </button>
             </div>
             <div className="grid gap-3 md:grid-cols-2">
@@ -194,8 +193,12 @@ const AdminServices = () => {
               </label>
               <label className="block">
                 <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Kategória</span>
-                <select value={draft.category} onChange={(event) => setDraft((current) => ({ ...current, category: event.target.value }))} className={fieldClass}>
-                  {categories.map((category) => <option key={category} value={category} className="bg-[#050505]">{category}</option>)}
+                <select value={draft.category} onChange={(event) => setDraft((current) => ({ ...current, category: event.target.value }))} className={`${fieldClass.replace(' text-foreground', '')} ${categoryTextClass(draft.category)}`}>
+                  {categories.map((category) => (
+                    <option key={category} value={category} className="bg-[#050505]" style={{ color: categoryTone[category]?.color ?? '#fafafa' }}>
+                      {category}
+                    </option>
+                  ))}
                 </select>
               </label>
               <label className="block">
@@ -207,8 +210,11 @@ const AdminServices = () => {
                 <input value={draft.description} onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))} maxLength={500} className={fieldClass} />
               </label>
             </div>
-            <div className="mt-3 flex justify-end">
-              <button type="button" onClick={() => save(draft)} disabled={busy} className="inline-flex h-11 items-center gap-2 rounded-md border border-primary/70 bg-primary/15 px-4 text-sm font-bold uppercase tracking-wide text-primary shadow-[0_0_16px_rgba(0,242,255,0.28)] transition-colors hover:bg-primary/25 disabled:opacity-60">
+            <div className="mt-3 flex justify-end gap-3">
+              <button type="button" onClick={closeCreate} className="inline-flex h-[42px] items-center gap-2 rounded-md border border-red-400/55 bg-[#0a192f] px-4 text-sm font-bold uppercase tracking-wide text-red-400 shadow-[0_0_16px_rgba(248,113,113,0.28)] transition-colors hover:border-red-400 hover:bg-red-500/15 hover:shadow-[0_0_16px_rgba(248,113,113,0.5)]">
+                Zrušiť
+              </button>
+              <button type="button" onClick={() => save(draft)} disabled={busy} className="inline-flex h-[42px] items-center gap-2 rounded-md border border-primary/70 bg-primary/15 px-4 text-sm font-bold uppercase tracking-wide text-primary shadow-[0_0_16px_rgba(0,242,255,0.28)] transition-colors hover:bg-primary/25 disabled:opacity-60">
                 <Plus className="h-4 w-4" />
                 Pridať službu
               </button>
