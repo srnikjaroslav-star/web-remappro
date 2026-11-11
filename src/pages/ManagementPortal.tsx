@@ -5,6 +5,7 @@ import {
   RefreshCw, Search, Power, Save, Trash2, LogOut, FileText, X, RotateCcw
 } from 'lucide-react';
 import SystemStatus, { fetchSystemStatusFromDB, setSystemStatusInDB, isSystemOnline, SystemStatusMode } from '@/components/SystemStatus';
+import NavLogo from '@/components/NavLogo';
 import SmartTooltip from '@/components/SmartTooltip';
 import InternalNoteModal from '@/components/InternalNoteModal';
 import {
@@ -1709,13 +1710,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
       <header className="sticky top-0 z-50 w-full border-b border-primary/25 bg-background/80 backdrop-blur-sm">
         <div className="py-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-6 shrink-0">
-            <Link to="/" aria-label="REMAPPRO" className="inline-flex items-center gap-2 shrink-0 no-underline antialiased leading-none">
-              <span className="inline-flex items-center justify-center h-9 px-3 rounded-full border border-cyan-400/60 bg-transparent shadow-[0_0_15px_rgba(6,182,212,0.4)]">
-                <span className="text-2xl font-black leading-none tracking-tight text-cyan-400">R</span>
-                <span className="text-2xl font-black leading-none tracking-tight text-white">P</span>
-              </span>
-              <span className="text-2xl font-semibold leading-none tracking-normal text-cyan-400">REMAPPRO</span>
-            </Link>
+            <NavLogo />
             <SystemStatus />
           </div>
           <div className="flex flex-nowrap items-center justify-end gap-3">

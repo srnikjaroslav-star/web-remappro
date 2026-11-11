@@ -3,6 +3,7 @@ import type { User } from '@supabase/supabase-js';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import ClientProfile from '@/components/ClientProfile';
+import NavLogo from '@/components/NavLogo';
 import MyOrders from '@/components/MyOrders';
 import StageYearSelect from '@/components/StageYearSelect';
 import SystemStatus from '@/components/SystemStatus';
@@ -646,13 +647,7 @@ const OrderPage = () => {
         <header className="sticky top-0 z-50 w-full border-b border-primary/25 bg-background/80 backdrop-blur-sm">
           <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between lg:px-8">
             <div className="flex shrink-0 items-center gap-6">
-              <Link to="/" aria-label="REMAPPRO" className="inline-flex shrink-0 items-center gap-2 no-underline antialiased leading-none">
-                <span className="inline-flex h-9 items-center justify-center rounded-full border border-cyan-400/60 bg-transparent px-3 shadow-[0_0_15px_rgba(6,182,212,0.4)]">
-                  <span className="text-2xl font-black leading-none tracking-tight text-cyan-400">R</span>
-                  <span className="text-2xl font-black leading-none tracking-tight text-white">P</span>
-                </span>
-                <span className="text-2xl font-semibold leading-none tracking-normal text-cyan-400">REMAPPRO</span>
-              </Link>
+              <NavLogo />
               <SystemStatus />
             </div>
             <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
