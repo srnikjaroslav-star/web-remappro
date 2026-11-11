@@ -10,7 +10,6 @@ import SystemStatus from '@/components/SystemStatus';
 import { useLanguage } from '@/i18n/LanguageContext';
 import type { TranslationKey } from '@/i18n/translations';
 import {
-  categoryHint,
   formatServicePrice,
   groupCatalog,
   loadServiceCatalog,
@@ -1121,15 +1120,10 @@ const OrderPage = () => {
                   {catalogStatus === 'error' && (
                     <p className="px-1 text-sm text-red-400">{t('catalogError')}</p>
                   )}
-                  {catalogGroups.map((group) => {
-                    const hint = categoryHint(group.category);
-                    return (
+                  {catalogGroups.map((group) => (
                       <div key={group.category}>
-                        <div className="mb-2 flex items-baseline justify-between gap-3 border-b border-primary/35 px-1 pb-1">
-                          <h3 className="border-l-2 border-primary pl-2 text-xs font-bold uppercase tracking-[0.16em] neon-text">{group.category}</h3>
-                          <span className="shrink-0 text-[11px] text-muted-foreground">
-                            {hint ? t(hint) : group.items.length}
-                          </span>
+                        <div className="mb-2 flex h-[22px] items-center rounded-xl border border-primary/70 bg-primary/15 px-3 shadow-[0_0_16px_rgba(0,242,255,0.4)]">
+                          <h3 className="truncate text-sm font-bold uppercase leading-4 tracking-[0.16em] text-primary [text-shadow:0_0_8px_rgba(0,242,255,0.95),0_0_18px_rgba(0,242,255,0.55)]">{group.category}</h3>
                         </div>
                         <div className="space-y-1.5">
                           {group.category === 'Performance' && stageGroups.map((stageGroup) => (
@@ -1189,8 +1183,7 @@ const OrderPage = () => {
                           </p>
                         )}
                       </div>
-                    );
-                  })}
+                  ))}
                   {errors.services && <p className="px-1 text-xs text-red-400">{t(errors.services)}</p>}
                 </div>
 
