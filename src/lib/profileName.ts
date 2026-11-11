@@ -12,6 +12,13 @@ export const splitProfileName = (value: string) => {
 export const emailLocalPart = (email?: string | null) =>
   String(email ?? '').split('@')[0]?.trim() ?? '';
 
+/** An email address is contact data, never a person's or company's name. */
+export const realProfileLabel = (value?: string | null) => {
+  const text = String(value ?? '').trim();
+  if (!text || text.includes('@')) return '';
+  return text;
+};
+
 export const companyFromMetadata = (meta?: Record<string, unknown> | null) => {
   if (!meta) return '';
   for (const key of ['company', 'company_name', 'firma']) {
@@ -47,4 +54,17 @@ export const accountDisplayName = (input: {
   const company = String(input.company ?? '').trim();
   if (company) return company;
   return emailLocalPart(input.email);
+};
+
+/** Admin client list: real name, otherwise company. The email stays in its own column. */
+export const clientRecordName = (input: {
+  name?: string | null;
+  company?: string | null;
+}) => {
+  const name = realProfileLabel(input.name);
+  const company = realProfileLabel(input.company);
+  if (name && company) return `${name} · ${company}`;
+  if (name) return name;
+  if (company) return company;
+  return '';
 };

@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { RefreshCw, Search } from 'lucide-react';
 import { toast } from 'sonner';
-import { accountDisplayName } from '@/lib/profileName';
+import { clientRecordName } from '@/lib/profileName';
 import { supabase } from '@/lib/supabase';
 
 type ClientAccount = {
   id: string;
   email: string;
   name: string;
+  company?: string;
   balance: number;
 };
 
@@ -22,6 +23,13 @@ const readInvoke = async <T,>(result: { data: T | null; error: unknown }) => {
 
 const money = (value: number) =>
   `${value.toLocaleString('sk-SK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
+
+const sheetGrid = 'grid w-full grid-cols-[minmax(220px,max-content)_minmax(max-content,1fr)_max-content_20.25rem] text-base';
+const nameCell = 'flex min-w-[220px] items-center whitespace-nowrap border-r border-slate-500 px-3 py-2 text-left';
+const emailCell = 'flex min-w-max items-center whitespace-nowrap border-r border-slate-500 px-3 py-2 text-left';
+const balanceCell = 'flex shrink-0 items-center whitespace-nowrap py-2 pl-3 pr-2';
+const creditCell = 'flex shrink-0 items-center whitespace-nowrap';
+const headChrome = 'sticky top-0 z-50 border-b border-primary/30 bg-[#0a192f] text-sm font-bold uppercase tracking-wide text-white';
 
 const ClientCredits = () => {
   const [clients, setClients] = useState<ClientAccount[]>([]);
@@ -53,7 +61,7 @@ const ClientCredits = () => {
     if (!needle) return clients;
     return clients.filter((client) =>
       client.email.toLowerCase().includes(needle) ||
-      accountDisplayName(client).toLowerCase().includes(needle),
+      clientRecordName(client).toLowerCase().includes(needle),
     );
   }, [clients, query]);
 
@@ -101,47 +109,43 @@ const ClientCredits = () => {
         </button>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-base">
-          <thead className="sticky top-0 z-50">
-            <tr className="border-b border-primary/30 bg-[#0a192f] shadow-md">
-              <th className="whitespace-nowrap border-r border-slate-500 p-2.5 text-left align-middle text-sm font-bold uppercase tracking-wide text-white">E-mail</th>
-              <th className="w-full min-w-[16rem] whitespace-nowrap border-r border-slate-500 p-2.5 text-left align-middle text-sm font-bold uppercase tracking-wide text-white">Meno</th>
-              <th className="min-w-[8.5rem] whitespace-nowrap border-r border-slate-500 p-4 text-center align-middle text-sm font-bold uppercase tracking-wide text-white">Zostatok</th>
-              <th className="sticky right-0 z-10 min-w-[22rem] whitespace-nowrap border-r border-slate-500 bg-[#0a192f] p-2.5 text-center align-middle text-sm font-bold uppercase tracking-wide text-white">Úprava kreditov</th>
+        <table className={sheetGrid}>
+          <thead className="contents">
+            <tr className="contents">
+              <th className={`${nameCell} ${headChrome}`}>Meno</th>
+              <th className={`${emailCell} ${headChrome}`}>E-mail</th>
+              <th className={`${balanceCell} ${headChrome} justify-center text-center`}>Zostatok</th>
+              <th className={`${creditCell} ${headChrome} justify-center px-2 py-2 text-center`}>Úprava kreditov</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="contents">
             {loading ? (
-              <tr>
-                <td colSpan={4} className="py-12 text-center text-muted-foreground">Načítavam klientov...</td>
+              <tr className="contents">
+                <td colSpan={4} className="col-span-4 py-12 text-center text-muted-foreground">Načítavam klientov...</td>
               </tr>
             ) : visible.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="py-12 text-center text-muted-foreground">Žiadni klienti</td>
+              <tr className="contents">
+                <td colSpan={4} className="col-span-4 py-12 text-center text-muted-foreground">Žiadni klienti</td>
               </tr>
             ) : visible.map((client) => {
               const busy = adjustingId === client.id;
               const active = selectedId === client.id;
-              const label = accountDisplayName(client);
-              const cell = `border-r border-slate-800/60 px-4 py-2 align-middle ${active ? 'bg-slate-800/40' : ''}`;
-              const actionButton = 'inline-flex min-h-12 min-w-[7.25rem] flex-1 items-center justify-center border-0 bg-transparent px-4 text-sm font-bold uppercase tracking-wide transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-60';
+              const label = clientRecordName(client);
+              const rowBg = `cursor-pointer border-b border-slate-800/60 ${active ? 'bg-slate-800/40' : ''}`;
+              const actionButton = 'inline-flex h-full min-w-0 flex-1 items-center justify-center border-0 bg-transparent px-2 text-sm font-bold uppercase tracking-wide transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-60';
               return (
-                <tr
-                  key={client.id}
-                  onClick={() => setSelectedId(client.id)}
-                  className="cursor-pointer border-b border-slate-800/60 align-middle"
-                >
-                  <td className={`${cell} whitespace-nowrap`}>
-                    <p className="whitespace-nowrap text-xs leading-none text-white">{client.email || '—'}</p>
+                <tr key={client.id} className="contents" onClick={() => setSelectedId(client.id)}>
+                  <td className={`${nameCell} ${rowBg}`}>
+                    <span className="text-base font-semibold leading-none text-cyan-400">{label || '—'}</span>
                   </td>
-                  <td className={`${cell} w-full min-w-[16rem]`}>
-                    <p className="whitespace-nowrap text-lg font-bold leading-none text-cyan-400">{label || '—'}</p>
+                  <td className={`${emailCell} ${rowBg}`}>
+                    <span className="text-base font-medium leading-none text-white">{client.email || '—'}</span>
                   </td>
-                  <td className={`min-w-[8.5rem] whitespace-nowrap border-r border-slate-800/60 p-4 text-center align-middle ${active ? 'bg-slate-800/40' : ''}`}>
-                    <p className="flex items-center justify-center text-xl font-bold leading-none text-primary">{money(client.balance)}</p>
+                  <td className={`${balanceCell} ${rowBg} justify-end text-right`}>
+                    <span className="text-base font-bold leading-none tabular-nums text-primary">{money(client.balance)}</span>
                   </td>
-                  <td className="sticky right-0 z-10 border-r border-slate-800/60 bg-[#070d16] px-3 py-2 align-middle" onClick={(event) => event.stopPropagation()}>
-                    <div className="flex h-12 items-stretch overflow-hidden rounded-md border border-primary/35 bg-cyan-950/35 shadow-[0_0_16px_rgba(0,242,255,0.08)]">
+                  <td className={`${creditCell} ${rowBg} items-stretch self-stretch p-0`} onClick={(event) => event.stopPropagation()}>
+                    <div className="grid h-full min-h-10 w-full grid-cols-3 items-stretch overflow-hidden rounded-md border border-primary/35 bg-cyan-950/35 shadow-[0_0_16px_rgba(0,242,255,0.08)]">
                       <input
                         type="text"
                         inputMode="decimal"
@@ -149,7 +153,7 @@ const ClientCredits = () => {
                         onChange={(event) => setDrafts((current) => ({ ...current, [client.id]: event.target.value }))}
                         placeholder="0,00"
                         disabled={busy}
-                        className="w-32 shrink-0 border-0 bg-transparent px-3 text-center text-xl font-bold leading-none tabular-nums text-primary placeholder:font-bold placeholder:text-primary focus:outline-none disabled:opacity-60"
+                        className="min-w-0 border-0 bg-transparent px-2 text-center text-base font-bold leading-none tabular-nums text-primary placeholder:font-bold placeholder:text-primary focus:outline-none disabled:opacity-60"
                       />
                       <button
                         type="button"

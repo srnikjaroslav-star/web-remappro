@@ -14,6 +14,12 @@ const json = (body: unknown, status = 200) =>
 
 const adminEmail = () => (Deno.env.get("ADMIN_EMAIL") || "info@remappro.eu").trim().toLowerCase();
 
+const realLabel = (value: unknown) => {
+  const text = String(value ?? "").trim();
+  if (!text || text.includes("@")) return "";
+  return text;
+};
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -58,29 +64,36 @@ Deno.serve(async (req) => {
         (accounts ?? []).map((account) => [account.user_id as string, Number(account.balance)]),
       );
 
-      const { data: profiles, error: profileError } = await admin
+      const withCompany = await admin
         .from("client_profiles")
-        .select("user_id, first_name, last_name");
-      if (profileError) return json({ ok: false, code: "SERVER" }, 500);
+        .select("user_id, first_name, last_name, company_name");
+      const profileResult = withCompany.error
+        ? await admin.from("client_profiles").select("user_id, first_name, last_name")
+        : withCompany;
+      if (profileResult.error) return json({ ok: false, code: "SERVER" }, 500);
       const profileNames = new Map(
-        (profiles ?? []).map((profile) => [
-          profile.user_id as string,
-          [profile.first_name, profile.last_name].map((part) => String(part ?? "").trim()).filter(Boolean).join(" "),
-        ]),
+        (profileResult.data ?? []).map((profile) => {
+          const row = profile as { user_id?: string; first_name?: string; last_name?: string; company_name?: string };
+          const person = [row.first_name, row.last_name].map((part) => realLabel(part)).filter(Boolean).join(" ");
+          const company = realLabel(row.company_name);
+          return [String(row.user_id ?? ""), { person, company }] as const;
+        }),
       );
 
       const clients = users
         .map((user) => {
           const meta = user.user_metadata ?? {};
-          const stored = profileNames.get(user.id)
-            || [meta.first_name, meta.last_name].map((part) => String(part ?? "").trim()).filter(Boolean).join(" ")
-            || String(meta.full_name || meta.name || "").trim();
-          const company = String(meta.company || meta.company_name || meta.firma || "").trim();
-          const local = String(user.email ?? "").split("@")[0]?.trim() ?? "";
+          const storedProfile = profileNames.get(user.id);
+          const metaPerson = [meta.first_name, meta.last_name].map((part) => realLabel(part)).filter(Boolean).join(" ")
+            || realLabel(meta.full_name || meta.name);
+          const metaCompany = realLabel(meta.company || meta.company_name || meta.firma);
+          const person = storedProfile?.person || metaPerson;
+          const company = storedProfile?.company || metaCompany;
           return {
             id: user.id,
             email: user.email ?? "",
-            name: stored || company || local,
+            name: person,
+            company,
             balance: balances.get(user.id) ?? 0,
             createdAt: user.created_at ?? null,
           };

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
+import ClientProfile from '@/components/ClientProfile';
 import MyOrders from '@/components/MyOrders';
 import SystemStatus from '@/components/SystemStatus';
 import { useLanguage } from '@/i18n/LanguageContext';
@@ -14,12 +15,11 @@ import {
   subscribeServiceCatalog,
   type CatalogService,
 } from '@/lib/serviceCatalog';
+import { emptyBilling, loadClientBilling, orderDisplayName, saveClientBilling, type ClientBilling } from '@/lib/clientProfile';
 import {
   accountDisplayName,
   companyFromMetadata,
   joinProfileName,
-  metadataProfileName,
-  splitProfileName,
 } from '@/lib/profileName';
 import { supabase } from '@/lib/supabase';
 import {
@@ -39,6 +39,7 @@ import {
   LogOut,
   Search,
   Upload,
+  UserRound,
   X,
 } from 'lucide-react';
 
@@ -105,8 +106,10 @@ const OrderPage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [creditBalance, setCreditBalance] = useState<number | null>(null);
-  const [profileName, setProfileName] = useState('');
-  const [portalView, setPortalView] = useState<'new' | 'orders'>('new');
+  const [billing, setBilling] = useState<ClientBilling>(emptyBilling);
+  const [profileReady, setProfileReady] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [portalView, setPortalView] = useState<'new' | 'orders' | 'profile'>('new');
   const [loginOpen, setLoginOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'sign-in' | 'sign-up' | 'reset'>('sign-in');
   const [loginFirstName, setLoginFirstName] = useState('');
@@ -130,9 +133,9 @@ const OrderPage = () => {
   const [catalogStatus, setCatalogStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [customerNote, setCustomerNote] = useState('');
-  const [customer, setCustomer] = useState({ name: '', email: '' });
 
   const dragDepth = useRef(0);
+  const profileRequest = useRef(0);
 
   useEffect(() => {
     let active = true;
@@ -161,15 +164,15 @@ const OrderPage = () => {
     let active = true;
     const applyAccount = (user: User | null) => {
       if (!user) {
-        setProfileName('');
-        setCustomer({ name: '', email: '' });
+        setProfileReady(false);
+        setBilling(emptyBilling());
         setPortalView('new');
         return;
       }
-      setCustomer((current) => ({
-        name: current.name,
-        email: user.email || current.email,
-      }));
+      setBilling((current) => {
+        if (current.email || !user.email) return current;
+        return { ...current, email: user.email };
+      });
     };
     supabase.auth.getSession().then(({ data }) => {
       if (!active) return;
@@ -191,66 +194,51 @@ const OrderPage = () => {
   useEffect(() => {
     if (!authUser) return;
     const user = authUser;
+    const request = ++profileRequest.current;
     let active = true;
     const loadProfile = async () => {
-      const { data } = await supabase
-        .from('client_profiles')
-        .select('first_name, last_name')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      const stored = joinProfileName(data?.first_name, data?.last_name);
-      let name = stored || metadataProfileName(user.user_metadata);
-      if (!name && user.email) {
-        const { data: order } = await supabase
-          .from('orders')
-          .select('customer_name')
-          .eq('customer_email', user.email.toLowerCase())
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        name = String(order?.customer_name ?? '').trim();
+      let next = await loadClientBilling(user);
+      if (!next && active) {
+        await new Promise((resolve) => window.setTimeout(resolve, 350));
+        if (!active || profileRequest.current !== request) return;
+        next = await loadClientBilling(user);
       }
-      if (name && name !== stored) {
-        const parts = splitProfileName(name);
-        await supabase.from('client_profiles').upsert({
-          user_id: user.id,
-          first_name: parts.first_name,
-          last_name: parts.last_name,
-          updated_at: new Date().toISOString(),
-        });
-      }
-      if (!active) return;
-      setProfileName(name);
-      setCustomer((current) => ({
-        name: name || current.name,
-        email: user.email || current.email,
-      }));
+      if (!active || profileRequest.current !== request || !next) return;
+      setBilling(next);
+      setProfileReady(true);
     };
-    loadProfile();
+    void loadProfile();
     return () => {
       active = false;
     };
   }, [authUser?.id]);
 
   useEffect(() => {
-    if (!authUser || !customer.name.trim()) return;
-    const parts = splitProfileName(customer.name);
-    const nextName = joinProfileName(parts.first_name, parts.last_name);
+    if (!authUser || portalView !== 'profile') return;
+    const user = authUser;
+    const request = ++profileRequest.current;
+    let active = true;
+    const loadProfile = async () => {
+      const next = await loadClientBilling(user);
+      if (!active || profileRequest.current !== request || !next) return;
+      setBilling(next);
+      setProfileReady(true);
+    };
+    void loadProfile();
+    return () => {
+      active = false;
+    };
+  }, [authUser?.id, portalView]);
+
+  useEffect(() => {
+    if (!authUser || !profileReady) return;
+    const userId = authUser.id;
+    const snapshot = billing;
     const handle = window.setTimeout(() => {
-      supabase
-        .from('client_profiles')
-        .upsert({
-          user_id: authUser.id,
-          first_name: parts.first_name,
-          last_name: parts.last_name,
-          updated_at: new Date().toISOString(),
-        })
-        .then(({ error }) => {
-          if (!error) setProfileName(nextName);
-        });
-    }, 400);
+      void saveClientBilling(userId, snapshot, { preserveExisting: true });
+    }, 700);
     return () => window.clearTimeout(handle);
-  }, [authUser, customer.name]);
+  }, [authUser?.id, billing, profileReady]);
 
   useEffect(() => {
     if (!authUser) {
@@ -304,10 +292,56 @@ const OrderPage = () => {
   }, [loginOpen]);
 
   const accountLabel = accountDisplayName({
-    name: profileName,
-    email: authUser?.email,
-    company: companyFromMetadata(authUser?.user_metadata),
+    name: joinProfileName(billing.firstName, billing.lastName),
+    email: authUser?.email || billing.email,
+    company: billing.company || companyFromMetadata(authUser?.user_metadata),
   });
+
+  const updateBilling = (next: ClientBilling) => {
+    setBilling(next);
+    setErrors((current) => {
+      if (!current.name && !current.email) return current;
+      const cleared = { ...current };
+      delete cleared.name;
+      delete cleared.email;
+      return cleared;
+    });
+  };
+
+  const saveProfile = async () => {
+    if (!authUser) return false;
+    const email = billing.email.trim();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast.error(t('profileEmailInvalid'));
+      return false;
+    }
+    setProfileSaving(true);
+    const saved = await saveClientBilling(authUser.id, billing);
+    if (!saved.ok) {
+      setProfileSaving(false);
+      toast.error(t('profileSaveFailed'));
+      return false;
+    }
+    const currentEmail = (authUser.email ?? '').trim().toLowerCase();
+    const emailChanged = Boolean(email) && email.toLowerCase() !== currentEmail;
+    const { error: accountError } = await supabase.auth.updateUser({
+      ...(emailChanged ? { email } : {}),
+      data: {
+        first_name: billing.firstName.trim(),
+        last_name: billing.lastName.trim(),
+        full_name: joinProfileName(billing.firstName, billing.lastName),
+        company: billing.company.trim(),
+      },
+    });
+    setProfileSaving(false);
+    setProfileReady(true);
+    if (accountError && emailChanged) {
+      toast.error(t('profileEmailFailed'));
+      return true;
+    }
+    toast.success(emailChanged ? t('profileEmailConfirm') : t('profileSaved'));
+    return true;
+  };
 
   const showCreditBalance = () => {
     document.getElementById('order-credit-balance')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -363,17 +397,14 @@ const OrderPage = () => {
       return;
     }
     if (data.session && data.user) {
-      await supabase.from('client_profiles').upsert({
-        user_id: data.user.id,
-        first_name: first,
-        last_name: last,
-        updated_at: new Date().toISOString(),
-      });
-      setProfileName(fullName);
-      setCustomer((current) => ({
-        name: fullName,
-        email: email || current.email,
-      }));
+      const nextBilling = {
+        ...emptyBilling(),
+        firstName: first,
+        lastName: last,
+        email,
+      };
+      await saveClientBilling(data.user.id, nextBilling);
+      setBilling(nextBilling);
       setLoginPassword('');
       setLoginOpen(false);
       setLoginBusy(false);
@@ -410,7 +441,7 @@ const OrderPage = () => {
   const signOut = async () => {
     await supabase.auth.signOut();
     setCreditBalance(null);
-    setProfileName('');
+    setBilling(emptyBilling());
   };
 
   const catalogGroups = useMemo(() => groupCatalog(catalog), [catalog]);
@@ -475,9 +506,9 @@ const OrderPage = () => {
     if (vehicle.fuelType !== 'Diesel' && vehicle.fuelType !== 'Petrol') next.fuelType = 'errorFuel';
     if (!selectedFile) next.file = 'errorFile';
     if (services.length === 0) next.services = 'errorServices';
-    if (!customer.name.trim()) next.name = 'errorName';
-    if (!customer.email.trim()) next.email = 'errorEmail';
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customer.email)) next.email = 'errorEmailInvalid';
+    if (!orderDisplayName(billing)) next.name = 'errorName';
+    if (!billing.email.trim()) next.email = 'errorEmail';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(billing.email)) next.email = 'errorEmailInvalid';
     if (!legalConsentAgreed) next.consent = 'errorConsent';
     return next;
   };
@@ -519,15 +550,21 @@ const OrderPage = () => {
       }
       toast.dismiss('upload');
 
-      if (customer.name.trim()) {
-        await supabase.auth.updateUser({ data: { full_name: customer.name.trim() } }).catch(() => undefined);
-      }
+      await saveClientBilling(authUser.id, billing);
+      await supabase.auth.updateUser({
+        data: {
+          first_name: billing.firstName.trim(),
+          last_name: billing.lastName.trim(),
+          full_name: joinProfileName(billing.firstName, billing.lastName),
+          company: billing.company.trim(),
+        },
+      }).catch(() => undefined);
 
       const invoked = await supabase.functions.invoke('pay-with-credits', {
         body: {
           serviceIds: services,
-          customerName: customer.name,
-          customerEmail: customer.email,
+          customerName: orderDisplayName(billing),
+          customerEmail: billing.email,
           brand: vehicle.brand,
           model: vehicle.model,
           fuelType: vehicle.fuelType,
@@ -618,9 +655,14 @@ const OrderPage = () => {
               </div>
               {authUser ? (
                 <div className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-primary/40 bg-black/50 px-2 py-0.5">
-                  <span className="max-w-[9rem] truncate text-sm font-semibold leading-none text-foreground" title={accountLabel || undefined}>
+                  <button
+                    type="button"
+                    onClick={() => setPortalView('profile')}
+                    className="max-w-[9rem] truncate text-sm font-semibold leading-none text-foreground transition-colors hover:text-primary"
+                    title={t('myProfile')}
+                  >
                     {accountLabel || '—'}
-                  </span>
+                  </button>
                   <span className="h-4 w-px shrink-0 bg-primary/35" aria-hidden="true" />
                   <button
                     type="button"
@@ -650,6 +692,21 @@ const OrderPage = () => {
                   className="inline-flex h-8 items-center rounded-lg border border-border/60 bg-black/40 px-2.5 text-xs font-semibold text-muted-foreground transition-colors hover:text-primary"
                 >
                   {t('signIn')}
+                </button>
+              )}
+              {authUser && (
+                <button
+                  type="button"
+                  onClick={() => setPortalView('profile')}
+                  aria-pressed={portalView === 'profile'}
+                  className={`inline-flex h-9 shrink-0 items-center gap-2 rounded-md border px-3 text-sm font-bold transition-colors ${
+                    portalView === 'profile'
+                      ? 'border-primary bg-primary/25 text-primary shadow-[0_0_18px_rgba(0,242,255,0.55)]'
+                      : 'border-primary/70 bg-primary/15 text-primary shadow-[0_0_16px_rgba(0,242,255,0.4)] hover:bg-primary/25'
+                  }`}
+                >
+                  <UserRound className="h-4 w-4" />
+                  {t('myProfile')}
                 </button>
               )}
               {authUser && (
@@ -689,8 +746,18 @@ const OrderPage = () => {
                   {t('backToNewOrder')}
                 </button>
               </div>
-              <MyOrders email={authUser.email ?? ''} />
+              <MyOrders email={authUser.email || billing.email} />
             </div>
+          ) : portalView === 'profile' && authUser ? (
+            <ClientProfile
+              billing={billing}
+              onBilling={updateBilling}
+              onSave={saveProfile}
+              saving={profileSaving}
+              creditBalance={creditBalance}
+              authEmail={authUser.email ?? billing.email}
+              onBack={() => setPortalView('new')}
+            />
           ) : (
           <>
           <div className="mb-3 flex flex-row flex-wrap items-baseline gap-x-4">
@@ -924,6 +991,85 @@ const OrderPage = () => {
                   <span className="mt-1.5 block text-right text-[11px] text-muted-foreground">{customerNote.length}/500</span>
                 </label>
               </section>
+
+              {authUser && (
+                <section className="order-panel !rounded-md p-4 md:p-5">
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-primary">{t('profileBilling')}</h2>
+                    <button
+                      type="button"
+                      onClick={() => setPortalView('profile')}
+                      className="text-[11px] font-bold uppercase tracking-wide text-primary transition-colors hover:text-foreground"
+                    >
+                      {t('myProfile')}
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <label className="block sm:col-span-2">
+                      <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t('profilePhone')}</span>
+                      <input
+                        type="tel"
+                        value={billing.phone}
+                        onChange={(event) => updateBilling({ ...billing, phone: event.target.value })}
+                        autoComplete="tel"
+                        placeholder="+421 900 000 000"
+                        className={fieldClass(isFilled(billing.phone), false)}
+                      />
+                    </label>
+                    <label className="block sm:col-span-2">
+                      <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t('profileStreet')}</span>
+                      <input
+                        type="text"
+                        value={billing.street}
+                        onChange={(event) => updateBilling({ ...billing, street: event.target.value })}
+                        autoComplete="street-address"
+                        className={fieldClass(isFilled(billing.street), false)}
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t('profileCity')}</span>
+                      <input
+                        type="text"
+                        value={billing.city}
+                        onChange={(event) => updateBilling({ ...billing, city: event.target.value })}
+                        autoComplete="address-level2"
+                        className={fieldClass(isFilled(billing.city), false)}
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t('profilePostal')}</span>
+                      <input
+                        type="text"
+                        value={billing.postalCode}
+                        onChange={(event) => updateBilling({ ...billing, postalCode: event.target.value })}
+                        autoComplete="postal-code"
+                        className={fieldClass(isFilled(billing.postalCode), false)}
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t('profileVat')}</span>
+                      <input
+                        type="text"
+                        value={billing.vatId}
+                        onChange={(event) => updateBilling({ ...billing, vatId: event.target.value })}
+                        autoComplete="off"
+                        placeholder="SK0000000000"
+                        className={fieldClass(isFilled(billing.vatId), false)}
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t('profileTax')}</span>
+                      <input
+                        type="text"
+                        value={billing.taxId}
+                        onChange={(event) => updateBilling({ ...billing, taxId: event.target.value })}
+                        autoComplete="off"
+                        className={fieldClass(isFilled(billing.taxId), false)}
+                      />
+                    </label>
+                  </div>
+                </section>
+              )}
             </div>
 
             <aside className="sticky top-16 z-20 min-w-0 self-start lg:col-span-4">
@@ -1014,45 +1160,66 @@ const OrderPage = () => {
                 </div>
 
                 <div className="shrink-0 space-y-3 border-t border-primary/20 bg-black/45 p-4">
-                  <div className="grid grid-cols-2 gap-2">
-                    <label className="block">
-                      <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t('name')}</span>
-                      <input
-                        type="text"
-                        value={customer.name}
-                        onChange={(event) => {
-                          setCustomer((current) => ({ ...current, name: event.target.value }));
-                          setErrors((current) => {
-                            if (!current.name) return current;
-                            const next = { ...current };
-                            delete next.name;
-                            return next;
-                          });
-                        }}
-                        placeholder={t('namePlaceholder')}
-                        className={fieldClass(isFilled(customer.name), Boolean(errors.name))}
-                      />
-                      {errors.name && <p className="mt-1 text-xs text-red-400">{t(errors.name)}</p>}
-                    </label>
-                    <label className="block">
-                      <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t('email')}</span>
-                      <input
-                        type="email"
-                        value={customer.email}
-                        onChange={(event) => {
-                          setCustomer((current) => ({ ...current, email: event.target.value }));
-                          setErrors((current) => {
-                            if (!current.email) return current;
-                            const next = { ...current };
-                            delete next.email;
-                            return next;
-                          });
-                        }}
-                        placeholder={t('emailPlaceholder')}
-                        className={fieldClass(isFilled(customer.email), Boolean(errors.email))}
-                      />
-                      {errors.email && <p className="mt-1 text-xs text-red-400">{t(errors.email)}</p>}
-                    </label>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">{t('profileTitle')}</p>
+                      {authUser && (
+                        <button
+                          type="button"
+                          onClick={() => setPortalView('profile')}
+                          className="text-[11px] font-bold uppercase tracking-wide text-primary transition-colors hover:text-foreground"
+                        >
+                          {t('myProfile')}
+                        </button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="block">
+                        <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t('signUpFirstName')}</span>
+                        <input
+                          type="text"
+                          value={billing.firstName}
+                          onChange={(event) => updateBilling({ ...billing, firstName: event.target.value })}
+                          autoComplete="given-name"
+                          className={fieldClass(isFilled(billing.firstName), Boolean(errors.name))}
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t('signUpLastName')}</span>
+                        <input
+                          type="text"
+                          value={billing.lastName}
+                          onChange={(event) => updateBilling({ ...billing, lastName: event.target.value })}
+                          autoComplete="family-name"
+                          className={fieldClass(isFilled(billing.lastName), Boolean(errors.name))}
+                        />
+                      </label>
+                      <label className="col-span-2 block">
+                        <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t('profileCompany')}</span>
+                        <input
+                          type="text"
+                          value={billing.company}
+                          onChange={(event) => updateBilling({ ...billing, company: event.target.value })}
+                          autoComplete="organization"
+                          placeholder={t('profileCompanyPlaceholder')}
+                          className={fieldClass(isFilled(billing.company), Boolean(errors.name) && !orderDisplayName(billing))}
+                        />
+                      </label>
+                      {errors.name && <p className="col-span-2 text-xs text-red-400">{t(errors.name)}</p>}
+                      <label className="col-span-2 block">
+                        <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t('email')}</span>
+                        <input
+                          type="email"
+                          value={billing.email}
+                          onChange={(event) => updateBilling({ ...billing, email: event.target.value })}
+                          autoComplete="email"
+                          placeholder={t('emailPlaceholder')}
+                          className={fieldClass(isFilled(billing.email), Boolean(errors.email))}
+                        />
+                        {errors.email && <p className="mt-1 text-xs text-red-400">{t(errors.email)}</p>}
+                      </label>
+                    </div>
+                    {authUser && <p className="text-[11px] leading-relaxed text-muted-foreground">{t('profileOrderHint')}</p>}
                   </div>
 
                   <label
