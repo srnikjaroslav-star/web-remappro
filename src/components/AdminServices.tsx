@@ -267,7 +267,7 @@ const AdminServices = () => {
                 <th className="sticky top-0 z-20 w-full min-w-[18rem] whitespace-nowrap border-r border-slate-500 bg-[#0a192f] p-2.5 text-left align-middle text-sm font-bold uppercase tracking-wide text-white">Služba</th>
                 <th className="sticky top-0 z-20 whitespace-nowrap border-r border-slate-500 bg-[#0a192f] p-2.5 text-left align-middle text-sm font-bold uppercase tracking-wide text-white">Kategória</th>
                 <th className="sticky top-0 z-20 min-w-[8.5rem] whitespace-nowrap border-r border-slate-500 bg-[#0a192f] p-4 text-center align-middle text-sm font-bold uppercase tracking-wide text-white">Kredity</th>
-                <th className="sticky top-0 right-0 z-30 min-w-[16rem] whitespace-nowrap border-r border-slate-500 bg-[#0a192f] p-2.5 text-center align-middle text-sm font-bold uppercase tracking-wide text-white">Akcie</th>
+                <th className="sticky top-0 right-0 z-30 min-w-[16.690625rem] whitespace-nowrap border-r border-slate-500 bg-[#0a192f] p-2.5 text-center align-middle text-sm font-bold uppercase tracking-wide text-white">Akcie</th>
               </tr>
             </thead>
             <tbody>
@@ -334,7 +334,7 @@ const AdminServices = () => {
                         <p className="text-xl font-bold leading-none text-primary">{credits(service.price)}</p>
                       )}
                     </td>
-                    <td className="sticky right-0 z-10 border-r border-slate-800/60 bg-[#070d16] px-3 py-0 align-middle">
+                    <td className={`sticky right-0 z-10 border-r border-slate-800/60 bg-[#070d16] py-0 align-middle ${editing ? 'px-3' : 'px-0'}`}>
                       {editing ? (
                         <div className="flex h-12 w-full overflow-hidden rounded-md border border-primary/35 bg-cyan-950/35 shadow-[0_0_16px_rgba(0,242,255,0.08)]">
                           <button type="button" disabled={busy} onClick={() => save(editDraft)} className="inline-flex h-full min-w-[7.25rem] flex-1 items-center justify-center gap-2 whitespace-nowrap border-0 bg-transparent px-3 text-sm font-bold uppercase tracking-wide text-cyan-300 transition-colors hover:bg-cyan-500/20 disabled:opacity-60">
@@ -347,13 +347,13 @@ const AdminServices = () => {
                           </button>
                         </div>
                       ) : (
-                        <div className="flex h-12 overflow-hidden rounded-md border border-primary/35 bg-cyan-950/35 shadow-[0_0_16px_rgba(0,242,255,0.08)]">
-                          <button type="button" onClick={() => beginEdit(service)} className="inline-flex min-w-[7.25rem] flex-1 items-center justify-center gap-2 border-0 bg-transparent px-4 text-sm font-bold uppercase tracking-wide text-cyan-300 transition-colors hover:bg-cyan-500/20">
-                            <Pencil className="h-4 w-4" />
+                        <div className="flex h-12 w-full">
+                          <button type="button" onClick={() => beginEdit(service)} className="inline-flex h-full min-w-0 flex-1 items-center justify-center gap-2 border-0 bg-cyan-500/15 px-3 text-sm font-bold uppercase tracking-wide text-cyan-300 transition-colors hover:bg-cyan-500/25">
+                            <Pencil className="h-4 w-4 shrink-0" />
                             Upraviť
                           </button>
-                          <button type="button" disabled={busy} onClick={() => remove(service)} className="inline-flex min-w-[7.25rem] flex-1 items-center justify-center gap-2 border-0 bg-transparent px-4 text-sm font-bold uppercase tracking-wide text-red-400 transition-colors hover:bg-red-500/15 disabled:opacity-60">
-                            <Trash2 className="h-4 w-4" />
+                          <button type="button" disabled={busy} onClick={() => remove(service)} className="inline-flex h-full min-w-0 flex-1 items-center justify-center gap-2 border-l-2 border-l-cyan-300/80 bg-red-500/15 px-3 text-sm font-bold uppercase tracking-wide text-red-400 transition-colors hover:bg-red-500/25 disabled:opacity-60">
+                            <Trash2 className="h-4 w-4 shrink-0" />
                             {confirmId === service.id ? 'Potvrdiť' : 'Zmazať'}
                           </button>
                         </div>
