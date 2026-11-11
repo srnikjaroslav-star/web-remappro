@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Pencil, Plus, RefreshCw, Search, Trash2 } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Check, Pencil, Plus, RefreshCw, Search, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { catalogCategories, loadServiceCatalog, subscribeServiceCatalog, type CatalogService } from '@/lib/serviceCatalog';
 import { supabase } from '@/lib/supabase';
@@ -33,12 +34,16 @@ const readInvoke = async <T,>(result: { data: T | null; error: unknown }) => {
 };
 
 const fieldClass = 'h-11 w-full rounded-md border border-primary/50 bg-transparent px-3 text-sm text-foreground focus:outline-none';
+const inlineClass = 'h-12 w-full min-w-0 rounded-md border border-primary/50 bg-black/50 px-2.5 text-foreground focus:border-primary focus:outline-none focus:shadow-[0_0_12px_rgba(0,242,255,0.35)]';
 
 const AdminServices = () => {
   const [services, setServices] = useState<CatalogService[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
   const [draft, setDraft] = useState<Draft>(emptyDraft);
+  const [creating, setCreating] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<Draft>(emptyDraft);
   const [busy, setBusy] = useState(false);
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
@@ -77,9 +82,10 @@ const AdminServices = () => {
       .sort((a, b) => rank(a.category) - rank(b.category) || a.name.localeCompare(b.name, 'sk'));
   }, [query, services]);
 
-  const edit = (service: CatalogService) => {
+  const beginEdit = (service: CatalogService) => {
     setConfirmId(null);
-    setDraft({
+    setEditingId(service.id);
+    setEditDraft({
       id: service.id,
       name: service.name,
       description: service.description,
@@ -88,20 +94,30 @@ const AdminServices = () => {
     });
   };
 
-  const save = async () => {
-    const price = draft.price.trim();
-    if (!draft.name.trim() || !draft.category.trim() || !price) {
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditDraft(emptyDraft());
+  };
+
+  const closeCreate = () => {
+    setCreating(false);
+    setDraft(emptyDraft());
+  };
+
+  const save = async (current: Draft) => {
+    const price = current.price.trim();
+    if (!current.name.trim() || !current.category.trim() || !price) {
       toast.error('Vyplňte názov, kategóriu a cenu.');
       return;
     }
     setBusy(true);
     const result = await supabase.functions.invoke('manage-services', {
       body: {
-        action: draft.id ? 'update' : 'create',
-        id: draft.id || undefined,
-        name: draft.name,
-        description: draft.description,
-        category: draft.category,
+        action: current.id ? 'update' : 'create',
+        id: current.id || undefined,
+        name: current.name,
+        description: current.description,
+        category: current.category,
         price,
       },
     });
@@ -111,8 +127,9 @@ const AdminServices = () => {
       toast.error(data?.code === 'FORBIDDEN' ? 'Na úpravu služieb nemáte oprávnenie.' : 'Službu sa nepodarilo uložiť.');
       return;
     }
-    toast.success(draft.id ? 'Služba bola upravená.' : 'Služba bola pridaná.');
-    if (!draft.id) setDraft(emptyDraft());
+    toast.success(current.id ? 'Služba bola upravená.' : 'Služba bola pridaná.');
+    if (current.id) cancelEdit();
+    else closeCreate();
     reload();
   };
 
@@ -132,55 +149,73 @@ const AdminServices = () => {
       toast.error('Službu sa nepodarilo zmazať.');
       return;
     }
-    if (draft.id === service.id) setDraft(emptyDraft());
+    if (editingId === service.id) cancelEdit();
     toast.success('Služba bola zmazaná.');
     reload();
   };
 
   return (
     <div className="space-y-3">
-      <div className="rounded-xl border border-primary/20 bg-background/40 p-4 shadow-[0_0_30px_rgba(59,130,246,0.15)] backdrop-blur-xl">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <h2 className="text-sm font-bold uppercase tracking-[0.16em] text-primary">
-            {draft.id ? 'Upraviť službu' : 'Nová služba'}
-          </h2>
-          {draft.id && (
-            <button type="button" onClick={() => setDraft(emptyDraft())} className="text-xs font-semibold text-muted-foreground hover:text-primary">
-              Zrušiť úpravu
-            </button>
-          )}
-        </div>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <label className="block">
-            <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Názov</span>
-            <input value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} className={fieldClass} maxLength={120} />
-          </label>
-          <label className="block">
-            <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Kategória</span>
-            <select value={draft.category} onChange={(event) => setDraft((current) => ({ ...current, category: event.target.value }))} className={fieldClass}>
-              {categories.map((category) => <option key={category} value={category} className="bg-[#050505]">{category}</option>)}
-            </select>
-          </label>
-          <label className="block">
-            <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Cena v kreditoch</span>
-            <input value={draft.price} onChange={(event) => setDraft((current) => ({ ...current, price: event.target.value }))} inputMode="decimal" placeholder="0,00" className={`${fieldClass} text-center text-xl font-bold tabular-nums text-primary placeholder:text-primary/50`} />
-          </label>
-          <label className="block md:col-span-2 xl:col-span-1">
-            <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Popis</span>
-            <input value={draft.description} onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))} maxLength={500} className={fieldClass} />
-          </label>
-        </div>
-        <div className="mt-3 flex justify-end">
-          <button type="button" onClick={save} disabled={busy} className="inline-flex h-11 items-center gap-2 rounded-md border border-primary/70 bg-primary/15 px-4 text-sm font-bold uppercase tracking-wide text-primary shadow-[0_0_16px_rgba(0,242,255,0.28)] transition-colors hover:bg-primary/25 disabled:opacity-60">
-            {draft.id ? <Pencil className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-            {draft.id ? 'Uložiť zmeny' : 'Pridať službu'}
-          </button>
-        </div>
-      </div>
+      {creating && createPortal(
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4"
+          onClick={closeCreate}
+          onKeyDown={(event) => { if (event.key === 'Escape') closeCreate(); }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="new-service-title"
+            className="w-full max-w-3xl rounded-xl border border-primary/40 bg-[#070d16] p-4 shadow-[0_0_30px_rgba(0,242,255,0.22)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h2 id="new-service-title" className="text-sm font-bold uppercase tracking-[0.16em] text-primary">Nová služba</h2>
+              <button type="button" onClick={closeCreate} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-primary/35 px-3 text-xs font-bold uppercase tracking-wide text-white/80 transition-colors hover:bg-white/10 hover:text-white">
+                <X className="h-3.5 w-3.5" />
+                Zrušiť
+              </button>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="block">
+                <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Názov</span>
+                <input value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} className={fieldClass} maxLength={120} />
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Kategória</span>
+                <select value={draft.category} onChange={(event) => setDraft((current) => ({ ...current, category: event.target.value }))} className={fieldClass}>
+                  {categories.map((category) => <option key={category} value={category} className="bg-[#050505]">{category}</option>)}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Cena v kreditoch</span>
+                <input value={draft.price} onChange={(event) => setDraft((current) => ({ ...current, price: event.target.value }))} inputMode="decimal" placeholder="0,00" className={`${fieldClass} text-center text-xl font-bold tabular-nums text-primary placeholder:text-primary/50`} />
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Popis</span>
+                <input value={draft.description} onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))} maxLength={500} className={fieldClass} />
+              </label>
+            </div>
+            <div className="mt-3 flex justify-end">
+              <button type="button" onClick={() => save(draft)} disabled={busy} className="inline-flex h-11 items-center gap-2 rounded-md border border-primary/70 bg-primary/15 px-4 text-sm font-bold uppercase tracking-wide text-primary shadow-[0_0_16px_rgba(0,242,255,0.28)] transition-colors hover:bg-primary/25 disabled:opacity-60">
+                <Plus className="h-4 w-4" />
+                Pridať službu
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
 
       <div className="h-fit w-full shrink-0 rounded-xl border border-primary/20 bg-background/40 shadow-[0_0_30px_rgba(59,130,246,0.15)] backdrop-blur-xl">
         <div className="flex items-center justify-end gap-3 border-b border-primary/30 bg-[#0a192f] px-4 py-2.5">
-          <p className="mr-auto text-sm font-bold uppercase tracking-wide text-white">{loading ? 'Služby' : `${services.length} služieb`}</p>
+          <div className="mr-auto flex min-w-0 items-center gap-3">
+            <p className="text-sm font-bold uppercase tracking-wide text-white">{loading ? 'Služby' : `${services.length} služieb`}</p>
+            <button type="button" onClick={() => setCreating(true)} className="inline-flex h-[42px] shrink-0 items-center gap-2 rounded-md border border-primary/70 bg-primary/15 px-4 text-sm font-bold uppercase tracking-wide text-primary shadow-[0_0_16px_rgba(0,242,255,0.28)] transition-colors hover:bg-primary/25">
+              <Plus className="h-4 w-4" />
+              Pridať službu
+            </button>
+          </div>
           <div className="relative w-72 shrink-0">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <input
@@ -212,29 +247,84 @@ const AdminServices = () => {
               ) : visible.length === 0 ? (
                 <tr><td colSpan={4} className="py-12 text-center text-muted-foreground">Žiadne služby</td></tr>
               ) : visible.map((service) => {
-                const active = draft.id === service.id;
-                const cell = `border-r border-slate-800/60 px-4 py-2 align-middle ${active ? 'bg-slate-800/40' : ''}`;
+                const editing = editingId === service.id;
+                const cell = editing
+                  ? 'border-r border-slate-800/60 px-3 py-0 align-middle bg-slate-800/40'
+                  : 'border-r border-slate-800/60 px-4 py-0 align-middle';
                 return (
-                  <tr key={service.id} onClick={() => edit(service)} className="cursor-pointer border-b border-slate-800/60">
+                  <tr key={service.id} className="border-b border-slate-800/60">
                     <td className={cell}>
-                      <p className="text-lg font-bold leading-none text-cyan-400">{service.name}</p>
-                      {service.description && <p className="mt-1 text-xs text-white/70">{service.description}</p>}
+                      {editing ? (
+                        <div className="w-0 min-w-full">
+                          <input
+                            value={editDraft.name}
+                            onChange={(event) => setEditDraft((current) => ({ ...current, name: event.target.value }))}
+                            maxLength={120}
+                            aria-label="Názov služby"
+                            className={`${inlineClass} text-lg font-bold leading-none text-cyan-400`}
+                          />
+                        </div>
+                      ) : (
+                        <>
+                          <p className="text-lg font-bold leading-none text-cyan-400">{service.name}</p>
+                          {service.description && <p className="mt-1 text-xs text-white/70">{service.description}</p>}
+                        </>
+                      )}
                     </td>
-                    <td className={`${cell} whitespace-nowrap text-sm text-white`}>{service.category}</td>
+                    <td className={`border-r border-slate-800/60 py-0 align-middle text-sm font-normal text-white ${editing ? 'bg-slate-800/40 px-1' : 'px-4'}`}>
+                      {editing ? (
+                        <div className="w-0 min-w-full">
+                          <select
+                            value={editDraft.category}
+                            onChange={(event) => setEditDraft((current) => ({ ...current, category: event.target.value }))}
+                            aria-label="Kategória"
+                            className="h-12 w-full min-w-0 rounded-md border border-primary/50 bg-black/50 pl-1.5 pr-1 text-sm font-normal text-white focus:border-primary focus:outline-none focus:shadow-[0_0_12px_rgba(0,242,255,0.35)]"
+                          >
+                            {categories.map((category) => <option key={category} value={category} className="bg-[#050505]">{category}</option>)}
+                          </select>
+                        </div>
+                      ) : <span className="whitespace-nowrap">{service.category}</span>}
+                    </td>
                     <td className={`${cell} text-center`}>
-                      <p className="text-xl font-bold leading-none text-primary">{credits(service.price)}</p>
+                      {editing ? (
+                        <div className="w-0 min-w-full">
+                          <input
+                            value={editDraft.price}
+                            onChange={(event) => setEditDraft((current) => ({ ...current, price: event.target.value }))}
+                            inputMode="decimal"
+                            placeholder="0,00"
+                            aria-label="Cena v kreditoch"
+                            className={`${inlineClass} text-center text-xl font-bold leading-none tabular-nums text-primary placeholder:text-primary/50`}
+                          />
+                        </div>
+                      ) : (
+                        <p className="text-xl font-bold leading-none text-primary">{credits(service.price)}</p>
+                      )}
                     </td>
-                    <td className="sticky right-0 z-10 border-r border-slate-800/60 bg-[#070d16] px-3 py-2 align-middle" onClick={(event) => event.stopPropagation()}>
-                      <div className="flex h-12 overflow-hidden rounded-md border border-primary/35 bg-cyan-950/35 shadow-[0_0_16px_rgba(0,242,255,0.08)]">
-                        <button type="button" onClick={() => edit(service)} className="inline-flex min-w-[7.25rem] flex-1 items-center justify-center gap-2 border-0 bg-transparent px-4 text-sm font-bold uppercase tracking-wide text-cyan-300 transition-colors hover:bg-cyan-500/20">
-                          <Pencil className="h-4 w-4" />
-                          Upraviť
-                        </button>
-                        <button type="button" disabled={busy} onClick={() => remove(service)} className="inline-flex min-w-[7.25rem] flex-1 items-center justify-center gap-2 border-0 bg-transparent px-4 text-sm font-bold uppercase tracking-wide text-red-400 transition-colors hover:bg-red-500/15 disabled:opacity-60">
-                          <Trash2 className="h-4 w-4" />
-                          {confirmId === service.id ? 'Potvrdiť' : 'Zmazať'}
-                        </button>
-                      </div>
+                    <td className="sticky right-0 z-10 border-r border-slate-800/60 bg-[#070d16] px-3 py-0 align-middle">
+                      {editing ? (
+                        <div className="flex h-12 w-full overflow-hidden rounded-md border border-primary/35 bg-cyan-950/35 shadow-[0_0_16px_rgba(0,242,255,0.08)]">
+                          <button type="button" disabled={busy} onClick={() => save(editDraft)} className="inline-flex h-full min-w-[7.25rem] flex-1 items-center justify-center gap-2 whitespace-nowrap border-0 bg-transparent px-3 text-sm font-bold uppercase tracking-wide text-cyan-300 transition-colors hover:bg-cyan-500/20 disabled:opacity-60">
+                            <Check className="h-4 w-4 shrink-0" />
+                            Uložiť
+                          </button>
+                          <button type="button" onClick={cancelEdit} className="inline-flex h-full min-w-[7.25rem] flex-1 items-center justify-center gap-2 whitespace-nowrap border-0 bg-transparent px-3 text-sm font-bold uppercase tracking-wide text-white/80 shadow-[inset_1px_0_0_rgba(0,234,255,0.35)] transition-colors hover:bg-white/10 hover:text-white">
+                            <X className="h-4 w-4 shrink-0" />
+                            Zrušiť
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex h-12 overflow-hidden rounded-md border border-primary/35 bg-cyan-950/35 shadow-[0_0_16px_rgba(0,242,255,0.08)]">
+                          <button type="button" onClick={() => beginEdit(service)} className="inline-flex min-w-[7.25rem] flex-1 items-center justify-center gap-2 border-0 bg-transparent px-4 text-sm font-bold uppercase tracking-wide text-cyan-300 transition-colors hover:bg-cyan-500/20">
+                            <Pencil className="h-4 w-4" />
+                            Upraviť
+                          </button>
+                          <button type="button" disabled={busy} onClick={() => remove(service)} className="inline-flex min-w-[7.25rem] flex-1 items-center justify-center gap-2 border-0 bg-transparent px-4 text-sm font-bold uppercase tracking-wide text-red-400 transition-colors hover:bg-red-500/15 disabled:opacity-60">
+                            <Trash2 className="h-4 w-4" />
+                            {confirmId === service.id ? 'Potvrdiť' : 'Zmazať'}
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 );
