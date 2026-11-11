@@ -219,38 +219,36 @@ const AdminServices = () => {
       )}
 
       <div className="h-fit w-full shrink-0 rounded-xl border border-primary/20 bg-background/40 shadow-[0_0_30px_rgba(59,130,246,0.15)] backdrop-blur-xl">
-        <div className="flex items-center justify-end gap-3 border-b border-primary/30 bg-[#0a192f] py-2.5 pl-0 pr-8">
-          <div className="mr-auto flex min-w-0 items-center">
-            <button type="button" onClick={() => setCreating(true)} className="ml-4 inline-flex h-[42px] shrink-0 items-center gap-2 rounded-md border border-primary/70 bg-primary/15 px-4 text-sm font-bold uppercase tracking-wide text-primary shadow-[0_0_16px_rgba(0,242,255,0.28)] transition-colors hover:bg-primary/25">
-              <Plus className="h-4 w-4" />
-              Pridať službu
-            </button>
-          </div>
-          <div className="relative w-[25.171875rem] shrink-0">
-            <span className="absolute right-full top-0 mr-3 inline-flex h-[42px] items-center gap-1.5 whitespace-nowrap rounded-md border border-primary/70 bg-primary/15 px-2.5 shadow-[0_0_16px_rgba(0,242,255,0.28)]" aria-label={loading ? 'Služby' : `${services.length} služieb`}>
-              {loading ? (
-                <span className="text-sm font-bold uppercase tracking-wide text-primary">Služby</span>
-              ) : (
-                <>
-                  <span className="text-2xl font-black leading-none tabular-nums text-cyan-400">{services.length}</span>
-                  <span className="text-[10px] font-bold uppercase leading-none tracking-wide text-primary/80">služieb</span>
-                </>
-              )}
-            </span>
+        <div className="flex items-center justify-end gap-3 border-b border-primary/30 bg-[#0a192f] py-2.5 pl-4 pr-4">
+          <button type="button" onClick={() => setCreating(true)} className="inline-flex h-[42px] shrink-0 items-center gap-2 rounded-md border border-primary/70 bg-primary/15 px-4 text-sm font-bold uppercase tracking-wide text-primary shadow-[0_0_16px_rgba(0,242,255,0.28)] transition-colors hover:bg-primary/25">
+            <Plus className="h-4 w-4" />
+            Pridať službu
+          </button>
+          <div className="relative w-56 shrink-0">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Hľadať službu..."
-              className="h-[42px] w-full rounded-none border border-primary/50 bg-transparent py-2 pl-9 pr-4 text-base leading-6 text-foreground shadow-none placeholder:text-muted-foreground focus:outline-none"
+              className="h-[42px] w-full rounded-md border border-primary/70 bg-transparent py-2 pl-9 pr-4 text-base leading-6 text-foreground shadow-[0_0_16px_rgba(0,242,255,0.28)] placeholder:text-muted-foreground focus:outline-none"
             />
           </div>
+          <span className="inline-flex h-[42px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-primary/70 bg-primary/15 px-2.5 shadow-[0_0_16px_rgba(0,242,255,0.28)]" aria-label={loading ? 'Služby' : `${services.length} služieb`}>
+            {loading ? (
+              <span className="text-sm font-bold uppercase tracking-wide text-primary">Služby</span>
+            ) : (
+              <>
+                <span className="text-2xl font-black leading-none tabular-nums text-cyan-400">{services.length}</span>
+                <span className="text-[10px] font-bold uppercase leading-none tracking-wide text-primary/80">služieb</span>
+              </>
+            )}
+          </span>
           <select
             value={categoryFilter}
             onChange={(event) => setCategoryFilter(event.target.value)}
             aria-label="Filtrovať kategóriu"
-            className={`h-[42px] w-[15.5rem] shrink-0 rounded-none border border-primary/50 bg-[#0a192f] px-3 text-base leading-6 shadow-none focus:outline-none ${categoryFilter ? categoryTextClass(categoryFilter) : 'text-foreground'}`}
+            className={`h-[42px] w-[15.5rem] shrink-0 rounded-md border border-primary/70 bg-[#0a192f] px-3 text-base leading-6 shadow-[0_0_16px_rgba(0,242,255,0.28)] focus:outline-none ${categoryFilter ? categoryTextClass(categoryFilter) : 'text-foreground'}`}
           >
             <option value="" className="bg-[#050505] text-white">Všetky kategórie</option>
             {catalogCategories.map((category) => (
