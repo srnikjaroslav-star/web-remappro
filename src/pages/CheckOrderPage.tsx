@@ -4,6 +4,7 @@ import { Search, Mail, Hash, Clock, Package, CheckCircle, Download, AlertCircle,
 import Logo from '@/components/Logo';
 import { supabase, Order } from '@/integrations/supabase/client';
 import { SERVICES } from '@/data/services';
+import { lookupServiceName } from '@/lib/serviceCatalog';
 
 const CheckOrderPage = () => {
   const [orderNumber, setOrderNumber] = useState('');
@@ -67,7 +68,7 @@ const CheckOrderPage = () => {
     const serviceIds = Array.isArray(order.service_type) 
       ? order.service_type 
       : JSON.parse(order.service_type as unknown as string);
-    return serviceIds.map((id: string) => SERVICES.find((s) => s.id === id)?.name).filter(Boolean);
+    return serviceIds.map((id: string) => lookupServiceName(id) || SERVICES.find((s) => s.id === id)?.name).filter(Boolean);
   };
 
   const currentStep = order ? getStatusStep(order.status) : 0;

@@ -21,7 +21,7 @@ const emptyDraft = (): Draft => ({
 });
 
 const credits = (price: number) =>
-  `${price.toLocaleString('sk-SK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
+  `${price.toLocaleString('sk-SK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} CR`;
 
 const readInvoke = async <T,>(result: { data: T | null; error: unknown }) => {
   if (result.data) return result.data;

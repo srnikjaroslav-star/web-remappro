@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import ClientProfile from '@/components/ClientProfile';
 import MyOrders from '@/components/MyOrders';
+import StageYearSelect from '@/components/StageYearSelect';
 import SystemStatus from '@/components/SystemStatus';
 import { useLanguage } from '@/i18n/LanguageContext';
 import type { TranslationKey } from '@/i18n/translations';
@@ -16,6 +17,12 @@ import {
   type CatalogService,
 } from '@/lib/serviceCatalog';
 import { emptyBilling, loadClientBilling, orderDisplayName, saveClientBilling, type ClientBilling } from '@/lib/clientProfile';
+import {
+  isLegacyStage1,
+  isStageDropdownService,
+  stageGroupSelection,
+  stageGroupsFromCatalog,
+} from '@/lib/stageOptions';
 import {
   accountDisplayName,
   companyFromMetadata,
@@ -145,7 +152,10 @@ const OrderPage = () => {
           if (!active) return;
           setCatalog(next);
           setCatalogStatus('ready');
-          setServices((current) => current.filter((id) => next.some((service) => service.id === id)));
+          setServices((current) => current.filter((id) => {
+            const service = next.find((item) => item.id === id);
+            return Boolean(service) && !isLegacyStage1(service!);
+          }));
         })
         .catch(() => {
           if (!active) return;
@@ -445,12 +455,13 @@ const OrderPage = () => {
   };
 
   const catalogGroups = useMemo(() => groupCatalog(catalog), [catalog]);
+  const stageGroups = useMemo(() => stageGroupsFromCatalog(catalog), [catalog]);
 
   const selectedItems = useMemo(
     () =>
       services
         .map((id) => catalog.find((service) => service.id === id))
-        .filter((service): service is CatalogService => Boolean(service)),
+        .filter((service): service is CatalogService => Boolean(service) && !isLegacyStage1(service)),
     [services, catalog],
   );
 
@@ -466,16 +477,32 @@ const OrderPage = () => {
     });
   };
 
-  const toggleService = (serviceId: string) => {
-    setServices((current) =>
-      current.includes(serviceId) ? current.filter((id) => id !== serviceId) : [...current, serviceId],
-    );
+  const clearServiceError = () => {
     setErrors((current) => {
       if (!current.services) return current;
       const next = { ...current };
       delete next.services;
       return next;
     });
+  };
+
+  const toggleService = (serviceId: string) => {
+    setServices((current) =>
+      current.includes(serviceId) ? current.filter((id) => id !== serviceId) : [...current, serviceId],
+    );
+    clearServiceError();
+  };
+
+  const selectStage = (groupId: string, optionId: string) => {
+    const group = stageGroups.find((item) => item.id === groupId);
+    if (!group) return;
+    const memberIds = new Set(group.options.map((option) => option.id));
+    setServices((current) => {
+      const next = current.filter((id) => !memberIds.has(id));
+      if (optionId) next.push(optionId);
+      return next;
+    });
+    clearServiceError();
   };
 
   const acceptFile = (file: File | undefined) => {
@@ -1087,7 +1114,7 @@ const OrderPage = () => {
                   <div className="flex min-w-0 items-center justify-between gap-2 rounded-xl border border-primary/45 bg-black/50 px-3 py-2.5 shadow-[0_0_18px_rgba(0,242,255,0.14),inset_0_1px_0_rgba(0,242,255,0.18)]">
                     <p className="truncate text-[11px] font-semibold uppercase tracking-[0.14em] text-primary/80">{t('available')}</p>
                     <p className="text-2xl font-bold leading-none tabular-nums neon-text">
-                      {catalogStatus === 'ready' ? catalog.length : '—'}
+                      {catalogStatus === 'ready' ? catalog.filter((service) => !isLegacyStage1(service)).length : '—'}
                     </p>
                   </div>
                 </div>
@@ -1110,7 +1137,20 @@ const OrderPage = () => {
                           </span>
                         </div>
                         <div className="space-y-1.5">
-                          {group.items.map((service) => {
+                          {group.category === 'Performance' && stageGroups.map((stageGroup) => (
+                            <div key={stageGroup.id} className="min-w-0 rounded-xl border border-primary/20 bg-black/35 px-2.5 py-1">
+                              <span className="block truncate text-[11px] font-semibold uppercase tracking-wide text-foreground">{stageGroup.label}</span>
+                              <div className="mt-0.5">
+                                <StageYearSelect
+                                  label={stageGroup.label}
+                                  value={stageGroupSelection(stageGroup, services)}
+                                  options={stageGroup.options}
+                                  onChange={(optionId) => selectStage(stageGroup.id, optionId)}
+                                />
+                              </div>
+                            </div>
+                          ))}
+                          {group.items.filter((service) => !isLegacyStage1(service) && !isStageDropdownService(service)).map((service) => {
                             const selected = services.includes(service.id);
                             return (
                               <button
