@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Download, Send } from 'lucide-react';
+import { Download, Search, Send } from 'lucide-react';
 import { useLanguage } from '@/i18n/LanguageContext';
 import type { TranslationKey } from '@/i18n/translations';
 import { SERVICES } from '@/data/services';
@@ -37,6 +37,23 @@ const STATUS_CLASS: Record<string, string> = {
   completed: 'text-emerald-400',
   cancelled: 'text-red-400',
   paid: 'text-cyan-300',
+};
+
+const STATUS_FILTERS = ['all', 'pending', 'processing', 'completed'] as const;
+type StatusFilter = (typeof STATUS_FILTERS)[number];
+
+const fold = (value: string) =>
+  value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+const orderLabel = (order: ClientOrder) => order.order_number || order.id.slice(0, 8).toUpperCase();
+
+const matchesQuery = (order: ClientOrder, query: string) => {
+  const needle = fold(query.trim().replace(/^#/, ''));
+  if (!needle) return true;
+  const brand = order.car_brand?.trim() ?? '';
+  const model = order.car_model?.trim() ?? '';
+  const haystack = fold([orderLabel(order), order.id, brand, model, `${brand} ${model}`].join(' '));
+  return haystack.includes(needle);
 };
 
 const serviceLabel = (id: string) =>
@@ -81,6 +98,11 @@ const MyOrders = ({ email }: { email: string }) => {
   const [orders, setOrders] = useState<ClientOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const visibleOrders = orders.filter((order) =>
+    (statusFilter === 'all' || order.status === statusFilter) && matchesQuery(order, query),
+  );
 
   useEffect(() => {
     const address = email.trim();
@@ -126,6 +148,39 @@ const MyOrders = ({ email }: { email: string }) => {
 
   return (
     <div className="overflow-hidden rounded-xl border border-primary/25 bg-black/45 shadow-[0_0_30px_hsl(185_100%_50%/0.08)] backdrop-blur-xl">
+      <div className="flex flex-col gap-3 border-b border-primary/30 bg-[#0a192f] px-4 py-3 lg:flex-row lg:items-center">
+        <label className="relative block min-w-0 flex-1">
+          <span className="sr-only">{t('myOrdersSearch')}</span>
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-primary/70" />
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={t('myOrdersSearch')}
+            className="h-[42px] w-full rounded-md border border-primary/70 bg-transparent py-2 pl-9 pr-4 text-base leading-6 text-foreground shadow-[0_0_16px_rgba(0,242,255,0.28)] placeholder:text-muted-foreground transition-shadow hover:border-primary hover:shadow-[0_0_16px_rgba(0,242,255,0.45)] focus:border-primary focus:outline-none focus:shadow-[0_0_16px_rgba(0,242,255,0.45)]"
+          />
+        </label>
+        <div className="flex flex-wrap gap-2" role="group" aria-label={t('myOrdersStatus')}>
+          {STATUS_FILTERS.map((filter) => {
+            const active = statusFilter === filter;
+            return (
+              <button
+                key={filter}
+                type="button"
+                aria-pressed={active}
+                onClick={() => setStatusFilter(filter)}
+                className={`inline-flex h-[42px] items-center rounded-md border px-3 text-sm font-bold uppercase tracking-wide transition-colors ${
+                  active
+                    ? 'border-primary bg-primary/20 text-primary shadow-[0_0_16px_rgba(0,242,255,0.35)]'
+                    : 'border-primary/35 bg-transparent text-slate-300 hover:border-primary/70 hover:text-primary'
+                }`}
+              >
+                {filter === 'all' ? t('myOrdersFilterAll') : t(STATUS_KEY[filter])}
+              </button>
+            );
+          })}
+        </div>
+      </div>
       <div className="overflow-x-auto">
         <table className="w-full border-collapse text-base">
           <thead>
@@ -150,7 +205,11 @@ const MyOrders = ({ email }: { email: string }) => {
               <tr>
                 <td colSpan={6} className="py-12 text-center text-muted-foreground">{t('myOrdersEmpty')}</td>
               </tr>
-            ) : orders.map((order) => {
+            ) : visibleOrders.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="py-12 text-center text-muted-foreground">{t('myOrdersNoMatch')}</td>
+              </tr>
+            ) : visibleOrders.map((order) => {
               const vehicle = [order.car_brand, order.car_model].filter(Boolean).join(' ');
               const details = [order.year, order.fuel_type, order.ecu_type].filter(Boolean).join(' · ');
               const motor = engineLine(order.customer_note);
