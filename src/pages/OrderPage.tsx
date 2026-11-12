@@ -1123,8 +1123,8 @@ const OrderPage = () => {
                   )}
                   {catalogGroups.map((group) => (
                       <div key={group.category}>
-                        <div className="mb-2 flex h-[22px] items-center rounded-xl border border-primary/70 bg-primary/15 px-3 shadow-[0_0_16px_rgba(0,242,255,0.4)]">
-                          <h3 className="truncate text-sm font-bold uppercase leading-4 tracking-[0.16em] text-primary [text-shadow:0_0_8px_rgba(0,242,255,0.95),0_0_18px_rgba(0,242,255,0.55)]">{group.category}</h3>
+                        <div className="mb-2 flex h-[22px] items-center px-3">
+                          <h3 className="truncate text-xl font-semibold uppercase leading-[22px] tracking-[0.16em] text-primary">{group.category}</h3>
                         </div>
                         <div className="space-y-1.5">
                           {group.category === 'Performance' && stageGroups.map((stageGroup) => (
