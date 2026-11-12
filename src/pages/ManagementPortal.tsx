@@ -1615,7 +1615,7 @@ const ManagementPortal = () => {
   });
 
   const STATUS_TEXT_COLOR: Record<string, string> = {
-    all: '#e5e7eb',
+    all: '#00eaff',
     paid: '#22c55e',
     pending: '#facc15',
     processing: '#06b6d4',
@@ -1731,19 +1731,19 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
           </div>
           <div className="flex flex-nowrap items-center justify-end gap-3">
             <div className="relative w-72 shrink-0">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-primary" />
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Hľadať objednávky..."
-                className="h-[42px] w-full rounded-xl border border-primary/50 bg-transparent py-2 pl-9 pr-4 text-base leading-6 text-foreground shadow-none placeholder:text-muted-foreground focus:outline-none"
+                className="h-[42px] w-full rounded-lg border border-primary/60 bg-transparent py-2 pl-9 pr-4 text-base leading-6 text-foreground shadow-[0_0_14px_rgba(0,242,255,0.28)] placeholder:text-muted-foreground transition-shadow hover:border-primary hover:shadow-[0_0_16px_rgba(0,242,255,0.42)] focus:border-primary focus:outline-none focus:shadow-[0_0_18px_rgba(0,242,255,0.5)]"
               />
             </div>
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="admin-filter-select w-40 shrink-0 py-2 px-4 text-base font-normal text-left rounded-lg border border-teal-500/30 bg-teal-950/40 shadow-none"
+              className="admin-filter-select h-[42px] w-40 shrink-0 !rounded-lg !border !border-primary !bg-primary/25 px-4 py-2 text-left !text-base font-semibold shadow-[0_0_18px_rgba(0,242,255,0.55)] transition-shadow hover:!border-primary hover:!bg-primary/35 hover:shadow-[0_0_22px_rgba(0,242,255,0.7)] focus:outline-none"
               style={{ color: STATUS_TEXT_COLOR[statusFilter] || STATUS_TEXT_COLOR.all }}
             >
               <option value="all" style={{ color: STATUS_TEXT_COLOR.all, backgroundColor: '#050505', fontSize: '16px' }}>Všetky</option>
@@ -1756,24 +1756,24 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
             <button
               onClick={cycleStatusMode}
               disabled={statusLoading}
-              className={`py-2 px-4 flex items-center gap-2 rounded-lg border transition-all disabled:opacity-50 ${
+              className={`flex items-center gap-2 rounded-lg border px-4 py-2 transition-all disabled:opacity-50 ${
                 statusMode === 'online'
-                  ? 'bg-green-500/20 border-green-500/50 text-green-400 hover:bg-green-500/30'
+                  ? 'border-green-400 bg-green-500/25 text-green-300 shadow-[0_0_16px_rgba(74,222,128,0.55)] hover:bg-green-500/35 hover:shadow-[0_0_20px_rgba(74,222,128,0.7)]'
                   : statusMode === 'offline'
-                    ? 'bg-red-500/20 border-red-500/50 text-red-400 hover:bg-red-500/30'
-                    : 'bg-primary/20 border-primary/50 text-primary hover:bg-primary/30'
+                    ? 'border-red-400 bg-red-500/25 text-red-300 shadow-[0_0_16px_rgba(248,113,113,0.55)] hover:bg-red-500/35 hover:shadow-[0_0_20px_rgba(248,113,113,0.7)]'
+                    : 'border-primary/50 bg-primary/20 text-primary hover:bg-primary/30'
               }`}
             >
               <Power className={`w-4 h-4 ${statusLoading ? 'animate-spin' : ''}`} />
               {statusLoading ? 'Updating...' : statusMode === 'online' ? 'Force ONLINE' : statusMode === 'offline' ? 'Force OFFLINE' : 'Auto (Schedule)'}
             </button>
-            <button onClick={fetchOrders} className="btn-secondary py-2 px-4 flex items-center gap-2">
+            <button onClick={fetchOrders} className="flex h-[42px] items-center gap-2 rounded-lg border border-primary/50 bg-primary/20 px-4 text-base text-primary shadow-[0_0_16px_rgba(0,242,255,0.35)] transition-colors hover:border-primary hover:bg-primary/30 hover:shadow-[0_0_16px_rgba(0,242,255,0.5)]">
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
               Refresh
             </button>
-            <button 
+            <button
               onClick={handleLogout}
-              className="btn-secondary py-2 px-4 flex items-center gap-2 hover:bg-red-500/20 hover:border-red-500/50 hover:text-red-400 transition-colors"
+              className="flex h-[42px] items-center gap-2 rounded-lg border border-primary/50 bg-primary/20 px-4 text-base text-primary shadow-[0_0_16px_rgba(0,242,255,0.35)] transition-colors hover:border-primary hover:bg-primary/30 hover:shadow-[0_0_16px_rgba(0,242,255,0.5)]"
             >
               <LogOut className="w-4 h-4" />
               Odhlásiť sa

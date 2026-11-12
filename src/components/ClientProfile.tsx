@@ -17,8 +17,12 @@ type ClientProfileProps = {
 };
 
 const fieldLabel = 'mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground';
-const fieldInput = 'input-field w-full !rounded-md !px-3 !py-2 text-sm';
-const profileActionButton = 'btn-secondary flex min-h-[46px] items-center justify-center gap-2 !rounded-md px-5 py-2 text-sm font-semibold shadow-none hover:border-primary hover:shadow-[0_0_16px_rgba(0,242,255,0.28)] disabled:cursor-not-allowed disabled:opacity-60';
+const fieldInput =
+  'input-field w-full !rounded-lg !border !border-primary/60 !bg-secondary !px-3 !py-2 text-sm text-foreground shadow-[0_0_14px_rgba(0,242,255,0.28)] transition-shadow placeholder:text-muted-foreground hover:!border-primary hover:shadow-[0_0_16px_rgba(0,242,255,0.42)] focus:!border focus:!border-primary focus:!bg-primary/10 focus:shadow-[0_0_18px_rgba(0,242,255,0.5)] focus:outline-none';
+const profilePanel =
+  'order-panel !rounded-lg !border-primary/60 p-4 shadow-[0_0_24px_rgba(0,242,255,0.22),inset_0_0_0_1px_rgba(0,242,255,0.14)] md:p-5';
+const profileActionButton =
+  'flex min-h-[46px] items-center justify-center gap-2 rounded-lg border border-primary/50 bg-primary/20 px-5 py-2 text-sm font-semibold text-primary shadow-[0_0_16px_rgba(0,242,255,0.35)] transition-colors hover:border-primary hover:bg-primary/30 hover:shadow-[0_0_22px_rgba(0,242,255,0.55)] disabled:cursor-not-allowed disabled:opacity-60';
 
 const ClientProfile = ({
   billing,
@@ -45,24 +49,29 @@ const ClientProfile = ({
     await onSave();
   };
 
+  const rejectPassword = (message: string) => {
+    setPasswordError(message);
+    toast.error(message, { id: 'profile-password' });
+  };
+
   const changePassword = async (event: React.FormEvent) => {
     event.preventDefault();
     setPasswordError('');
     if (nextPassword.length < 6) {
-      setPasswordError(t('profilePasswordShort'));
+      rejectPassword(t('profilePasswordShort'));
       return;
     }
     if (nextPassword !== confirmPassword) {
-      setPasswordError(t('resetPasswordMismatch'));
+      rejectPassword(t('resetPasswordMismatch'));
       return;
     }
     if (nextPassword === currentPassword) {
-      setPasswordError(t('profilePasswordSame'));
+      rejectPassword(t('profilePasswordSame'));
       return;
     }
     const email = authEmail.trim();
     if (!email) {
-      setPasswordError(t('profilePasswordWrong'));
+      rejectPassword(t('profilePasswordWrong'));
       return;
     }
     setPasswordBusy(true);
@@ -72,19 +81,19 @@ const ClientProfile = ({
     });
     if (reauthError) {
       setPasswordBusy(false);
-      setPasswordError(t('profilePasswordWrong'));
+      rejectPassword(t('profilePasswordWrong'));
       return;
     }
     const { error: updateError } = await supabase.auth.updateUser({ password: nextPassword });
     setPasswordBusy(false);
     if (updateError) {
-      setPasswordError(t('resetPasswordFailed'));
+      rejectPassword(t('profilePasswordFailed'));
       return;
     }
     setCurrentPassword('');
     setNextPassword('');
     setConfirmPassword('');
-    toast.success(t('resetPasswordSuccess'));
+    toast.success(t('resetPasswordSuccess'), { id: 'profile-password' });
   };
 
   return (
@@ -105,7 +114,7 @@ const ClientProfile = ({
       </div>
 
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.45fr)_minmax(18rem,0.8fr)]">
-        <form onSubmit={saveDetails} className="order-panel !rounded-md p-4 md:p-5">
+        <form onSubmit={saveDetails} className={profilePanel}>
           <div className="mb-4 flex items-center gap-2">
             <UserRound className="h-4 w-4 text-primary" />
             <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-primary">{t('profileTitle')}</h2>
@@ -234,7 +243,7 @@ const ClientProfile = ({
         </form>
 
         <div className="space-y-4">
-          <section className="order-panel !rounded-md p-4 md:p-5">
+          <section className={profilePanel}>
             <div className="mb-3 flex items-center gap-2">
               <Coins className="h-4 w-4 text-primary" />
               <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-primary">{t('creditBalance')}</h2>
@@ -245,7 +254,7 @@ const ClientProfile = ({
             <p className="mt-3 text-xs leading-relaxed text-muted-foreground">{t('profileCreditsHint')}</p>
           </section>
 
-          <form onSubmit={changePassword} className="order-panel !rounded-md p-4 md:p-5">
+          <form onSubmit={changePassword} className={profilePanel}>
             <div className="mb-4 flex items-center gap-2">
               <KeyRound className="h-4 w-4 text-primary" />
               <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-primary">{t('profilePasswordTitle')}</h2>

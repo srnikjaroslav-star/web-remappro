@@ -96,11 +96,18 @@ const isFilled = (value: string | number | undefined) => {
   return Boolean(value && value.trim().length > 0);
 };
 
-const fieldClass = (filled: boolean, hasError: boolean) => {
-  if (hasError) return 'input-field w-full !px-3 !py-2 text-sm !border-red-500';
-  if (filled) return 'input-field-active w-full !px-3 !py-2 text-sm';
-  return 'input-field w-full !px-3 !py-2 text-sm';
+const orderField =
+  'input-field w-full !rounded-lg !border !border-primary/60 !bg-secondary !px-3 !py-2 text-sm text-foreground shadow-[0_0_14px_rgba(0,242,255,0.28)] transition-shadow placeholder:text-muted-foreground hover:!border-primary hover:shadow-[0_0_16px_rgba(0,242,255,0.42)] focus:!border focus:!border-primary focus:!bg-primary/10 focus:shadow-[0_0_18px_rgba(0,242,255,0.5)] focus:outline-none';
+
+const fieldClass = (_filled: boolean, hasError: boolean) => {
+  if (hasError) {
+    return 'input-field w-full !rounded-lg !border !border-red-500 !bg-secondary !px-3 !py-2 text-sm text-foreground shadow-[0_0_14px_rgba(239,68,68,0.28)] focus:!border focus:!border-red-500 focus:outline-none';
+  }
+  return orderField;
 };
+
+const orderPanelGlow =
+  'order-panel !rounded-lg !border-primary/60 shadow-[0_0_24px_rgba(0,242,255,0.22),inset_0_0_0_1px_rgba(0,242,255,0.14)]';
 
 const headerControl =
   'inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border border-primary/50 bg-secondary px-3 text-sm font-medium text-primary shadow-[0_0_16px_rgba(0,242,255,0.35)] transition-colors hover:border-primary hover:bg-primary/20 hover:shadow-[0_0_16px_rgba(0,242,255,0.5)]';
@@ -861,7 +868,7 @@ const OrderPage = () => {
 
           <div className="flex flex-col gap-8 lg:grid lg:grid-cols-12">
             <div className="min-w-0 space-y-5 lg:col-span-8">
-              <section className="order-panel p-4 md:p-5">
+              <section className={`${orderPanelGlow} p-4 md:p-5`}>
                 <div className="mb-4 flex items-center gap-2">
                   <Car className="h-4 w-4 text-primary" />
                   <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-primary">{t('vehicleSpec')}</h2>
@@ -962,10 +969,10 @@ const OrderPage = () => {
                             key={value}
                             type="button"
                             onClick={() => setVehicleField('fuelType', value)}
-                            className={`h-[38px] rounded-xl text-sm font-medium transition-all ${
+                            className={`h-[38px] rounded-lg border text-sm font-medium transition-colors ${
                               active
-                                ? 'interactive-active text-foreground'
-                                : 'interactive-idle text-muted-foreground hover:text-foreground'
+                                ? 'border-primary bg-primary/20 text-primary shadow-[0_0_16px_rgba(0,242,255,0.4)]'
+                                : 'border-primary/60 bg-secondary text-muted-foreground shadow-[0_0_14px_rgba(0,242,255,0.28)] hover:border-primary hover:text-foreground hover:shadow-[0_0_16px_rgba(0,242,255,0.42)]'
                             } ${errors.fuelType ? '!border-red-500' : ''}`}
                           >
                             {t(labelKey)}
@@ -978,7 +985,7 @@ const OrderPage = () => {
                 </div>
               </section>
 
-              <section className="order-panel p-4 md:p-5">
+              <section className={`${orderPanelGlow} p-4 md:p-5`}>
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <Upload className="h-4 w-4 text-primary" />
@@ -1017,14 +1024,14 @@ const OrderPage = () => {
                     setIsDragging(false);
                     acceptFile(event.dataTransfer.files?.[0]);
                   }}
-                  className={`flex min-h-[240px] cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed px-6 py-10 text-center transition-all ${
+                  className={`flex min-h-[240px] cursor-pointer flex-col items-center justify-center rounded-lg border px-6 py-10 text-center transition-all ${
                     selectedFile
                       ? 'border-emerald-400 bg-emerald-500/10 shadow-[0_0_24px_rgba(16,185,129,0.25)]'
                       : isDragging
-                        ? 'border-primary bg-primary/15 shadow-[0_0_28px_rgba(0,242,255,0.35)]'
+                        ? 'border-primary bg-primary/15 shadow-[0_0_28px_rgba(0,242,255,0.45)]'
                         : errors.file
-                          ? 'border-red-500 bg-red-500/5'
-                          : 'border-primary/40 bg-black/30 hover:border-primary hover:bg-primary/5'
+                          ? 'border-red-500 bg-red-500/5 shadow-[0_0_16px_rgba(239,68,68,0.28)]'
+                          : 'border-primary/60 bg-secondary shadow-[0_0_18px_rgba(0,242,255,0.28)] hover:border-primary hover:bg-primary/10 hover:shadow-[0_0_22px_rgba(0,242,255,0.45)]'
                   }`}
                 >
                   <input
@@ -1051,7 +1058,7 @@ const OrderPage = () => {
                     </>
                   ) : (
                     <>
-                      <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-primary/40 bg-primary/10 shadow-[0_0_24px_rgba(0,242,255,0.25)]">
+                      <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-primary/60 bg-primary/10 shadow-[0_0_18px_rgba(0,242,255,0.35)]">
                         <Upload className="h-8 w-8 text-primary" />
                       </div>
                       <p className="text-lg font-semibold">{t('fileDrop')}</p>
@@ -1071,7 +1078,7 @@ const OrderPage = () => {
                 )}
               </section>
 
-              <section className="order-panel p-4 md:p-5">
+              <section className={`${orderPanelGlow} p-4 md:p-5`}>
                 <label className="block">
                   <span className="mb-2 block text-sm font-semibold uppercase tracking-[0.16em] text-primary">{t('note')}</span>
                   <textarea
@@ -1080,7 +1087,7 @@ const OrderPage = () => {
                     maxLength={500}
                     rows={4}
                     placeholder={t('notePlaceholder')}
-                    className="input-field min-h-[120px] w-full resize-y !px-3 !py-2.5 text-sm"
+                    className={`${orderField} min-h-[120px] resize-y`}
                   />
                   <span className="mt-1.5 block text-right text-[11px] text-muted-foreground">{customerNote.length}/500</span>
                 </label>
