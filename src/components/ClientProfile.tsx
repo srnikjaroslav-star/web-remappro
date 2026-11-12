@@ -117,7 +117,7 @@ const ClientProfile = ({
         <form onSubmit={saveDetails} className={profilePanel}>
           <div className="mb-4 flex items-center gap-2">
             <UserRound className="h-4 w-4 text-primary" />
-            <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-primary">{t('profileTitle')}</h2>
+            <h2 className="text-base font-semibold uppercase leading-5 tracking-[0.16em] text-primary">{t('profileTitle')}</h2>
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -177,7 +177,7 @@ const ClientProfile = ({
           </div>
 
           <div className="mb-3 mt-5 flex items-center gap-2">
-            <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-primary">{t('profileBilling')}</h2>
+            <h2 className="text-base font-semibold uppercase leading-5 tracking-[0.16em] text-primary">{t('profileBilling')}</h2>
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="block sm:col-span-2">
@@ -246,7 +246,7 @@ const ClientProfile = ({
           <section className={profilePanel}>
             <div className="mb-3 flex items-center gap-2">
               <Coins className="h-4 w-4 text-primary" />
-              <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-primary">{t('creditBalance')}</h2>
+              <h2 className="text-base font-semibold uppercase leading-5 tracking-[0.16em] text-primary">{t('creditBalance')}</h2>
             </div>
             <p className="text-4xl font-black tabular-nums leading-none neon-text">
               {creditBalance === null ? '—' : `${formatServicePrice(creditBalance)}€`}
@@ -257,7 +257,7 @@ const ClientProfile = ({
           <form onSubmit={changePassword} className={profilePanel}>
             <div className="mb-4 flex items-center gap-2">
               <KeyRound className="h-4 w-4 text-primary" />
-              <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-primary">{t('profilePasswordTitle')}</h2>
+              <h2 className="text-base font-semibold uppercase leading-5 tracking-[0.16em] text-primary">{t('profilePasswordTitle')}</h2>
             </div>
             <label className="mb-3 block">
               <span className={fieldLabel}>{t('profilePasswordCurrent')}</span>
