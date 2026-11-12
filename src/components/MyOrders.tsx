@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Download } from 'lucide-react';
+import { Download, Send } from 'lucide-react';
 import { useLanguage } from '@/i18n/LanguageContext';
 import type { TranslationKey } from '@/i18n/translations';
 import { SERVICES } from '@/data/services';
@@ -57,6 +57,18 @@ const serviceNames = (value: ClientOrder['service_type']) => {
 const engineLine = (note: string | null) => {
   const line = String(note ?? '').split('\n').map((part) => part.trim()).find(Boolean) ?? '';
   return line.startsWith('Motor:') ? line : '';
+};
+
+// Administrátor: prepíš TVOJE_TELEGRAM_USERNAME na svoje reálne Telegram meno, bez znaku @.
+const TELEGRAM_SUPPORT_USERNAME = 'RemapproSupport';
+
+const telegramSupportUrl = (order: ClientOrder) => {
+  const label = order.order_number || order.id.slice(0, 8).toUpperCase();
+  const brand = order.car_brand?.trim() ?? '';
+  const model = order.car_model?.trim() ?? '';
+  const vehicle = brand && model ? ` (${brand} ${model})` : '';
+  const text = `Ahoj, mám otázku k objednávke #${label}${vehicle}`;
+  return `https://t.me/${TELEGRAM_SUPPORT_USERNAME}?text=${encodeURIComponent(text)}`;
 };
 
 const money = (value: number | string | null) => {
@@ -163,8 +175,19 @@ const MyOrders = ({ email }: { email: string }) => {
                     <p className="text-xl font-bold leading-none text-primary">{money(order.total_price)}</p>
                   </td>
                   <td className={`${cell} whitespace-nowrap`}>
-                    <span className={`text-sm font-bold uppercase tracking-wide ${STATUS_CLASS[order.status] || 'text-white'}`}>
-                      {STATUS_KEY[order.status] ? t(STATUS_KEY[order.status]) : order.status}
+                    <span className="inline-flex items-center gap-3">
+                      <span className={`text-sm font-bold uppercase tracking-wide ${STATUS_CLASS[order.status] || 'text-white'}`}>
+                        {STATUS_KEY[order.status] ? t(STATUS_KEY[order.status]) : order.status}
+                      </span>
+                      <a
+                        href={telegramSupportUrl(order)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex h-7 items-center gap-1.5 rounded-md border border-white/15 bg-transparent px-2 text-[11px] font-semibold uppercase tracking-wide text-slate-300 transition-colors hover:border-[#2AABEE] hover:text-[#2AABEE] hover:shadow-[0_0_12px_rgba(42,171,238,0.35)]"
+                      >
+                        <Send className="h-3.5 w-3.5" />
+                        {t('orderSupport')}
+                      </a>
                     </span>
                   </td>
                   <td className="px-4 py-3 text-center align-middle">
