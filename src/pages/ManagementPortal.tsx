@@ -1855,6 +1855,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                 <tr className="bg-[#0a192f] border-b border-primary/30 shadow-md">
                   <th className="text-left p-2.5 border-r border-slate-500 text-sm font-bold uppercase tracking-wide align-middle text-white whitespace-nowrap">Faktúra</th>
                   <th className="text-left p-2.5 border-r border-slate-500 text-sm font-bold uppercase tracking-wide align-middle text-white whitespace-nowrap min-w-[12rem]">ID</th>
+                  <th className="text-left p-2.5 border-r border-slate-500 text-sm font-bold uppercase tracking-wide align-middle text-white whitespace-nowrap">Vozidlo</th>
                   <th className="text-left p-2.5 border-r border-slate-500 text-sm font-bold uppercase tracking-wide align-middle text-white whitespace-nowrap">Dátum</th>
                   <th className="text-left p-2.5 border-r border-slate-500 text-sm font-bold uppercase tracking-wide align-middle text-white w-full min-w-[320px]">Zákazník</th>
                   <th className="text-center p-4 border-r border-slate-500 text-sm font-bold uppercase tracking-wide align-middle text-white whitespace-nowrap min-w-[8.5rem]">Cena</th>
@@ -1865,13 +1866,13 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
               <tbody>
                 {loading ? (
                 <tr>
-                      <td colSpan={7} className="text-center py-12 text-muted-foreground">
+                      <td colSpan={8} className="text-center py-12 text-muted-foreground">
                         Načítavam objednávky...
                       </td>
                     </tr>
                   ) : filteredOrders.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="text-center py-12 text-muted-foreground">
+                      <td colSpan={8} className="text-center py-12 text-muted-foreground">
                         Žiadne objednávky
                       </td>
                     </tr>
@@ -1884,6 +1885,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                       return `px-4 py-2 align-middle border-r border-slate-800/60 ${selected}`;
                     };
                     const actionCell = 'w-12 flex-1 min-h-[48px] inline-flex items-center justify-center border-l border-slate-700/50 rounded-none bg-cyan-950/30 transition-all duration-200';
+                    const vehicle = [order.car_brand, order.car_model].map((part) => String(part ?? '').trim()).filter(Boolean).join(' ');
                     const documents: { number: string; href: string; title: string }[] = [];
                     if (order.invoice_number) {
                       documents.push({ number: order.invoice_number, href: order.invoice_url || '#', title: 'Zobraziť faktúru' });
@@ -1921,6 +1923,9 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                         <span className="font-mono text-lg font-bold leading-none text-cyan-300 whitespace-nowrap">
                           {order.order_number || order.id.slice(0, 6).toUpperCase()}
                         </span>
+                      </td>
+                      <td className={`${cell('mid')} whitespace-nowrap`}>
+                        <p className="text-base font-bold leading-none text-cyan-400 whitespace-nowrap">{vehicle || '—'}</p>
                       </td>
                       <td className={`${cell('mid')} whitespace-nowrap`}>
                         <p className="text-base font-medium leading-none text-white whitespace-nowrap">
