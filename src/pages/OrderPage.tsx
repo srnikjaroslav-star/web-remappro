@@ -731,8 +731,9 @@ const OrderPage = () => {
       </div>
 
       <div className="relative z-10 flex w-full flex-grow flex-col">
-        <header className="sticky top-0 z-50 w-full border-b border-primary/25 bg-background/80 backdrop-blur-sm">
-          <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between lg:px-8">
+        <header className="sticky top-0 z-50 w-full border-b border-primary/25">
+          <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-background/80 backdrop-blur-sm" />
+          <div className="relative mx-auto flex w-full max-w-[1600px] flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between lg:px-8">
             <div className="flex shrink-0 items-center gap-6">
               <NavLogo />
               <SystemStatus />

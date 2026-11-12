@@ -149,7 +149,9 @@ const ManagementPortal = () => {
         : detail && typeof detail === 'object' && 'mode' in detail
           ? (detail as { mode?: string }).mode
           : null;
-      if (mode === 'auto' || mode === 'online' || mode === 'offline') setStatusMode(mode);
+      if (mode === 'auto' || mode === 'online' || mode === 'offline') {
+        setStatusMode((current) => (current === mode ? current : mode));
+      }
     };
     window.addEventListener('systemStatusChange', handleChange);
     return () => window.removeEventListener('systemStatusChange', handleChange);

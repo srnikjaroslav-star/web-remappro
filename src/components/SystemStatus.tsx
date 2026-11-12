@@ -175,11 +175,12 @@ const SystemStatus = ({ showModeLabel = false }: { showModeLabel?: boolean }) =>
     let active = true;
     fetchSystemSettings().then((next) => {
       if (!active) return;
-      if (next) setSettings(next);
+      if (next) setSettings((current) => (settingsMatch(current, next) ? current : next));
       setLoading(false);
     });
 
     const handleChange = (event: Event) => {
+      if (!active) return;
       const detail = (event as CustomEvent<unknown>).detail;
       setSettings((current) => {
         const next = applyDetail(current, detail);
@@ -188,7 +189,6 @@ const SystemStatus = ({ showModeLabel = false }: { showModeLabel?: boolean }) =>
     };
     window.addEventListener('systemStatusChange', handleChange);
 
-    const interval = setInterval(() => setClock((value) => value + 1), 60000);
     const channel = supabase
       .channel('system_settings_changes')
       .on(
@@ -200,6 +200,7 @@ const SystemStatus = ({ showModeLabel = false }: { showModeLabel?: boolean }) =>
           filter: 'key=eq.system_status',
         },
         (payload) => {
+          if (!active) return;
           const next = (payload.new as { value?: unknown } | undefined)?.value;
           if (!next) return;
           setSettings((current) => {
@@ -213,10 +214,15 @@ const SystemStatus = ({ showModeLabel = false }: { showModeLabel?: boolean }) =>
     return () => {
       active = false;
       window.removeEventListener('systemStatusChange', handleChange);
-      clearInterval(interval);
       supabase.removeChannel(channel);
     };
   }, []);
+
+  useEffect(() => {
+    if (settings.mode !== 'auto') return;
+    const interval = window.setInterval(() => setClock((value) => value + 1), 60000);
+    return () => window.clearInterval(interval);
+  }, [settings.mode]);
 
   const online = isSystemOnline(settings.mode, settings.schedule);
   void clock;
@@ -236,7 +242,7 @@ const SystemStatus = ({ showModeLabel = false }: { showModeLabel?: boolean }) =>
         className={`w-2.5 h-2.5 rounded-full ${
           online
             ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]'
-            : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)] animate-pulse'
+            : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]'
         }`}
       />
       <span className={online ? 'text-green-500' : 'text-red-500 font-bold'}>

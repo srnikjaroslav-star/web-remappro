@@ -302,8 +302,9 @@ const ServiceDetail = () => {
       </div>
 
       {/* Header */}
-      <header className="relative border-b border-border/50 backdrop-blur-sm bg-background/80">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+      <header className="relative border-b border-border/50">
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-background/80 backdrop-blur-sm" />
+        <div className="container relative mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-6">
             <Link to="/">
               <Logo size="md" />
