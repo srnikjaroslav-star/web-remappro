@@ -27,6 +27,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { useOnlineClients } from '@/lib/clientPresence';
 import { supabase } from '@/lib/supabase';
 import { Order, ActivityLog } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -67,6 +68,7 @@ const ManagementPortal = () => {
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [financialStats, setFinancialStats] = useState<{ grossRevenue: number; refunds: number; netRevenue: number } | null>(null);
   const [section, setSection] = useState<'orders' | 'clients' | 'services' | 'hours'>('orders');
+  const onlineIds = useOnlineClients(!isCheckingAuth);
   
   // NEW: Refund Wizard Modal State
   const [refundModalOpen, setRefundModalOpen] = useState(false);
@@ -140,6 +142,20 @@ const ManagementPortal = () => {
     };
     loadStatus();
   }, [isCheckingAuth]);
+
+  useEffect(() => {
+    const handleChange = (event: Event) => {
+      const detail = (event as CustomEvent<unknown>).detail;
+      const mode = typeof detail === 'string'
+        ? detail
+        : detail && typeof detail === 'object' && 'mode' in detail
+          ? (detail as { mode?: string }).mode
+          : null;
+      if (mode === 'auto' || mode === 'online' || mode === 'offline') setStatusMode(mode);
+    };
+    window.addEventListener('systemStatusChange', handleChange);
+    return () => window.removeEventListener('systemStatusChange', handleChange);
+  }, []);
 
   const cycleStatusMode = async () => {
     // Cycle: auto -> online -> offline -> auto
@@ -1767,37 +1783,37 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
       </header>
 
       <div className="w-full flex-grow pt-3">
-        <div className="mb-3 inline-flex flex-wrap items-center rounded-lg border border-primary/30 bg-black/40 p-0.5 text-sm font-semibold">
+        <div className="mb-3 inline-flex flex-wrap items-center rounded-lg border border-transparent bg-transparent p-0.5 text-sm font-semibold">
           <button
             type="button"
             onClick={() => setSection('orders')}
-            className={`rounded-md px-3 py-1.5 transition-colors ${section === 'orders' ? 'bg-primary/15 text-primary shadow-[0_0_12px_rgba(0,242,255,0.35)]' : 'text-muted-foreground hover:text-foreground'}`}
+            className={`inline-flex h-8 items-center rounded-md border px-[11px] transition-colors ${section === 'orders' ? 'border-primary/70 bg-primary/20 text-primary shadow-[0_0_16px_rgba(0,242,255,0.45)]' : 'border-primary/35 bg-[#070d16] text-muted-foreground hover:border-primary/70 hover:bg-[#0a192f] hover:text-primary hover:shadow-[0_0_12px_rgba(0,242,255,0.28)]'}`}
           >
             Objednávky
           </button>
           <button
             type="button"
             onClick={() => setSection('clients')}
-            className={`rounded-md px-3 py-1.5 transition-colors ${section === 'clients' ? 'bg-primary/15 text-primary shadow-[0_0_12px_rgba(0,242,255,0.35)]' : 'text-muted-foreground hover:text-foreground'}`}
+            className={`inline-flex h-8 items-center rounded-md border px-[11px] transition-colors ${section === 'clients' ? 'border-primary/70 bg-primary/20 text-primary shadow-[0_0_16px_rgba(0,242,255,0.45)]' : 'border-primary/35 bg-[#070d16] text-muted-foreground hover:border-primary/70 hover:bg-[#0a192f] hover:text-primary hover:shadow-[0_0_12px_rgba(0,242,255,0.28)]'}`}
           >
             Klienti
           </button>
           <button
             type="button"
             onClick={() => setSection('services')}
-            className={`rounded-md px-3 py-1.5 transition-colors ${section === 'services' ? 'bg-primary/15 text-primary shadow-[0_0_12px_rgba(0,242,255,0.35)]' : 'text-muted-foreground hover:text-foreground'}`}
+            className={`inline-flex h-8 items-center rounded-md border px-[11px] transition-colors ${section === 'services' ? 'border-primary/70 bg-primary/20 text-primary shadow-[0_0_16px_rgba(0,242,255,0.45)]' : 'border-primary/35 bg-[#070d16] text-muted-foreground hover:border-primary/70 hover:bg-[#0a192f] hover:text-primary hover:shadow-[0_0_12px_rgba(0,242,255,0.28)]'}`}
           >
             Služby
           </button>
           <button
             type="button"
             onClick={() => setSection('hours')}
-            className={`rounded-md px-3 py-1.5 transition-colors ${section === 'hours' ? 'bg-primary/15 text-primary shadow-[0_0_12px_rgba(0,242,255,0.35)]' : 'text-muted-foreground hover:text-foreground'}`}
+            className={`inline-flex h-8 items-center rounded-md border px-[11px] transition-colors ${section === 'hours' ? 'border-primary/70 bg-primary/20 text-primary shadow-[0_0_16px_rgba(0,242,255,0.45)]' : 'border-primary/35 bg-[#070d16] text-muted-foreground hover:border-primary/70 hover:bg-[#0a192f] hover:text-primary hover:shadow-[0_0_12px_rgba(0,242,255,0.28)]'}`}
           >
             Otváracie hodiny
           </button>
         </div>
-        {section === 'clients' ? <ClientCredits /> : section === 'services' ? <AdminServices /> : section === 'hours' ? <OpeningHours /> : (
+        {section === 'clients' ? <ClientCredits onlineIds={onlineIds} /> : section === 'services' ? <AdminServices /> : section === 'hours' ? <OpeningHours /> : (
         <>
         <div className="mb-3 w-full grid grid-cols-1 xl:grid-cols-5 gap-4">
           <div className="rounded-none p-3 bg-[#0f172a] border-t-4 border-t-cyan-400 shadow-[inset_0_0_28px_rgba(34,211,238,0.14)]">
@@ -1863,8 +1879,9 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                 ) : (
                   filteredOrders.map((order) => {
                     const active = activeRowId === order.id;
+                    const picked = active ? 'bg-[#0b2430] shadow-[inset_0_0_18px_rgba(0,242,255,0.16)]' : '';
                     const cell = (edge: 'first' | 'mid' | 'last' | 'fill') => {
-                      const selected = active && edge !== 'last' ? 'bg-slate-800/40' : '';
+                      const selected = active && edge !== 'last' ? picked : '';
                       return `px-4 py-2 align-middle border-r border-slate-800/60 ${selected}`;
                     };
                     const actionCell = 'w-12 flex-1 min-h-[48px] inline-flex items-center justify-center border-l border-slate-700/50 rounded-none bg-cyan-950/30 transition-all duration-200';
@@ -1917,7 +1934,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                           <p className="whitespace-nowrap text-xs leading-none text-white" title={order.customer_email}>{order.customer_email}</p>
                         </div>
                       </td>
-                      <td className={`min-w-[8.5rem] whitespace-nowrap border-r border-slate-800/60 p-4 text-center align-middle ${active ? 'bg-slate-800/40' : ''}`}>
+                      <td className={`min-w-[8.5rem] whitespace-nowrap border-r border-slate-800/60 p-4 text-center align-middle ${picked}`}>
                         <p className={`flex items-center justify-center text-xl font-bold leading-none ${
                           order.status === 'cancelled' 
                             ? 'text-red-500' 
@@ -1926,7 +1943,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                           {getDisplayAmount(order).toFixed(2)}€
                         </p>
                       </td>
-                      <td className={`h-px min-w-[9.5rem] whitespace-nowrap border-r border-slate-800/60 p-0 text-center ${active ? 'bg-slate-800/40' : ''}`}>
+                      <td className={`h-px min-w-[9.5rem] whitespace-nowrap border-r border-slate-800/60 p-0 text-center ${picked}`}>
                         <select
                           value={order.status}
                           onChange={(e) => handleStatusChange(order.id, e.target.value)}

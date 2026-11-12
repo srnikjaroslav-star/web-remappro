@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { RefreshCw, Search } from 'lucide-react';
 import { toast } from 'sonner';
+import ConnectionDot from '@/components/ConnectionDot';
 import { clientRecordName } from '@/lib/profileName';
 import { supabase } from '@/lib/supabase';
 
@@ -31,7 +32,11 @@ const balanceCell = 'flex shrink-0 items-center whitespace-nowrap py-2 pl-3 pr-2
 const creditCell = 'flex shrink-0 items-center whitespace-nowrap';
 const headChrome = 'sticky top-0 z-50 border-b border-primary/30 bg-[#0a192f] text-sm font-bold uppercase tracking-wide text-white';
 
-const ClientCredits = () => {
+type ClientCreditsProps = {
+  onlineIds: ReadonlySet<string>;
+};
+
+const ClientCredits = ({ onlineIds }: ClientCreditsProps) => {
   const [clients, setClients] = useState<ClientAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
@@ -65,6 +70,12 @@ const ClientCredits = () => {
     );
   }, [clients, query]);
 
+  const onlineCount = useMemo(
+    () => clients.reduce((count, client) => count + (onlineIds.has(client.id) ? 1 : 0), 0),
+    [clients, onlineIds],
+  );
+  const offlineCount = Math.max(0, clients.length - onlineCount);
+
   const adjust = async (client: ClientAccount, direction: 'add' | 'subtract') => {
     const amount = Number(String(drafts[client.id] ?? '').replace(',', '.'));
     if (!Number.isFinite(amount) || amount <= 0) {
@@ -92,18 +103,38 @@ const ClientCredits = () => {
 
   return (
     <div className="h-fit w-full shrink-0 rounded-xl border border-primary/20 bg-background/40 shadow-[0_0_30px_rgba(59,130,246,0.15)] backdrop-blur-xl">
-      <div className="flex items-center justify-end gap-3 border-b border-primary/30 bg-[#0a192f] px-4 py-2.5">
-        <div className="relative w-72 shrink-0">
+      <div className="flex items-center gap-3 border-b border-primary/30 bg-[#0a192f] px-4 py-2.5">
+        <div
+          className="mr-auto inline-flex h-[42px] shrink-0 items-stretch overflow-hidden rounded-md border border-primary/40 bg-[#070d16] shadow-[0_0_16px_rgba(0,242,255,0.22)]"
+          aria-live="polite"
+          aria-label="Stav prihlásenia klientov"
+        >
+          <div className="flex items-center gap-2 border-r border-primary/30 px-3">
+            <ConnectionDot online decorative label="Prihlásení" />
+            <span className="text-xs font-bold uppercase tracking-wide text-white">Prihlásení</span>
+            <span className="min-w-[1.25rem] text-lg font-black tabular-nums leading-none text-green-400">
+              {loading ? '—' : onlineCount}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 px-3">
+            <ConnectionDot online={false} decorative label="Odhlásení" />
+            <span className="text-xs font-bold uppercase tracking-wide text-white">Odhlásení</span>
+            <span className="min-w-[1.25rem] text-lg font-black tabular-nums leading-none text-red-400">
+              {loading ? '—' : offlineCount}
+            </span>
+          </div>
+        </div>
+        <div className="relative w-56 shrink-0">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Hľadať klienta..."
-            className="h-[42px] w-full rounded-none border border-primary/50 bg-transparent py-2 pl-9 pr-4 text-base leading-6 text-foreground shadow-none placeholder:text-muted-foreground focus:outline-none"
+            className="h-[42px] w-full rounded-md border border-primary/70 bg-transparent py-2 pl-9 pr-4 text-base leading-6 text-foreground shadow-[0_0_16px_rgba(0,242,255,0.28)] placeholder:text-muted-foreground transition-shadow hover:border-primary hover:shadow-[0_0_16px_rgba(0,242,255,0.45)] focus:border-primary focus:outline-none focus:shadow-[0_0_16px_rgba(0,242,255,0.45)]"
           />
         </div>
-        <button type="button" onClick={loadClients} className="btn-secondary flex items-center gap-2 rounded-none px-4 py-2 text-base">
+        <button type="button" onClick={loadClients} className="inline-flex h-[42px] shrink-0 items-center gap-2 rounded-md border border-primary/70 bg-primary/15 px-4 text-sm font-bold uppercase tracking-wide text-primary shadow-[0_0_16px_rgba(0,242,255,0.28)] transition-colors hover:border-primary hover:bg-primary/25 hover:shadow-[0_0_16px_rgba(0,242,255,0.45)]">
           <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           Obnoviť
         </button>
@@ -131,17 +162,24 @@ const ClientCredits = () => {
               const busy = adjustingId === client.id;
               const active = selectedId === client.id;
               const label = clientRecordName(client);
-              const rowBg = `cursor-pointer border-b border-slate-800/60 ${active ? 'bg-slate-800/40' : ''}`;
+              const rowBg = 'cursor-pointer border-b border-slate-800/60';
+              const picked = active ? ' bg-[#0b2430] shadow-[inset_0_0_18px_rgba(0,242,255,0.16)]' : '';
               const actionButton = 'inline-flex h-full min-w-0 flex-1 items-center justify-center border-0 bg-transparent px-2 text-sm font-bold uppercase tracking-wide transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-60';
               return (
                 <tr key={client.id} className="contents" onClick={() => setSelectedId(client.id)}>
-                  <td className={`${nameCell} ${rowBg}`}>
+                  <td className={`${nameCell} ${rowBg}${picked}`}>
+                    <ConnectionDot
+                      online={onlineIds.has(client.id)}
+                      size="md"
+                      label={onlineIds.has(client.id) ? 'Prihlásený' : 'Offline'}
+                      className="mr-2"
+                    />
                     <span className="text-base font-semibold leading-none text-cyan-400">{label || '—'}</span>
                   </td>
-                  <td className={`${emailCell} ${rowBg}`}>
+                  <td className={`${emailCell} ${rowBg}${picked}`}>
                     <span className="text-base font-medium leading-none text-white">{client.email || '—'}</span>
                   </td>
-                  <td className={`${balanceCell} ${rowBg} justify-end text-right`}>
+                  <td className={`${balanceCell} ${rowBg}${picked} justify-end text-right`}>
                     <span className="text-base font-bold leading-none tabular-nums text-primary">{money(client.balance)}</span>
                   </td>
                   <td className={`${creditCell} ${rowBg} items-stretch self-stretch p-0`} onClick={(event) => event.stopPropagation()}>

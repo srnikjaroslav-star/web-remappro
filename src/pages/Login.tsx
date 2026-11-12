@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Lock, Mail, LogIn, AlertCircle } from 'lucide-react';
 import Logo from '@/components/Logo';
-import { supabase } from '@/lib/supabase';
+import { authRemembered, setAuthRemember, supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 
 const Login = () => {
@@ -18,12 +18,15 @@ const Login = () => {
     setIsLoading(true);
 
     try {
+      const previousRemember = authRemembered();
+      setAuthRemember(true);
       const { data, error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
       if (signInError) {
+        setAuthRemember(previousRemember);
         setError(signInError.message || 'Prihlasovanie zlyhalo. Skontrolujte svoje údaje.');
         toast.error('Prihlasovanie zlyhalo');
         return;

@@ -53,6 +53,7 @@ const AdminServices = () => {
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<Draft>(emptyDraft);
   const [busy, setBusy] = useState(false);
   const [confirmId, setConfirmId] = useState<string | null>(null);
@@ -161,6 +162,7 @@ const AdminServices = () => {
       return;
     }
     if (editingId === service.id) cancelEdit();
+    if (selectedId === service.id) setSelectedId(null);
     toast.success('Služba bola zmazaná.');
     reload();
   };
@@ -281,11 +283,14 @@ const AdminServices = () => {
                 <tr><td colSpan={4} className="py-12 text-center text-muted-foreground">Žiadne služby</td></tr>
               ) : visible.map((service) => {
                 const editing = editingId === service.id;
+                const picked = !editing && selectedId === service.id
+                  ? ' bg-[#0b2430] shadow-[inset_0_0_18px_rgba(0,242,255,0.16)]'
+                  : '';
                 const cell = editing
                   ? 'border-r border-slate-800/60 px-3 py-0 align-middle bg-slate-800/40'
-                  : 'border-r border-slate-800/60 px-4 py-0 align-middle';
+                  : `border-r border-slate-800/60 px-4 py-0 align-middle${picked}`;
                 return (
-                  <tr key={service.id} className="border-b border-slate-800/60">
+                  <tr key={service.id} onClick={() => setSelectedId(service.id)} className="cursor-pointer border-b border-slate-800/60">
                     <td className={cell}>
                       {editing ? (
                         <div className="w-0 min-w-full">
@@ -304,7 +309,7 @@ const AdminServices = () => {
                         </>
                       )}
                     </td>
-                    <td className={`border-r border-slate-800/60 py-0 align-middle text-sm font-normal text-white ${editing ? 'bg-slate-800/40 px-1' : 'px-4'}`}>
+                    <td className={`border-r border-slate-800/60 py-0 align-middle text-sm font-normal text-white ${editing ? 'bg-slate-800/40 px-1' : `px-4${picked}`}`}>
                       {editing ? (
                         <div className="w-0 min-w-full">
                           <select

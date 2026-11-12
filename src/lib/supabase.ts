@@ -11,4 +11,48 @@ if (!supabaseAnonKey) {
   throw new Error('Missing VITE_SUPABASE_ANON_KEY environment variable');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const REMEMBER_KEY = 'remappro-auth-remember';
+
+export const authRemembered = () => {
+  try {
+    return localStorage.getItem(REMEMBER_KEY) !== '0';
+  } catch {
+    return true;
+  }
+};
+
+export const setAuthRemember = (remember: boolean) => {
+  localStorage.setItem(REMEMBER_KEY, remember ? '1' : '0');
+};
+
+const rememberedStore = () => (authRemembered() ? localStorage : sessionStorage);
+
+const authStorage = {
+  getItem(key: string) {
+    if (key === REMEMBER_KEY) return localStorage.getItem(key);
+    return rememberedStore().getItem(key);
+  },
+  setItem(key: string, value: string) {
+    if (key === REMEMBER_KEY) {
+      localStorage.setItem(key, value);
+      return;
+    }
+    const keep = rememberedStore();
+    const drop = keep === localStorage ? sessionStorage : localStorage;
+    drop.removeItem(key);
+    keep.setItem(key, value);
+  },
+  removeItem(key: string) {
+    localStorage.removeItem(key);
+    sessionStorage.removeItem(key);
+  },
+};
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    storage: authStorage,
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+  },
+});

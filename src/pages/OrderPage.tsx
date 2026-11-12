@@ -6,6 +6,7 @@ import ClientProfile from '@/components/ClientProfile';
 import NavLogo from '@/components/NavLogo';
 import MyOrders from '@/components/MyOrders';
 import StageYearSelect from '@/components/StageYearSelect';
+import ConnectionDot from '@/components/ConnectionDot';
 import SystemStatus from '@/components/SystemStatus';
 import { useLanguage } from '@/i18n/LanguageContext';
 import type { TranslationKey } from '@/i18n/translations';
@@ -28,7 +29,8 @@ import {
   companyFromMetadata,
   joinProfileName,
 } from '@/lib/profileName';
-import { supabase } from '@/lib/supabase';
+import { useClientPresence } from '@/lib/clientPresence';
+import { authRemembered, setAuthRemember, supabase } from '@/lib/supabase';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -112,6 +114,7 @@ const OrderPage = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [authUser, setAuthUser] = useState<User | null>(null);
+  const connected = useClientPresence(authUser?.id ?? null);
   const [creditBalance, setCreditBalance] = useState<number | null>(null);
   const [billing, setBilling] = useState<ClientBilling>(emptyBilling);
   const [profileReady, setProfileReady] = useState(false);
@@ -123,6 +126,7 @@ const OrderPage = () => {
   const [loginLastName, setLoginLastName] = useState('');
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(() => authRemembered());
   const [loginError, setLoginError] = useState('');
   const [loginBusy, setLoginBusy] = useState(false);
   const [legalConsentAgreed, setLegalConsentAgreed] = useState(false);
@@ -361,10 +365,13 @@ const OrderPage = () => {
     event.preventDefault();
     setLoginError('');
     setLoginBusy(true);
+    const previousRemember = authRemembered();
+    setAuthRemember(rememberMe);
     const { error } = await supabase.auth.signInWithPassword({
       email: loginEmail.trim(),
       password: loginPassword,
     });
+    if (error) setAuthRemember(previousRemember);
     setLoginBusy(false);
     if (error) {
       setLoginError(t('signInFailed'));
@@ -676,6 +683,10 @@ const OrderPage = () => {
               </div>
               {authUser ? (
                 <div className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-primary/40 bg-black/50 px-2 py-0.5">
+                  <ConnectionDot
+                    online={connected}
+                    label={connected ? t('connectionOnline') : t('connectionOffline')}
+                  />
                   <button
                     type="button"
                     onClick={() => setPortalView('profile')}
@@ -710,8 +721,9 @@ const OrderPage = () => {
                     setAuthMode('sign-in');
                     setLoginOpen(true);
                   }}
-                  className="inline-flex h-8 items-center rounded-lg border border-border/60 bg-black/40 px-2.5 text-xs font-semibold text-muted-foreground transition-colors hover:text-primary"
+                  className="inline-flex h-8 items-center gap-2 rounded-lg border border-border/60 bg-black/40 px-2.5 text-xs font-semibold text-muted-foreground transition-colors hover:text-primary"
                 >
+                  <ConnectionDot online={false} label={t('connectionOffline')} />
                   {t('signIn')}
                 </button>
               )}
@@ -1412,6 +1424,24 @@ const OrderPage = () => {
                   disabled={loginBusy}
                   className="input-field w-full !px-3 !py-2 text-sm"
                 />
+              </label>
+            )}
+            {authMode === 'sign-in' && (
+              <label className="relative mb-4 flex cursor-pointer items-center gap-2.5">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(event) => setRememberMe(event.target.checked)}
+                  disabled={loginBusy}
+                  className="peer sr-only"
+                />
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border border-primary/70 bg-[#070d16] shadow-[0_0_10px_rgba(0,242,255,0.28)] peer-checked:border-primary peer-checked:shadow-[0_0_12px_rgba(0,242,255,0.7)] peer-focus-visible:outline peer-focus-visible:outline-1 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-primary peer-disabled:opacity-60"
+                >
+                  <span className={`h-2 w-2 rounded-[2px] ${rememberMe ? 'bg-primary shadow-[0_0_8px_rgba(0,242,255,0.95)]' : 'bg-transparent'}`} />
+                </span>
+                <span className="text-xs font-semibold tracking-wide text-primary">{t('rememberMe')}</span>
               </label>
             )}
             {loginError && <p className="mb-3 text-xs text-red-400">{loginError}</p>}
