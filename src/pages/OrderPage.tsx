@@ -622,7 +622,22 @@ const OrderPage = () => {
       toast.error(t('creditAuthRequired'));
       return;
     }
-    if (creditBalance !== null && creditBalance < totalPrice) {
+    const { data: account, error: accountError } = await supabase
+      .from('credit_accounts')
+      .select('balance')
+      .eq('user_id', authUser.id)
+      .maybeSingle();
+    if (accountError) {
+      toast.error(t('creditPayFailed'));
+      return;
+    }
+    if (!account) {
+      toast.error(t('creditNoAccount'));
+      return;
+    }
+    const available = Number(account.balance);
+    setCreditBalance(Number.isFinite(available) ? available : 0);
+    if (!Number.isFinite(available) || available < totalPrice) {
       toast.error(t('creditInsufficient'));
       return;
     }
@@ -645,7 +660,12 @@ const OrderPage = () => {
       toast.dismiss('upload');
 
       const profileForOrder = { ...source, email: orderEmail(source) };
-      await saveClientBilling(authUser.id, profileForOrder);
+      const savedProfile = await saveClientBilling(authUser.id, profileForOrder);
+      if (!savedProfile.ok) {
+        toast.error(t('creditPayFailed'));
+        setIsSubmitting(false);
+        return;
+      }
       await supabase.auth.updateUser({
         data: {
           first_name: source.firstName.trim(),
@@ -877,7 +897,7 @@ const OrderPage = () => {
               <section className={`${orderPanelGlow} p-4 md:p-5`}>
                 <div className="mb-4 flex items-center gap-2">
                   <Car className="h-4 w-4 text-primary" />
-                  <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-primary">{t('vehicleSpec')}</h2>
+                  <h2 className="text-base font-semibold uppercase leading-5 tracking-[0.16em] text-primary">{t('vehicleSpec')}</h2>
                 </div>
 
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -995,7 +1015,7 @@ const OrderPage = () => {
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <Upload className="h-4 w-4 text-primary" />
-                    <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-primary">{t('ecuFile')}</h2>
+                    <h2 className="text-base font-semibold uppercase leading-5 tracking-[0.16em] text-primary">{t('ecuFile')}</h2>
                   </div>
                   <span className="text-[11px] uppercase tracking-wide text-muted-foreground">.bin · .ori · .mod · .ecu</span>
                 </div>
@@ -1086,7 +1106,7 @@ const OrderPage = () => {
 
               <section className={`${orderPanelGlow} p-4 md:p-5`}>
                 <label className="block">
-                  <span className="mb-2 block text-sm font-semibold uppercase tracking-[0.16em] text-primary">{t('note')}</span>
+                  <span className="mb-2 block text-base font-semibold uppercase leading-5 tracking-[0.16em] text-primary">{t('note')}</span>
                   <textarea
                     value={customerNote}
                     onChange={(event) => setCustomerNote(event.target.value)}
@@ -1259,11 +1279,15 @@ const OrderPage = () => {
                     type="button"
                     onClick={payWithCredits}
                     disabled={isSubmitting}
+                    aria-busy={isSubmitting}
                     aria-label={t('payCreditsAria')}
                     className="btn-primary flex min-h-[52px] w-full items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {isSubmitting ? (
-                      <Loader2 className="h-5 w-5 animate-spin" />
+                      <>
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                        <span className="text-sm font-bold uppercase tracking-wide">{t('payCreditsLoading')}</span>
+                      </>
                     ) : (
                       <>
                         <Coins className="h-4 w-4" />
