@@ -106,7 +106,7 @@ const ClientProfile = ({
         <button
           type="button"
           onClick={onBack}
-          className="inline-flex h-10 items-center justify-center gap-2 self-start rounded-md border border-primary/70 bg-primary/15 px-4 text-sm font-bold text-primary shadow-[0_0_16px_rgba(0,242,255,0.4)] transition-colors hover:bg-primary/25"
+          className="inline-flex h-10 w-auto shrink-0 items-center justify-center gap-1.5 self-end rounded-md border border-primary/70 bg-primary/15 px-3 text-sm font-bold text-primary shadow-[0_0_16px_rgba(0,242,255,0.4)] transition-colors hover:bg-primary/25 sm:self-start"
         >
           <ArrowLeft className="h-4 w-4" />
           {t('backToNewOrder')}
