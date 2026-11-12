@@ -100,6 +100,7 @@ const MyOrders = ({ email }: { email: string }) => {
   const [failed, setFailed] = useState(false);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const visibleOrders = orders.filter((order) =>
     (statusFilter === 'all' || order.status === statusFilter) && matchesQuery(order, query),
   );
@@ -214,9 +215,18 @@ const MyOrders = ({ email }: { email: string }) => {
               const details = [order.year, order.fuel_type, order.ecu_type].filter(Boolean).join(' · ');
               const motor = engineLine(order.customer_note);
               const services = serviceNames(order.service_type);
-              const cell = 'border-r border-slate-800/60 px-4 py-3 align-middle';
+              const selected = selectedId === order.id;
+              const picked = selected ? 'border-primary/45 bg-[#0b2430] shadow-[inset_0_0_18px_rgba(0,242,255,0.16)]' : '';
+              const glow = `px-4 py-1.5 align-middle transition-[background-color,box-shadow,border-color] duration-200 ${picked}`;
+              const cell = `border-r border-slate-800/60 ${glow}`;
+              const action = 'inline-flex h-10 items-center gap-2 rounded-md px-3 text-sm font-bold uppercase tracking-wide transition-colors';
               return (
-                <tr key={order.id} className="border-b border-slate-800/60 align-middle">
+                <tr
+                  key={order.id}
+                  onClick={() => setSelectedId(order.id)}
+                  aria-selected={selected}
+                  className={`cursor-pointer border-b border-slate-800/60 align-middle ${selected ? 'border-primary/50' : ''}`}
+                >
                   <td className={`${cell} whitespace-nowrap text-sm text-white`}>
                     {new Date(order.created_at).toLocaleString('sk-SK', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                   </td>
@@ -242,21 +252,21 @@ const MyOrders = ({ email }: { email: string }) => {
                         href={telegramSupportUrl(order)}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex h-7 items-center gap-1.5 rounded-md border border-white/15 bg-transparent px-2 text-[11px] font-semibold uppercase tracking-wide text-slate-300 transition-colors hover:border-[#2AABEE] hover:text-[#2AABEE] hover:shadow-[0_0_12px_rgba(42,171,238,0.35)]"
+                        className={`${action} border border-primary/40 bg-primary/10 text-primary hover:border-primary/70 hover:bg-primary/20 hover:shadow-[0_0_12px_rgba(0,242,255,0.28)]`}
                       >
-                        <Send className="h-3.5 w-3.5" />
+                        <Send className="h-4 w-4" />
                         {t('orderSupport')}
                       </a>
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-center align-middle">
+                  <td className={`${glow} text-center`}>
                     {order.status === 'completed' && order.result_file_url ? (
                       <a
                         href={order.result_file_url}
                         download
-                        className="inline-flex h-9 items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-3 text-xs font-bold uppercase tracking-wide text-primary transition-colors hover:bg-primary/20"
+                        className={`${action} border border-primary/40 bg-primary/10 text-primary hover:bg-primary/20`}
                       >
-                        <Download className="h-3.5 w-3.5" />
+                        <Download className="h-4 w-4" />
                         {t('downloadFile')}
                       </a>
                     ) : (
