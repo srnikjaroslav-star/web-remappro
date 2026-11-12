@@ -1179,7 +1179,7 @@ const OrderPage = () => {
                           })}
                         </div>
                         {group.category === 'Emission Control' && (
-                          <p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] leading-relaxed text-amber-100">
+                          <p className="mt-2 rounded-lg border border-red-500 bg-[rgba(255,0,0,0.1)] px-3 py-2 text-[11px] leading-relaxed text-[#ffe14d]">
                             {t('offroadDisclaimer')}
                           </p>
                         )}
