@@ -1166,7 +1166,6 @@ const ManagementPortal = () => {
 
   const STATUS_TEXT_COLOR: Record<string, string> = {
     all: '#00eaff',
-    paid: '#22c55e',
     pending: '#facc15',
     processing: '#06b6d4',
     completed: '#22c55e',
@@ -1294,7 +1293,6 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
               style={{ color: STATUS_TEXT_COLOR[statusFilter] || STATUS_TEXT_COLOR.all }}
             >
               <option value="all" style={{ color: STATUS_TEXT_COLOR.all, backgroundColor: '#050505', fontSize: '16px' }}>Všetky</option>
-              <option value="paid" style={{ color: STATUS_TEXT_COLOR.paid, backgroundColor: '#050505', fontSize: '16px' }}>Zaplatené</option>
               <option value="pending" style={{ color: STATUS_TEXT_COLOR.pending, backgroundColor: '#050505', fontSize: '16px' }}>Čakajúce</option>
               <option value="processing" style={{ color: STATUS_TEXT_COLOR.processing, backgroundColor: '#050505', fontSize: '16px' }}>V Procese</option>
               <option value="completed" style={{ color: STATUS_TEXT_COLOR.completed, backgroundColor: '#050505', fontSize: '16px' }}>Dokončené</option>
