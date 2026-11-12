@@ -530,7 +530,15 @@ const OrderPage = () => {
     });
   };
 
-  const validate = (): FieldErrors => {
+  const orderEmail = (source: ClientBilling) => {
+    const profileEmail = source.email.trim();
+    const accountEmail = (authUser?.email ?? '').trim();
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(profileEmail)) return profileEmail;
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(accountEmail)) return accountEmail;
+    return profileEmail || accountEmail;
+  };
+
+  const validate = (source: ClientBilling = billing): FieldErrors => {
     const next: FieldErrors = {};
     if (!vehicle.brand.trim()) next.brand = 'errorBrand';
     if (!vehicle.model.trim()) next.model = 'errorModel';
@@ -540,9 +548,12 @@ const OrderPage = () => {
     if (vehicle.fuelType !== 'Diesel' && vehicle.fuelType !== 'Petrol') next.fuelType = 'errorFuel';
     if (!selectedFile) next.file = 'errorFile';
     if (services.length === 0) next.services = 'errorServices';
-    if (!orderDisplayName(billing)) next.name = 'errorName';
-    if (!billing.email.trim()) next.email = 'errorEmail';
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(billing.email)) next.email = 'errorEmailInvalid';
+    if (authUser) {
+      if (!orderDisplayName(source)) next.name = 'errorName';
+      const email = orderEmail(source);
+      if (!email) next.email = 'errorEmail';
+      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) next.email = 'errorEmailInvalid';
+    }
     if (!legalConsentAgreed) next.consent = 'errorConsent';
     return next;
   };
@@ -552,10 +563,22 @@ const OrderPage = () => {
     .join('\n');
 
   const payWithCredits = async () => {
-    const nextErrors = validate();
+    let source = billing;
+    if (authUser && !profileReady) {
+      const loaded = await loadClientBilling(authUser);
+      if (loaded) {
+        source = loaded;
+        setBilling(loaded);
+        setProfileReady(true);
+      }
+    }
+    const nextErrors = validate(source);
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) {
-      toast.error(t('toastCheckFields'));
+      const profileMissing = Boolean(nextErrors.name || nextErrors.email);
+      const formInvalid = Object.keys(nextErrors).some((key) => key !== 'name' && key !== 'email');
+      if (profileMissing) toast.error(t('profileOrderRequired'));
+      if (formInvalid) toast.error(t('toastCheckFields'));
       return;
     }
     if (!authUser) {
@@ -584,21 +607,22 @@ const OrderPage = () => {
       }
       toast.dismiss('upload');
 
-      await saveClientBilling(authUser.id, billing);
+      const profileForOrder = { ...source, email: orderEmail(source) };
+      await saveClientBilling(authUser.id, profileForOrder);
       await supabase.auth.updateUser({
         data: {
-          first_name: billing.firstName.trim(),
-          last_name: billing.lastName.trim(),
-          full_name: joinProfileName(billing.firstName, billing.lastName),
-          company: billing.company.trim(),
+          first_name: source.firstName.trim(),
+          last_name: source.lastName.trim(),
+          full_name: joinProfileName(source.firstName, source.lastName),
+          company: source.company.trim(),
         },
       }).catch(() => undefined);
 
       const invoked = await supabase.functions.invoke('pay-with-credits', {
         body: {
           serviceIds: services,
-          customerName: orderDisplayName(billing),
-          customerEmail: billing.email,
+          customerName: orderDisplayName(source),
+          customerEmail: profileForOrder.email,
           brand: vehicle.brand,
           model: vehicle.model,
           fuelType: vehicle.fuelType,
@@ -1024,85 +1048,6 @@ const OrderPage = () => {
                   <span className="mt-1.5 block text-right text-[11px] text-muted-foreground">{customerNote.length}/500</span>
                 </label>
               </section>
-
-              {authUser && (
-                <section className="order-panel !rounded-md p-4 md:p-5">
-                  <div className="mb-4 flex items-center justify-between gap-3">
-                    <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-primary">{t('profileBilling')}</h2>
-                    <button
-                      type="button"
-                      onClick={() => setPortalView('profile')}
-                      className="text-[11px] font-bold uppercase tracking-wide text-primary transition-colors hover:text-foreground"
-                    >
-                      {t('myProfile')}
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <label className="block sm:col-span-2">
-                      <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t('profilePhone')}</span>
-                      <input
-                        type="tel"
-                        value={billing.phone}
-                        onChange={(event) => updateBilling({ ...billing, phone: event.target.value })}
-                        autoComplete="tel"
-                        placeholder="+421 900 000 000"
-                        className={fieldClass(isFilled(billing.phone), false)}
-                      />
-                    </label>
-                    <label className="block sm:col-span-2">
-                      <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t('profileStreet')}</span>
-                      <input
-                        type="text"
-                        value={billing.street}
-                        onChange={(event) => updateBilling({ ...billing, street: event.target.value })}
-                        autoComplete="street-address"
-                        className={fieldClass(isFilled(billing.street), false)}
-                      />
-                    </label>
-                    <label className="block">
-                      <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t('profileCity')}</span>
-                      <input
-                        type="text"
-                        value={billing.city}
-                        onChange={(event) => updateBilling({ ...billing, city: event.target.value })}
-                        autoComplete="address-level2"
-                        className={fieldClass(isFilled(billing.city), false)}
-                      />
-                    </label>
-                    <label className="block">
-                      <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t('profilePostal')}</span>
-                      <input
-                        type="text"
-                        value={billing.postalCode}
-                        onChange={(event) => updateBilling({ ...billing, postalCode: event.target.value })}
-                        autoComplete="postal-code"
-                        className={fieldClass(isFilled(billing.postalCode), false)}
-                      />
-                    </label>
-                    <label className="block">
-                      <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t('profileVat')}</span>
-                      <input
-                        type="text"
-                        value={billing.vatId}
-                        onChange={(event) => updateBilling({ ...billing, vatId: event.target.value })}
-                        autoComplete="off"
-                        placeholder="SK0000000000"
-                        className={fieldClass(isFilled(billing.vatId), false)}
-                      />
-                    </label>
-                    <label className="block">
-                      <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t('profileTax')}</span>
-                      <input
-                        type="text"
-                        value={billing.taxId}
-                        onChange={(event) => updateBilling({ ...billing, taxId: event.target.value })}
-                        autoComplete="off"
-                        className={fieldClass(isFilled(billing.taxId), false)}
-                      />
-                    </label>
-                  </div>
-                </section>
-              )}
             </div>
 
             <aside className="sticky top-16 z-20 min-w-0 self-start lg:col-span-4">
@@ -1200,68 +1145,6 @@ const OrderPage = () => {
                 </div>
 
                 <div className="shrink-0 space-y-3 border-t border-primary/20 bg-black/45 p-4">
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">{t('profileTitle')}</p>
-                      {authUser && (
-                        <button
-                          type="button"
-                          onClick={() => setPortalView('profile')}
-                          className="text-[11px] font-bold uppercase tracking-wide text-primary transition-colors hover:text-foreground"
-                        >
-                          {t('myProfile')}
-                        </button>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <label className="block">
-                        <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t('signUpFirstName')}</span>
-                        <input
-                          type="text"
-                          value={billing.firstName}
-                          onChange={(event) => updateBilling({ ...billing, firstName: event.target.value })}
-                          autoComplete="given-name"
-                          className={fieldClass(isFilled(billing.firstName), Boolean(errors.name))}
-                        />
-                      </label>
-                      <label className="block">
-                        <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t('signUpLastName')}</span>
-                        <input
-                          type="text"
-                          value={billing.lastName}
-                          onChange={(event) => updateBilling({ ...billing, lastName: event.target.value })}
-                          autoComplete="family-name"
-                          className={fieldClass(isFilled(billing.lastName), Boolean(errors.name))}
-                        />
-                      </label>
-                      <label className="col-span-2 block">
-                        <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t('profileCompany')}</span>
-                        <input
-                          type="text"
-                          value={billing.company}
-                          onChange={(event) => updateBilling({ ...billing, company: event.target.value })}
-                          autoComplete="organization"
-                          placeholder={t('profileCompanyPlaceholder')}
-                          className={fieldClass(isFilled(billing.company), Boolean(errors.name) && !orderDisplayName(billing))}
-                        />
-                      </label>
-                      {errors.name && <p className="col-span-2 text-xs text-red-400">{t(errors.name)}</p>}
-                      <label className="col-span-2 block">
-                        <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t('email')}</span>
-                        <input
-                          type="email"
-                          value={billing.email}
-                          onChange={(event) => updateBilling({ ...billing, email: event.target.value })}
-                          autoComplete="email"
-                          placeholder={t('emailPlaceholder')}
-                          className={fieldClass(isFilled(billing.email), Boolean(errors.email))}
-                        />
-                        {errors.email && <p className="mt-1 text-xs text-red-400">{t(errors.email)}</p>}
-                      </label>
-                    </div>
-                    {authUser && <p className="text-[11px] leading-relaxed text-muted-foreground">{t('profileOrderHint')}</p>}
-                  </div>
-
                   <label
                     className={`flex cursor-pointer items-start gap-2.5 rounded-lg border px-3 py-2.5 text-[11px] leading-relaxed ${
                       legalConsentAgreed

@@ -104,24 +104,16 @@ const ClientCredits = ({ onlineIds }: ClientCreditsProps) => {
   return (
     <div className="h-fit w-full shrink-0 rounded-xl border border-primary/20 bg-background/40 shadow-[0_0_30px_rgba(59,130,246,0.15)] backdrop-blur-xl">
       <div className="flex items-center gap-3 border-b border-primary/30 bg-[#0a192f] px-4 py-2.5">
-        <div
-          className="mr-auto inline-flex h-[42px] shrink-0 items-stretch overflow-hidden rounded-md border border-primary/40 bg-[#070d16] shadow-[0_0_16px_rgba(0,242,255,0.22)]"
-          aria-live="polite"
-          aria-label="Stav prihlásenia klientov"
-        >
-          <div className="flex items-center gap-2 border-r border-primary/30 px-3">
+        <div className="mr-auto inline-flex h-[42px] shrink-0 items-center gap-3" aria-live="polite" aria-label="Stav prihlásenia klientov">
+          <div className="inline-flex h-[42px] shrink-0 items-center gap-2 rounded-md border border-primary/70 bg-primary/15 px-4 text-sm font-bold uppercase tracking-wide text-primary shadow-[0_0_16px_rgba(0,242,255,0.28)]">
             <ConnectionDot online decorative label="Prihlásení" />
-            <span className="text-xs font-bold uppercase tracking-wide text-white">Prihlásení</span>
-            <span className="min-w-[1.25rem] text-lg font-black tabular-nums leading-none text-green-400">
-              {loading ? '—' : onlineCount}
-            </span>
+            <span>Prihlásení</span>
+            <span className="text-3xl font-bold leading-none tabular-nums text-green-500 [text-shadow:0_0_6px_rgba(34,197,94,1),0_0_14px_rgba(34,197,94,0.85)]">{loading ? '—' : onlineCount}</span>
           </div>
-          <div className="flex items-center gap-2 px-3">
+          <div className="inline-flex h-[42px] shrink-0 items-center gap-2 rounded-md border border-primary/70 bg-primary/15 px-4 text-sm font-bold uppercase tracking-wide text-primary shadow-[0_0_16px_rgba(0,242,255,0.28)]">
             <ConnectionDot online={false} decorative label="Odhlásení" />
-            <span className="text-xs font-bold uppercase tracking-wide text-white">Odhlásení</span>
-            <span className="min-w-[1.25rem] text-lg font-black tabular-nums leading-none text-red-400">
-              {loading ? '—' : offlineCount}
-            </span>
+            <span>Odhlásení</span>
+            <span className="text-3xl font-bold leading-none tabular-nums text-red-500 [text-shadow:0_0_6px_rgba(239,68,68,1),0_0_14px_rgba(239,68,68,0.85)]">{loading ? '—' : offlineCount}</span>
           </div>
         </div>
         <div className="relative w-56 shrink-0">
