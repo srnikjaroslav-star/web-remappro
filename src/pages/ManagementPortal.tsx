@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { 
   Download, Upload, Eye, CheckCircle,
-  RefreshCw, Search, Power, Save, Trash2, LogOut, FileText, X, RotateCcw
+  RefreshCw, Search, Power, Save, Trash2, LogOut, FileText, X
 } from 'lucide-react';
 import SystemStatus, { fetchSystemStatusFromDB, setSystemStatusInDB, isSystemOnline, SystemStatusMode } from '@/components/SystemStatus';
 import NavLogo from '@/components/NavLogo';
@@ -18,15 +18,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { useOnlineClients } from '@/lib/clientPresence';
 import { supabase } from '@/lib/supabase';
 import { statusAfterClientFileDownload, statusAfterResultDelivery } from '@/lib/orderStatus';
@@ -37,9 +28,32 @@ import { loadServiceCatalog, lookupServiceName } from '@/lib/serviceCatalog';
 import ClientCredits from '@/components/ClientCredits';
 import AdminServices from '@/components/AdminServices';
 import OpeningHours from '@/components/OpeningHours';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
+
+type RevenueOrder = { status?: string; total_price?: number | string | null; created_at?: string | null };
+
+const pricedAmount = (order: RevenueOrder) => {
+  if (order.status === 'cancelled') return 0;
+  const rawPrice = typeof order.total_price === 'string'
+    ? parseFloat(order.total_price)
+    : Number(order.total_price || 0);
+  if (!Number.isFinite(rawPrice) || rawPrice === 0) return 0;
+  return Math.abs(rawPrice);
+};
+
+const orderRevenue = (rows: RevenueOrder[]) => rows.reduce((sum, order) => sum + pricedAmount(order), 0);
+
+const isCreatedToday = (createdAt?: string | null, now = new Date()) => {
+  if (!createdAt) return false;
+  const created = new Date(createdAt);
+  if (Number.isNaN(created.getTime())) return false;
+  return created.getFullYear() === now.getFullYear()
+    && created.getMonth() === now.getMonth()
+    && created.getDate() === now.getDate();
+};
+
+const todayOrderRevenue = (rows: RevenueOrder[], now = new Date()) => (
+  rows.reduce((sum, order) => sum + (isCreatedToday(order.created_at, now) ? pricedAmount(order) : 0), 0)
+);
 
 const ManagementPortal = () => {
   const navigate = useNavigate();
@@ -60,29 +74,12 @@ const ManagementPortal = () => {
   const [noteModalOrder, setNoteModalOrder] = useState<Order | null>(null);
   const [detailOrder, setDetailOrder] = useState<Order | null>(null);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
-  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
-  const [pendingCancelOrder, setPendingCancelOrder] = useState<Order | null>(null);
-  const [refundReason, setRefundReason] = useState('');
-  const [refundAmount, setRefundAmount] = useState<string>('');
-  const [taxPointDate, setTaxPointDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [refundIban, setRefundIban] = useState<string>('');
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
-  const [financialStats, setFinancialStats] = useState<{ grossRevenue: number; refunds: number; netRevenue: number } | null>(null);
+  const [financialStats, setFinancialStats] = useState<{ grossRevenue: number; todayRevenue: number } | null>(null);
   const [section, setSection] = useState<'orders' | 'clients' | 'services' | 'hours'>('orders');
   const onlineIds = useOnlineClients(!isCheckingAuth);
-  
-  // NEW: Refund Wizard Modal State
-  const [refundModalOpen, setRefundModalOpen] = useState(false);
-  const [refundModalOrder, setRefundModalOrder] = useState<Order | null>(null);
-  const [refundWizardAmount, setRefundWizardAmount] = useState<string>('');
-  const [refundWizardReason, setRefundWizardReason] = useState('');
-  const [issuingCreditNote, setIssuingCreditNote] = useState(false);
-  
-  // Aliasy pre kompatibilitu
-  const isRefundModalOpen = refundModalOpen;
-  const setIsRefundModalOpen = setRefundModalOpen;
-  const selectedOrderForRefund = refundModalOrder;
-  const setSelectedOrderForRefund = setRefundModalOrder;
+  const [cancelConfirmOrder, setCancelConfirmOrder] = useState<Order | null>(null);
+  const [cancellingOrder, setCancellingOrder] = useState(false);
 
   // Check authentication on mount - only allow specific email
   useEffect(() => {
@@ -246,6 +243,13 @@ const ManagementPortal = () => {
     };
   }, [isCheckingAuth]);
 
+  useEffect(() => {
+    setFinancialStats({
+      grossRevenue: orderRevenue(orders),
+      todayRevenue: todayOrderRevenue(orders),
+    });
+  }, [orders]);
+
   // Sync detailOrder with orders array when invoice_number or important_note changes
   useEffect(() => {
     if (detailOrder) {
@@ -373,23 +377,6 @@ const ManagementPortal = () => {
     }
   };
 
-  // IBAN Extractor function
-  const extractIban = (order: Order): string | null => {
-    // Try to extract IBAN from customer_notes
-    if (order.customer_note) {
-      const ibanRegex = /[A-Z]{2}\d{2}[A-Z0-9]{4,30}/gi;
-      const matches = order.customer_note.match(ibanRegex);
-      if (matches && matches.length > 0) {
-        return matches[0].toUpperCase().replace(/\s/g, '');
-      }
-    }
-    
-    // Try to extract from Stripe metadata (if available)
-    // Note: This would require fetching Stripe session data
-    // For now, return null if not found in customer_notes
-    return null;
-  };
-
   // Log activity function
   const logActivity = async (orderId: string, action: string, details: Record<string, any>, adminId?: string) => {
     try {
@@ -432,59 +419,17 @@ const ManagementPortal = () => {
   // Calculate financial statistics
   const calculateFinancialStats = async () => {
     try {
-      // Try to select with refund_amount, but fallback to basic fields if column doesn't exist
-      let ordersData: any[] = [];
-      let error: any = null;
-      
-      try {
-        const result = await supabase
-          .from('orders')
-          .select('total_price, invoice_number, credit_note_number, refund_amount');
-        ordersData = result.data || [];
-        error = result.error;
-      } catch (err: any) {
-        // If refund_amount column doesn't exist, select without it
-        if (err?.message?.includes('refund_amount') || err?.code === 'PGRST204') {
-          console.warn('[calculateFinancialStats] refund_amount column not found, using basic fields');
-          const result = await supabase
-            .from('orders')
-            .select('total_price, invoice_number, credit_note_number');
-          ordersData = result.data || [];
-          error = result.error;
-        } else {
-          throw err;
-        }
-      }
-      
+      const result = await supabase
+        .from('orders')
+        .select('total_price, status, created_at');
+      const ordersData = result.data || [];
+      const error = result.error;
+
       if (error) throw error;
-      
-      let grossRevenue = 0;
-      let refunds = 0;
-      
-      (ordersData || []).forEach((order: any) => {
-        const price = typeof order.total_price === 'string' 
-          ? parseFloat(order.total_price) 
-          : (order.total_price || 0);
-        
-        // Add to gross revenue if invoice exists
-        if (order.invoice_number) {
-          grossRevenue += price;
-        }
-        
-        // Add to refunds if credit note exists
-        if (order.credit_note_number) {
-          // Use refund_amount if available, otherwise use full price
-          const refundAmount = order.refund_amount !== undefined && order.refund_amount !== null
-            ? (typeof order.refund_amount === 'string' ? parseFloat(order.refund_amount) : order.refund_amount)
-            : price;
-          refunds += Math.abs(refundAmount || 0);
-        }
-      });
-      
+
       setFinancialStats({
-        grossRevenue,
-        refunds,
-        netRevenue: grossRevenue - refunds,
+        grossRevenue: orderRevenue(ordersData),
+        todayRevenue: todayOrderRevenue(ordersData),
       });
     } catch (error) {
       console.error('[calculateFinancialStats] Error calculating stats:', error);
@@ -494,51 +439,7 @@ const ManagementPortal = () => {
   const handleStatusChange = async (orderId: string, newStatus: string) => {
     console.log('Updating order status:', { orderId, newStatus });
     
-    // THE REFUND CONNECTION: If changing to cancelled, COMPLETELY STOP old logic and redirect to processFullRefund
-    if (newStatus === 'cancelled') {
-      const order = orders.find(o => o.id === orderId);
-      if (!order) {
-        toast.error('Objednávka nebola nájdená');
-        return;
-      }
-      
-      // Extract IBAN if available
-      const extractedIban = extractIban(order);
-      if (extractedIban) {
-        setRefundIban(extractedIban);
-      }
-      
-      // Set default refund amount to 100% of total price
-      const totalPrice = typeof order.total_price === 'string' 
-        ? parseFloat(order.total_price) 
-        : (order.total_price || 0);
-      
-      // If total_price is 0, use window.prompt to request amount
-      if (totalPrice === 0 || isNaN(totalPrice) || !totalPrice) {
-        const manualAmount = window.prompt('Order price is 0. Enter refund amount:');
-        if (!manualAmount || manualAmount.trim() === '') {
-          toast.error('Refund amount is required');
-          return;
-        }
-        const parsedAmount = parseFloat(manualAmount.trim());
-        if (isNaN(parsedAmount) || parsedAmount <= 0) {
-          toast.error('Please enter a valid amount greater than zero');
-          return;
-        }
-        setRefundAmount(parsedAmount.toFixed(2));
-      } else {
-        setRefundAmount(totalPrice.toFixed(2));
-      }
-      
-      // Set tax point date to today
-      setTaxPointDate(new Date().toISOString().split('T')[0]);
-      setRefundReason('');
-      
-      // Show dialog - when confirmed, it will call processFullRefund
-      setPendingCancelOrder(order);
-      setCancelDialogOpen(true);
-      return; // STOP - don't proceed with normal status change
-    }
+    if (newStatus === 'cancelled') return;
     
     // For other statuses, proceed normally
     await executeStatusChange(orderId, newStatus);
@@ -555,14 +456,7 @@ const ManagementPortal = () => {
     setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o)));
 
     try {
-      // If changing to cancelled, multiply total_price by -1 for credit note
-      const updateData: any = { status: newStatus };
-      if (newStatus === 'cancelled' && order?.total_price) {
-        const totalPrice = typeof order.total_price === 'string' 
-          ? parseFloat(order.total_price) 
-          : order.total_price;
-        updateData.total_price = -Math.abs(totalPrice);
-      }
+      const updateData: { status: string } = { status: newStatus };
 
       const { data, error } = await supabase
         .from('orders')
@@ -645,454 +539,110 @@ const ManagementPortal = () => {
     }
   };
 
-  // THE REFUND CONNECTION: processFullRefund - Complete refund workflow in one indivisible unit
-  const processFullRefund = async (orderId: string, amount: number, reason: string) => {
-    console.log('[processFullRefund] Starting complete refund workflow:', { orderId, amount, reason });
-    
-    // Show admin message
-    toast.info('Generujem dobropis a odosielam refund email...');
-    
-    const order = orders.find(o => o.id === orderId);
-    if (!order) {
-      toast.error('Objednávka nebola nájdená');
+  const readFunctionData = async <T,>(invoked: { data: T | null; error: { context?: Response; message?: string } | null }) => {
+    let data = invoked.data;
+    if (invoked.error && !data) {
+      try {
+        data = await invoked.error.context?.json();
+      } catch {
+        data = null;
+      }
+    }
+    return data;
+  };
+
+  const markOrderCancelled = (orderId: string) => {
+    setOrders((prev) => prev.map((item) => (item.id === orderId ? { ...item, status: 'cancelled' } : item)));
+    setDetailOrder((current) => (current?.id === orderId ? { ...current, status: 'cancelled' } : current));
+  };
+
+  const cancelOrderDirectly = async (order: Order) => {
+    if (order.status === 'cancelled') {
+      toast.info('Objednávka je už zrušená.');
+      setCancelConfirmOrder(null);
       return;
     }
 
-    try {
-      // KROK A (Dáta): Create refundData object
-      // total_price = original_price * -1
-      // document_type = 'CREDIT_NOTE'
-      const originalPrice = typeof order.total_price === 'string' 
-        ? parseFloat(order.total_price) 
-        : (order.total_price || 0);
-      const negativeAmount = -Math.abs(amount);
-      
-      // VALIDATION: Ensure amount is negative
-      if (negativeAmount >= 0) {
-        console.error('[processFullRefund] CRITICAL ERROR: Amount is not negative!', { amount, negativeAmount });
-        throw new Error('Dobropis musí mať zápornú sumu. Aktuálna suma: ' + amount);
-      }
-      
-      const vatRate = 0.20; // 20% VAT
-      const negativeSubtotal = negativeAmount / (1 + vatRate);
-      const negativeTaxAmount = negativeAmount - negativeSubtotal;
-
-      // Get original invoice number (if exists)
-      const originalInvoiceNumber = order.invoice_number || null;
-      
-      // Generate credit note number: CN- + original invoice number
-      let creditNoteNumber: string;
-      if (originalInvoiceNumber && originalInvoiceNumber.startsWith('INV-')) {
-        creditNoteNumber = originalInvoiceNumber.replace(/^INV-/, 'CN-');
-      } else {
-        // Fallback: Generate new number if no invoice exists
-        const year = new Date().getFullYear();
-        const random = Math.floor(1000 + Math.random() * 9000);
-        creditNoteNumber = `CN-${year}-${random}`;
-      }
-
-      // Prepare items - single item for refund
-      const items = [{
-        name: `Storno objednávky ${order.order_number || order.id.slice(0, 8)}`,
-        price: negativeAmount, // Already negative
-        quantity: 1
-      }];
-
-      // KROK A: Create refundData object
-      const refundData = {
-        orderId: order.id,
-        orderNumber: order.order_number || '',
-        customerName: order.customer_name || 'Customer',
-        customerEmail: order.customer_email,
-        items: items,
-        totalAmount: negativeAmount, // original_price * -1
-        subtotal: negativeSubtotal, // Negative subtotal
-        taxAmount: negativeTaxAmount, // Negative tax
-        brand: order.car_brand || order.brand,
-        model: order.car_model || order.model,
-        fuelType: order.fuel_type,
-        year: order.year,
-        ecuType: order.ecu_type,
-        vin: order.vin,
-        documentType: 'CREDIT_NOTE' as const, // document_type = 'CREDIT_NOTE'
-        creditNote: true,
-        is_credit_note: true,
-        originalInvoiceNumber: originalInvoiceNumber,
-        creditNoteNumber: creditNoteNumber,
-        refundAmount: negativeAmount,
-        refundReason: reason,
-        refundIban: refundIban,
-        taxPointDate: taxPointDate,
-      };
-
-      console.log('[processFullRefund] KROK A: refundData created:', refundData);
-
-      // KROK B (Generovanie): Call Edge function and WAIT for PDF URL
-      console.log('[processFullRefund] KROK B: Calling Edge function generate-invoice...');
-      
-      const { data: invoiceResponse, error: invoiceError } = await supabase.functions.invoke('generate-invoice', {
-        body: refundData,
-      });
-
-      // ERROR HANDLING: If PDF generation fails, DO NOT change status
-      if (invoiceError) {
-        console.error('[processFullRefund] KROK B FAILED: Credit note generation failed:', invoiceError);
-        toast.error(`Chyba pri generovaní dobropisu: ${invoiceError.message}. Status objednávky sa nezmenil.`);
-        throw new Error(`Chyba pri generovaní dobropisu: ${invoiceError.message}`);
-      }
-
-      console.log('[processFullRefund] KROK B SUCCESS: Credit note PDF generated and email sent by Edge function');
-
-      // KROK C: Edge function already sent the email with PDF attachment
-      // The Edge function (generate-invoice) handles:
-      // - PDF generation with negative amounts
-      // - Saving PDF to credit-notes bucket
-      // - Saving credit_note_number and credit_note_pdf to database
-      // - Sending email with PDF attachment
-      // So KROK C is already complete!
-
-      // Update order status to cancelled and save refund data
-      // Note: credit_note_number and credit_note_pdf are already saved by Edge function
-      const { error: updateError } = await supabase
-        .from('orders')
-        .update({
-          status: 'cancelled',
-          refund_amount: negativeAmount,
-          refund_reason: reason || null,
-          refund_iban: refundIban || null,
-          tax_point_date: taxPointDate || null,
-        })
-        .eq('id', orderId);
-
-      if (updateError) {
-        console.error('[processFullRefund] Failed to update order status:', updateError);
-        throw new Error(`Chyba pri aktualizácii statusu: ${updateError.message}`);
-      }
-
-      console.log('[processFullRefund] Complete refund workflow finished successfully');
-      await fetchOrders();
-      toast.success(`Dobropis ${creditNoteNumber} vygenerovaný a odoslaný zákazníkovi.`);
-      
-    } catch (error: any) {
-      console.error('[processFullRefund] Refund workflow failed:', error);
-      toast.error(`Chyba pri refundácii: ${error.message}. Status objednávky sa nezmenil.`);
-      // Refresh orders to revert any optimistic updates
-      await fetchOrders();
-      throw error;
-    }
-  };
-
-  // Legacy handleRefund - now redirects to processFullRefund
-  const handleRefund = async (orderId: string, amount: number, reason: string) => {
-    // Redirect to processFullRefund
-    return processFullRefund(orderId, amount, reason);
-  };
-
-  // NEW: openRefundModal - Opens the Refund Wizard Modal
-  const openRefundModal = (order: Order) => {
-    console.log('[openRefundModal] Opening refund modal for order:', order.id);
-    
-    // Set default refund amount to order.total_price
-    const totalPrice = typeof order.total_price === 'string' 
-      ? parseFloat(order.total_price) 
-      : (order.total_price || 0);
-    
-    setRefundWizardAmount(totalPrice > 0 ? totalPrice.toFixed(2) : '');
-    setRefundWizardReason('');
-    setRefundModalOrder(order);
-    setRefundModalOpen(true);
-  };
-
-  // NEW: handleIssueCreditNote - Final action when confirming refund
-  const handleIssueCreditNote = async () => {
-    if (!refundModalOrder) {
-      toast.error('Objednávka nebola nájdená');
-      return;
-    }
-
-    // Ak je v DB nula, vezmeme manualAmount z Modalu
-    const amountToRefund = parseFloat(refundWizardAmount) || refundModalOrder.total_price || 0;
-    
-    if (!amountToRefund || amountToRefund <= 0) {
-      toast.error('Chyba: Suma pre dobropis musí byť vyššia ako 0.');
-      return;
-    }
-
-    if (!refundWizardReason.trim()) {
-      toast.error('Prosím zadajte dôvod refundácie');
-      return;
-    }
-
-    setIssuingCreditNote(true);
-    toast.info('Generujem dobropis a odosielam refund email...');
-
-    try {
-      // Presmerovanie: Použi ŠPECIÁLNY modul pre dobropisy
-      console.log("Spúšťam ŠPECIÁLNY modul pre dobropisy...");
-      
-      const requestPayload = {
-        orderId: refundModalOrder.id,
-        orderNumber: refundModalOrder.order_number || '',
-        customerEmail: refundModalOrder.customer_email,
-        customerName: refundModalOrder.customer_name || undefined,
-        totalAmount: parseFloat(amountToRefund.toFixed(2)), // Posielame plusové, Edge funkcia ho otočí na -1
-        taxAmount: parseFloat(amountToRefund.toFixed(2)) * 0.20, // Výpočet DPH (ak si platca)
-        refundReason: refundWizardReason,
-      };
-      
-      // Debugging Frontendu: Console.log pred volaním funkcie
-      console.log("INVOKING FUNCTION generate-credit-note WITH:", requestPayload);
-      console.log('[handleIssueCreditNote] Sending request to generate-credit-note:', JSON.stringify(requestPayload, null, 2));
-      
-      const { data, error } = await supabase.functions.invoke('generate-credit-note', {
-        body: requestPayload,
-      });
-
-      if (error) {
-        console.error('[handleIssueCreditNote] Error:', error);
-        throw new Error(`Chyba pri generovaní dobropisu: ${error.message}`);
-      }
-
-      // Edge funkcia už aktualizovala databázu (status, refund_amount, credit_note_number, credit_note_pdf)
-      // Takže len refreshneme dáta
-      console.log('[handleIssueCreditNote] Credit note generated successfully:', data);
-
-      console.log('[handleIssueCreditNote] Dobropis úspešne vygenerovaný a odoslaný!');
-      await fetchOrders();
-      toast.success('Dobropis úspešne vygenerovaný a odoslaný!');
-      
-      // Close modal
-      setRefundModalOpen(false);
-      setRefundModalOrder(null);
-      setRefundWizardAmount('');
-      setRefundWizardReason('');
-      
-    } catch (error: any) {
-      console.error('[handleIssueCreditNote] Failed:', error);
-      toast.error(`Chyba: ${error.message}`);
-    } finally {
-      setIssuingCreditNote(false);
-    }
-  };
-
-  const generateAndSendCreditNote = async (order: Order, partialAmount?: number | null) => {
-    console.log('[generateAndSendCreditNote] Starting credit note generation for order:', order.id);
-    
-    // Use partial amount if provided, otherwise use full order amount
-    const totalAmount = typeof order.total_price === 'string' 
-      ? parseFloat(order.total_price) 
-      : (order.total_price || 0);
-    const refundAmountValue = partialAmount !== null && partialAmount !== undefined 
-      ? partialAmount 
-      : totalAmount;
-    
-    console.log('[generateAndSendCreditNote] Refund amount:', refundAmountValue, 'of', totalAmount, `(${((refundAmountValue / totalAmount) * 100).toFixed(1)}%)`);
-    
-    // Authorization moved to backend - Edge function has access to SERVICE_ROLE_KEY natively
-    console.log('[generateAndSendCreditNote] Calling Edge function - authorization handled on backend');
-
-    // Get original invoice number (if exists)
-    const originalInvoiceNumber = order.invoice_number || null;
-    
-    // Generate credit note number by replacing INV- prefix with CN- prefix
-    // If invoice is INV-2026-5857, credit note will be CN-2026-5857
-    let creditNoteNumber: string;
-    if (originalInvoiceNumber && originalInvoiceNumber.startsWith('INV-')) {
-      creditNoteNumber = originalInvoiceNumber.replace(/^INV-/, 'CN-');
-      console.log('[generateAndSendCreditNote] Original invoice:', originalInvoiceNumber);
-      console.log('[generateAndSendCreditNote] Credit note number (mirrored):', creditNoteNumber);
-    } else {
-      // Fallback: Generate new number if no invoice exists
-      const year = new Date().getFullYear();
-      const random = Math.floor(1000 + Math.random() * 9000);
-      creditNoteNumber = `CN-${year}-${random}`;
-      console.log('[generateAndSendCreditNote] No original invoice found, generating new credit note number:', creditNoteNumber);
-    }
-
-    // Get order items for credit note
-    // Try order_items table first, but fallback to service_type from orders table if it doesn't exist
-    let orderItemsData: any[] | null = null;
-    
-    try {
-      const { data, error } = await supabase
-        .from('order_items')
-        .select('*')
-        .eq('order_id', order.id);
-      
-      if (!error && data && data.length > 0) {
-        orderItemsData = data;
-        console.log('[generateAndSendCreditNote] Found order_items:', orderItemsData.length, 'items');
-      } else {
-        console.log('[generateAndSendCreditNote] order_items table not found or empty, using service_type from orders table');
-      }
-    } catch (err: any) {
-      console.warn('[generateAndSendCreditNote] order_items table may not exist:', err?.message);
-      // Continue with fallback
-    }
-
-    // Calculate negative amounts (THE MIRROR LOGIC)
-    // Use refundAmountValue from parameter, or full order amount if not specified
-    const originalTotalAmount = typeof order.total_price === 'string' 
-      ? parseFloat(order.total_price) 
-      : (order.total_price || 0);
-    
-    // THE PRICE RESCUE: If total_price is 0 or missing, use window.prompt to request amount
-    let refundAmountToUse = refundAmountValue !== null && refundAmountValue !== undefined 
-      ? refundAmountValue 
-      : originalTotalAmount;
-    
-    if (refundAmountToUse === 0 || isNaN(refundAmountToUse) || !refundAmountToUse) {
-      console.warn('[generateAndSendCreditNote] Total price is ZERO or missing - requesting manual input');
-      const manualAmount = window.prompt('Order price is 0. Enter refund amount:');
-      if (!manualAmount || manualAmount.trim() === '') {
-        toast.error('Refund amount is required');
-        return;
-      }
-      const parsedAmount = parseFloat(manualAmount.trim());
-      if (isNaN(parsedAmount) || parsedAmount <= 0) {
-        toast.error('Please enter a valid amount greater than zero');
-        return;
-      }
-      refundAmountToUse = parsedAmount;
-    }
-    
-    // Transform all amounts to negative (mirror logic)
-    const negativeTotalAmount = -Math.abs(refundAmountToUse);
-    const vatRate = 0.20; // 20% VAT
-    const negativeSubtotal = negativeTotalAmount / (1 + vatRate);
-    const negativeTaxAmount = negativeTotalAmount - negativeSubtotal;
-    
-    console.log('[generateAndSendCreditNote] THE MIRROR LOGIC - Transformed amounts:', {
-      originalTotal: originalTotalAmount,
-      refundAmount: refundAmountToUse,
-      negativeTotal: negativeTotalAmount,
-      negativeSubtotal: negativeSubtotal,
-      negativeTax: negativeTaxAmount,
-    });
-    
-    // CRITICAL: Final validation - ensure totalAmount is NOT zero and is valid
-    if (negativeTotalAmount === 0 || isNaN(negativeTotalAmount) || !isFinite(negativeTotalAmount)) {
-      console.error('[generateAndSendCreditNote] CRITICAL ERROR: Calculated negative total is ZERO or invalid!', {
-        negativeTotalAmount,
-        refundAmountToUse,
-        originalTotalAmount,
-      });
-      throw new Error('Cannot generate credit note: Calculated amount is zero or invalid. Please check order data.');
-    }
-
-    // Prepare items for credit note (with negative prices)
-    // If order_items exists, use it; otherwise use service_type from orders table
-    let items: Array<{ name: string; price: number; quantity: number }>;
-    
-    if (orderItemsData && orderItemsData.length > 0) {
-      // DATA EXTRACTION FIX: If item prices are zero, calculate from total_price
-      const itemsWithPrices = orderItemsData.map(item => {
-        const itemPrice = typeof item.price === 'string' ? parseFloat(item.price) : (item.price || 0);
-        // If item price is zero or missing, calculate from total
-        const finalPrice = itemPrice > 0 ? itemPrice : (Math.abs(negativeTotalAmount) / orderItemsData.length);
-        return {
-          name: item.service_type || item.name || 'Service',
-          price: -Math.abs(finalPrice), // Ensure negative
-          quantity: item.quantity || 1
-        };
-      });
-      
-      // Verify sum matches negativeTotalAmount (allow small rounding differences)
-      const itemsSum = itemsWithPrices.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-      const difference = Math.abs(itemsSum - negativeTotalAmount);
-      
-      if (difference > 0.01) {
-        // Adjust prices proportionally to match total
-        const adjustmentFactor = negativeTotalAmount / itemsSum;
-        items = itemsWithPrices.map(item => ({
-          ...item,
-          price: item.price * adjustmentFactor
-        }));
-        console.log('[generateAndSendCreditNote] Adjusted item prices to match total:', { itemsSum, negativeTotalAmount, adjustmentFactor });
-      } else {
-        items = itemsWithPrices;
-      }
-    } else {
-      // Fallback: Use service_type from orders table
-      // service_type can be an array or comma-separated string
-      const serviceTypes = Array.isArray(order.service_type) 
-        ? order.service_type 
-        : (typeof order.service_type === 'string' ? order.service_type.split(',').map(s => s.trim()) : []);
-      
-      if (serviceTypes.length > 0) {
-        const pricePerService = negativeTotalAmount / serviceTypes.length;
-        items = serviceTypes.map(serviceName => ({
-          name: serviceName.replace(/[\[\]"]/g, '').trim() || 'ECU Tuning Service',
-          price: pricePerService,
-          quantity: 1
-        }));
-      } else {
-        // FALLBACK: Create artificial item if order_items doesn't exist
-        // Single item with full negative amount
-        items = [{
-          name: `Refund of Order ${order.order_number || order.id.slice(0, 8)}`,
-          price: negativeTotalAmount, // Already negative
-          quantity: 1
-        }];
-        console.log('[generateAndSendCreditNote] Using fallback artificial item:', items[0]);
-      }
-    }
-    
-    // CRITICAL: Verify no zero prices
-    const hasZeroPrice = items.some(item => item.price === 0 || Math.abs(item.price) < 0.01);
-    if (hasZeroPrice) {
-      console.error('[generateAndSendCreditNote] CRITICAL ERROR: Found zero prices in items!', items);
-      throw new Error('Cannot generate credit note: Found zero prices in items. Please check order data.');
-    }
-    
-    console.log('[generateAndSendCreditNote] Prepared items for credit note:', items);
-    console.log('[generateAndSendCreditNote] Items total sum:', items.reduce((sum, item) => sum + (item.price * item.quantity), 0));
-
-    // Call generate-invoice function with documentType: 'CREDIT_NOTE' and transformed data
-    const requestPayload = {
-      orderId: order.id,
-      orderNumber: order.order_number || '',
-      customerName: order.customer_name || 'Customer',
-      customerEmail: order.customer_email,
-      items: items,
-      totalAmount: negativeTotalAmount, // Negative total (multiplied by -1)
-      subtotal: negativeSubtotal, // Negative subtotal (multiplied by -1)
-      taxAmount: negativeTaxAmount, // Negative tax (multiplied by -1)
-      brand: order.car_brand || order.brand,
-      model: order.car_model || order.model,
-      fuelType: order.fuel_type,
-      year: order.year,
-      ecuType: order.ecu_type,
-      vin: order.vin,
-      documentType: 'CREDIT_NOTE' as const, // Explicit document type parameter
-      creditNote: true, // Legacy flag for backward compatibility
-      originalInvoiceNumber: originalInvoiceNumber,
-      creditNoteNumber: creditNoteNumber,
-      refundAmount: negativeTotalAmount, // Store as negative for dashboard calculation
-      refundReason: refundReason,
-      refundIban: refundIban,
-      taxPointDate: taxPointDate,
-    };
-    
-    console.log('[generateAndSendCreditNote] Calling Edge function - backend handles authorization and DB updates');
-    
-    // Use supabase.functions.invoke - backend handles all authorization and DB updates
-    const { data: invoiceData, error: invoiceError } = await supabase.functions.invoke('generate-invoice', {
-      body: requestPayload,
-    });
-
+    const { data: invoiceRows, error: invoiceError } = await supabase
+      .from('invoices')
+      .select('user_id, amount, payment_method')
+      .eq('order_id', order.id);
     if (invoiceError) {
-      console.error('[generateAndSendCreditNote] Invoice generation failed:', invoiceError);
-      throw new Error(`Invoice generation failed: ${invoiceError.message}`);
+      toast.error(`Faktúru sa nepodarilo načítať: ${invoiceError.message}`);
+      return;
     }
 
-    console.log('[generateAndSendCreditNote] Credit note generated successfully - backend handled DB update');
-    
-    // Simple response handling - backend already updated the database
-    // Just refresh the orders list to show updated data
+    const creditInvoices = (invoiceRows ?? []).filter((row) => row.payment_method === 'credits' && row.user_id);
+    const refundTotal = Math.round(creditInvoices.reduce((sum, row) => sum + Number(row.amount), 0) * 100) / 100;
+    const userId = creditInvoices[0]?.user_id as string | undefined;
+
+    const { data: updated, error: updateError } = await supabase
+      .from('orders')
+      .update({ status: 'cancelled' })
+      .eq('id', order.id)
+      .select('id');
+    if (updateError || !updated?.length) {
+      toast.error(updateError?.message || 'Stav objednávky sa nepodarilo zmeniť.');
+      return;
+    }
+
+    if (refundTotal > 0 && userId) {
+      const adjusted = await supabase.functions.invoke('manage-clients', {
+        body: { action: 'adjust', userId, amount: refundTotal, direction: 'add' },
+      });
+      const adjustment = await readFunctionData<{ ok?: boolean; code?: string; message?: string }>(adjusted);
+      if (adjusted.error || !adjustment?.ok) {
+        markOrderCancelled(order.id);
+        setCancelConfirmOrder(null);
+        await fetchOrders();
+        await calculateFinancialStats();
+        toast.error(adjustment?.message || 'Objednávka je zrušená, ale kredity sa nepodarilo vrátiť.');
+        return;
+      }
+    }
+
+    markOrderCancelled(order.id);
+    setCancelConfirmOrder(null);
     await fetchOrders();
-    
-    toast.success(`Credit Note ${creditNoteNumber} generated and sent to customer. Balance adjusted.`);
+    await calculateFinancialStats();
+    toast.success(
+      refundTotal > 0
+        ? 'Objednávka bola zrušená a kredity boli vrátené klientovi.'
+        : 'Objednávka bola zrušená.',
+    );
+  };
+
+  const confirmCancelOrder = async () => {
+    const order = cancelConfirmOrder;
+    if (!order || cancellingOrder) return;
+    setCancellingOrder(true);
+    try {
+      const invoked = await supabase.functions.invoke('manage-clients', {
+        body: { action: 'cancel-order', orderId: order.id },
+      });
+      const data = await readFunctionData<{ ok?: boolean; refunded?: number; code?: string; message?: string }>(invoked);
+      if (data?.ok) {
+        markOrderCancelled(order.id);
+        setCancelConfirmOrder(null);
+        await fetchOrders();
+        await calculateFinancialStats();
+        toast.success(
+          data.refunded && data.refunded > 0
+            ? 'Objednávka bola zrušená a kredity boli vrátené klientovi.'
+            : 'Objednávka bola zrušená.',
+        );
+        return;
+      }
+      if (data?.code === 'INVALID_AMOUNT') {
+        await cancelOrderDirectly(order);
+        return;
+      }
+      toast.error(data?.message || 'Objednávku sa nepodarilo zrušiť.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Objednávku sa nepodarilo zrušiť.');
+    } finally {
+      setCancellingOrder(false);
+    }
   };
 
   const handleFieldChange = (orderId: string, field: 'checksum_crc' | 'internal_note', value: string) => {
@@ -1646,13 +1196,9 @@ const ManagementPortal = () => {
     }
   };
 
-  // Helper function to get display amount (negative for cancelled orders)
   const getDisplayAmount = (order: Order) => {
     const amount = parseFloat(order.total_price?.toString() || '0');
-    if (order.status === 'cancelled') {
-      return -Math.abs(amount); // Ensure negative for cancelled
-    }
-    return amount;
+    return Math.abs(amount);
   };
 
   useEffect(() => {
@@ -1814,35 +1360,35 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
         </div>
         {section === 'clients' ? <ClientCredits onlineIds={onlineIds} /> : section === 'services' ? <AdminServices /> : section === 'hours' ? <OpeningHours /> : (
         <>
-        <div className="mb-3 w-full grid grid-cols-1 xl:grid-cols-5 gap-4">
-          <div className="rounded-none p-3 bg-[#0f172a] border-t-4 border-t-cyan-400 shadow-[inset_0_0_28px_rgba(34,211,238,0.14)]">
-            <p className="uppercase text-sm text-white font-extrabold tracking-wide">Celkové tržby</p>
-            <p className="text-4xl font-black text-cyan-400 mt-1 leading-none">
+        <div className="mb-3 grid w-full grid-cols-5 gap-3">
+          <div className="min-w-0 rounded-none border-t-4 border-t-cyan-400 bg-[#0f172a] px-3 py-2.5 shadow-[inset_0_0_28px_rgba(34,211,238,0.14)]">
+            <p className="truncate text-xs font-extrabold uppercase tracking-wide text-white">Celkové tržby</p>
+            <p className="mt-1 text-3xl font-black leading-none text-cyan-400">
               {(financialStats?.grossRevenue ?? 0).toFixed(2)} €
             </p>
           </div>
-          <div className="rounded-none p-3 bg-[#0f172a] border-t-4 border-t-emerald-500 shadow-[inset_0_0_28px_rgba(16,185,129,0.14)]">
-            <p className="uppercase text-sm text-white font-extrabold tracking-wide">Čistý zisk</p>
-            <p className="text-4xl font-black text-emerald-400 mt-1 leading-none">
-              {(financialStats?.netRevenue ?? 0).toFixed(2)} €
+          <div className="min-w-0 rounded-none border-t-4 border-t-sky-400 bg-[#0f172a] px-3 py-2.5 shadow-[inset_0_0_28px_rgba(56,189,248,0.14)]">
+            <p className="truncate text-xs font-extrabold uppercase tracking-wide text-white">Dnešné tržby</p>
+            <p className="mt-1 text-3xl font-black leading-none text-sky-400">
+              {(financialStats?.todayRevenue ?? 0).toFixed(2)} €
             </p>
           </div>
-          <div className="rounded-none p-3 bg-[#0f172a] border-t-4 border-t-violet-500 shadow-[inset_0_0_28px_rgba(139,92,246,0.16)]">
-            <p className="uppercase text-sm text-white font-extrabold tracking-wide">Dobropisy</p>
-            <p className="text-4xl font-black text-violet-400 mt-1 leading-none">
-              -{Math.abs(financialStats?.refunds ?? 0).toFixed(2)} €
+          <div className="min-w-0 rounded-none border-t-4 border-t-[#eab308] bg-[#0f172a] px-3 py-2.5 shadow-[inset_0_0_28px_rgba(234,179,8,0.16)]">
+            <p className="truncate text-xs font-extrabold uppercase tracking-wide text-white">Čakajúce</p>
+            <p className="mt-1 text-3xl font-black leading-none text-[#facc15]">
+              {orders.filter((order) => order.status === 'pending').length}
             </p>
           </div>
-          <div className="rounded-none p-3 bg-[#0f172a] border-t-4 border-t-yellow-500 shadow-[inset_0_0_28px_rgba(234,179,8,0.16)]">
-            <p className="uppercase text-sm text-white font-extrabold tracking-wide">Čakajúce</p>
-            <p className="text-4xl font-black text-yellow-400 mt-1 leading-none">
-              {orders.filter((o) => o.status === 'pending').length}
+          <div className="min-w-0 rounded-none border-t-4 border-t-[#06b6d4] bg-[#0f172a] px-3 py-2.5 shadow-[inset_0_0_28px_rgba(6,182,212,0.16)]">
+            <p className="truncate text-xs font-extrabold uppercase tracking-wide text-white">V procese</p>
+            <p className="mt-1 text-3xl font-black leading-none text-[#06b6d4]">
+              {orders.filter((order) => order.status === 'processing').length}
             </p>
           </div>
-          <div className="rounded-none p-3 bg-[#0f172a] border-t-4 border-t-red-500 shadow-[inset_0_0_28px_rgba(239,68,68,0.14)]">
-            <p className="uppercase text-sm text-white font-extrabold tracking-wide">Zrušené</p>
-            <p className="text-4xl font-black text-red-400 mt-1 leading-none">
-              {orders.filter((o) => o.status === 'cancelled').length}
+          <div className="min-w-0 rounded-none border-t-4 border-t-[#ef4444] bg-[#0f172a] px-3 py-2.5 shadow-[inset_0_0_28px_rgba(239,68,68,0.14)]">
+            <p className="truncate text-xs font-extrabold uppercase tracking-wide text-white">Zrušené</p>
+            <p className="mt-1 text-3xl font-black leading-none text-[#ef4444]">
+              {orders.filter((order) => order.status === 'cancelled').length}
             </p>
           </div>
         </div>
@@ -1884,7 +1430,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                       const selected = active && edge !== 'last' ? picked : '';
                       return `px-4 py-2 align-middle border-r border-slate-800/60 ${selected}`;
                     };
-                    const actionCell = 'w-12 flex-1 min-h-[48px] inline-flex items-center justify-center border-l border-slate-700/50 rounded-none bg-cyan-950/30 transition-all duration-200';
+                    const actionCell = 'inline-flex h-full min-h-[48px] flex-1 basis-0 items-center justify-center overflow-hidden border-l border-slate-700/50 bg-cyan-950/30 transition-all duration-200';
                     const vehicle = [order.car_brand, order.car_model].map((part) => String(part ?? '').trim()).filter(Boolean).join(' ');
                     const documents: { number: string; href: string; title: string }[] = [];
                     if (order.invoice_number) {
@@ -1953,14 +1499,16 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                           onChange={(e) => handleStatusChange(order.id, e.target.value)}
                           className={`status-cell-select flex h-full min-h-[48px] w-full cursor-pointer appearance-none items-center justify-center border-0 px-4 text-center font-bold outline-none ${STATUS_CELL_CLASS[order.status] || STATUS_CELL_CLASS.pending}`}
                         >
+                          {order.status === 'cancelled' && (
+                            <option value="cancelled" disabled hidden>Zrušené</option>
+                          )}
                           <option value="pending" style={{ color: STATUS_TEXT_COLOR.pending, backgroundColor: '#050505' }}>Čakajúce</option>
                           <option value="processing" style={{ color: STATUS_TEXT_COLOR.processing, backgroundColor: '#050505' }}>V Procese</option>
                           <option value="completed" style={{ color: STATUS_TEXT_COLOR.completed, backgroundColor: '#050505' }}>Dokončené</option>
-                          <option value="cancelled" style={{ color: STATUS_TEXT_COLOR.cancelled, backgroundColor: '#050505' }}>Zrušené</option>
                         </select>
                       </td>
                       <td className="sticky right-0 z-10 h-px border-r border-slate-800/60 bg-[#070d16] p-0">
-                        <div className="flex h-full items-stretch justify-end gap-0 p-0">
+                        <div className="flex h-full w-full flex-nowrap items-stretch gap-0 p-0">
                           {order.file_url ? (
                             <button
                               onClick={() => handleDownload(order.file_url!, order.order_number || order.id.slice(0, 8), order.id)}
@@ -2005,24 +1553,10 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                           </button>
                           <button
                             type="button"
-                            onClick={() => order.status !== 'cancelled' && openRefundModal(order)}
-                            disabled={order.status === 'cancelled'}
-                            className={
-                              order.status === 'cancelled'
-                                ? `${actionCell} cursor-not-allowed text-slate-600`
-                                : `${actionCell} text-red-500 hover:bg-red-500/20 hover:border-red-500/40`
-                            }
-                            title="Vystaviť dobropis"
-                          >
-                            <RotateCcw className="w-5 h-5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              toast.info(
-                                `Delete pre ${order.order_number || order.id.slice(0, 8).toUpperCase()} je pripravené na CRUD napojenie.`
-                              )
-                            }
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setCancelConfirmOrder(order);
+                            }}
                             className={`${actionCell} text-red-500 hover:bg-red-500/20 hover:border-red-500/40`}
                             title="Zmazať objednávku"
                           >
@@ -2472,180 +2006,40 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
       </footer>
       </div>
 
-      {/* Cancel Order Confirmation Dialog */}
-      <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
-        <AlertDialogContent className="max-h-[90vh] overflow-y-auto border border-[rgba(0,242,255,0.45)] bg-[#070b10] shadow-[0_0_28px_rgba(0,242,255,0.22)] sm:max-w-[500px]">
+      <AlertDialog
+        open={cancelConfirmOrder !== null}
+        onOpenChange={(open) => {
+          if (!open && !cancellingOrder) setCancelConfirmOrder(null);
+        }}
+      >
+        <AlertDialogContent className="border border-red-500/80 bg-[#1a0b0b] shadow-[0_0_32px_rgba(239,68,68,0.45)] sm:max-w-[560px]">
           <AlertDialogHeader>
-            <AlertDialogTitle>Storno objednávky a vrátenie peňazí</AlertDialogTitle>
-            <AlertDialogDescription>
-              Vyplňte údaje pre vytvorenie dobropisu a storno objednávky.
+            <AlertDialogTitle className="text-xl font-black tracking-wide text-red-400">UPOZORNENIE</AlertDialogTitle>
+            <AlertDialogDescription className="text-base leading-6 text-white">
+              Naozaj chcete zrušiť túto objednávku? Ak už bola zaplatená, kredity budú automaticky vrátené na účet klienta.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="refund-amount">Suma na vrátenie (€)</Label>
-              <Input
-                id="refund-amount"
-                type="number"
-                step="0.01"
-                min="0.01"
-                placeholder="0.00"
-                value={refundAmount}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  if (value === '' || /^\d*\.?\d*$/.test(value)) {
-                    setRefundAmount(value);
-                  }
-                }}
-                className="h-12 font-mono text-xl leading-none [appearance:textfield] md:text-xl [&::-webkit-inner-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="refund-reason">Dôvod storna</Label>
-              <Textarea
-                id="refund-reason"
-                placeholder="Zadajte dôvod storna objednávky..."
-                value={refundReason}
-                onChange={(e) => setRefundReason(e.target.value)}
-                rows={3}
-                className="resize-none"
-              />
-            </div>
-          </div>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => {
-              setCancelDialogOpen(false);
-              setPendingCancelOrder(null);
-              setRefundAmount('');
-              setRefundReason('');
-            }}>
-              Zrušiť
+            <AlertDialogCancel
+              disabled={cancellingOrder}
+              className="border-slate-500 bg-transparent text-white hover:bg-white/10 hover:text-white"
+            >
+              Nie
             </AlertDialogCancel>
             <AlertDialogAction
-              onClick={async () => {
-                if (pendingCancelOrder) {
-                  const amount = parseFloat(refundAmount);
-                  if (isNaN(amount) || amount <= 0) {
-                    toast.error('Prosím zadajte platnú sumu väčšiu ako nula');
-                    return;
-                  }
-                  
-                  setCancelDialogOpen(false);
-                  try {
-                    await handleRefund(pendingCancelOrder.id, amount, refundReason);
-                    setPendingCancelOrder(null);
-                    setRefundAmount('');
-                    setRefundReason('');
-                  } catch (error: any) {
-                    console.error('[CancelDialog] Refund failed:', error);
-                    toast.error(error?.message || 'Chyba pri spracovaní refundácie');
-                  }
-                }
+              disabled={cancellingOrder}
+              onClick={(event) => {
+                event.preventDefault();
+                void confirmCancelOrder();
               }}
-              className="bg-red-500 hover:bg-red-600 text-white"
+              className="bg-red-600 text-white hover:bg-red-500"
             >
-              Vytvoriť dobropis
+              Áno, zrušiť
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* NEW: Refund Wizard Modal */}
-      <Dialog open={refundModalOpen} onOpenChange={setRefundModalOpen}>
-        <DialogContent hideCloseButton className="max-h-[90vh] overflow-y-auto overflow-x-hidden border border-[rgba(0,242,255,0.45)] bg-[#070b10] shadow-[0_0_28px_rgba(0,242,255,0.22)] sm:max-w-[500px]">
-          <div className="flex items-start justify-between gap-3">
-            <DialogHeader className="min-w-0 flex-1">
-              <DialogTitle className="flex items-start gap-2 break-words text-xl font-bold leading-snug text-foreground">
-                <RotateCcw className="w-5 h-5 text-red-500" />
-                Refundácia objednávky {refundModalOrder?.order_number || refundModalOrder?.id.slice(0, 8).toUpperCase()}
-              </DialogTitle>
-              <DialogDescription>
-                Vyplňte údaje pre vytvorenie dobropisu. Email s prílohou bude automaticky odoslaný zákazníkovi.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogClose className="shrink-0 rounded-lg p-2 text-muted-foreground transition-colors duration-200 hover:bg-red-500/15 hover:text-red-500">
-              <X className="h-5 w-5" />
-              <span className="sr-only">Zavrieť</span>
-            </DialogClose>
-          </div>
-          <div className="grid gap-4 py-4">
-            {refundModalOrder && (
-              <>
-                <div className="rounded-lg border border-[rgba(0,242,255,0.35)] bg-gradient-to-r from-cyan-500/15 to-secondary/40 px-3 py-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-cyan-300">Zákazník</p>
-                  <p className="break-words font-semibold text-foreground">{refundModalOrder.customer_name}</p>
-                  <p className="break-all text-sm text-white/80">{refundModalOrder.customer_email}</p>
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="refund-wizard-amount">Refund Amount (€)</Label>
-                  <Input
-                    id="refund-wizard-amount"
-                    type="number"
-                    step="0.01"
-                    min="0.01"
-                    placeholder="0.00"
-                    value={refundWizardAmount}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      if (value === '' || /^\d*\.?\d*$/.test(value)) {
-                        setRefundWizardAmount(value);
-                      }
-                    }}
-                    className="h-12 font-mono text-xl leading-none [appearance:textfield] md:text-xl [&::-webkit-inner-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Predvolená suma: {typeof refundModalOrder.total_price === 'string' 
-                      ? parseFloat(refundModalOrder.total_price).toFixed(2) 
-                      : (refundModalOrder.total_price || 0).toFixed(2)} €
-                  </p>
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="refund-wizard-reason">Reason for Credit Note</Label>
-                  <Textarea
-                    id="refund-wizard-reason"
-                    placeholder="Zadajte dôvod refundácie..."
-                    value={refundWizardReason}
-                    onChange={(e) => setRefundWizardReason(e.target.value)}
-                    rows={3}
-                    className="resize-none"
-                  />
-                </div>
-              </>
-            )}
-          </div>
-          <DialogFooter className="flex-wrap gap-2">
-            <button
-              onClick={() => {
-                setRefundModalOpen(false);
-                setRefundModalOrder(null);
-                setRefundWizardAmount('');
-                setRefundWizardReason('');
-              }}
-              className="rounded-lg border border-transparent bg-secondary px-4 py-2 text-foreground transition-all duration-200 hover:border-cyan-400/60 hover:bg-gray-800 hover:text-white hover:shadow-[0_0_16px_rgba(0,242,255,0.22)]"
-              disabled={issuingCreditNote}
-            >
-              Zrušiť
-            </button>
-            <button
-              onClick={handleIssueCreditNote}
-              disabled={issuingCreditNote || !refundWizardAmount || !refundWizardReason.trim()}
-              className="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            >
-              {issuingCreditNote ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  Spracovávam...
-                </>
-              ) : (
-                <>
-                  <RotateCcw className="w-4 h-4" />
-                  Potvrdiť a odoslať Dobropis
-                </>
-              )}
-            </button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </>
   );
 };

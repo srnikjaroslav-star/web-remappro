@@ -130,6 +130,106 @@ Deno.serve(async (req) => {
       return json({ ok: true, balance: Number(data?.balance) });
     }
 
+    if (body.action === "cancel-order") {
+      const orderId = String(body.orderId ?? "");
+      if (!/^[0-9a-f-]{36}$/i.test(orderId)) {
+        return json({ ok: false, code: "INVALID_ORDER" });
+      }
+
+      const { data: order, error: orderError } = await admin
+        .from("orders")
+        .select("id, status")
+        .eq("id", orderId)
+        .maybeSingle();
+      if (orderError || !order) {
+        return json({ ok: false, code: "NOT_FOUND", message: orderError?.message ?? "Order not found" });
+      }
+
+      const { data: transactions, error: transactionError } = await admin
+        .from("credit_transactions")
+        .select("user_id, amount")
+        .eq("order_id", orderId);
+      if (transactionError) {
+        return json({ ok: false, code: "SERVER", message: transactionError.message }, 500);
+      }
+
+      const rows = transactions ?? [];
+      let net = Math.round(rows.reduce((sum, row) => sum + Number(row.amount), 0) * 100) / 100;
+      let refundUserId = String(rows.find((row) => row.user_id)?.user_id ?? "");
+
+      if (rows.length === 0 && order.status !== "cancelled") {
+        const { data: invoiceRows, error: invoiceError } = await admin
+          .from("invoices")
+          .select("user_id, amount, payment_method")
+          .eq("order_id", orderId);
+        if (invoiceError) {
+          return json({ ok: false, code: "SERVER", message: invoiceError.message }, 500);
+        }
+        const creditInvoices = (invoiceRows ?? []).filter((row) => row.payment_method === "credits" && row.user_id);
+        const invoiceTotal = Math.round(
+          creditInvoices.reduce((sum, row) => sum + Number(row.amount), 0) * 100,
+        ) / 100;
+        if (invoiceTotal > 0) {
+          net = -invoiceTotal;
+          refundUserId = String(creditInvoices[0].user_id);
+        }
+      }
+
+      let refunded = 0;
+
+      if (net < 0) {
+        const userId = refundUserId;
+        if (!/^[0-9a-f-]{36}$/i.test(userId)) {
+          return json({ ok: false, code: "NO_ACCOUNT", message: "Credit payment has no client account." });
+        }
+        refunded = Math.round(-net * 100) / 100;
+
+        const { data: account, error: accountError } = await admin
+          .from("credit_accounts")
+          .select("balance")
+          .eq("user_id", userId)
+          .maybeSingle();
+        if (accountError || !account) {
+          return json({ ok: false, code: "NO_ACCOUNT", message: accountError?.message ?? "Credit account not found" });
+        }
+
+        const nextBalance = Math.round((Number(account.balance) + refunded) * 100) / 100;
+        const { error: balanceError } = await admin
+          .from("credit_accounts")
+          .update({ balance: nextBalance, updated_at: new Date().toISOString() })
+          .eq("user_id", userId);
+        if (balanceError) {
+          return json({ ok: false, code: "SERVER", message: balanceError.message }, 500);
+        }
+
+        const { error: insertError } = await admin.from("credit_transactions").insert({
+          user_id: userId,
+          amount: refunded,
+          order_id: orderId,
+          note: "Vrátenie za zrušenú objednávku",
+        });
+        if (insertError) {
+          await admin
+            .from("credit_accounts")
+            .update({ balance: Number(account.balance), updated_at: new Date().toISOString() })
+            .eq("user_id", userId);
+          return json({ ok: false, code: "SERVER", message: insertError.message }, 500);
+        }
+      }
+
+      if (order.status !== "cancelled") {
+        const { error: updateError } = await admin
+          .from("orders")
+          .update({ status: "cancelled" })
+          .eq("id", orderId);
+        if (updateError) {
+          return json({ ok: false, code: "SERVER", message: updateError.message }, 500);
+        }
+      }
+
+      return json({ ok: true, refunded });
+    }
+
     return json({ ok: false, code: "INVALID_AMOUNT" });
   } catch (error) {
     console.error("[manage-clients]", error);
