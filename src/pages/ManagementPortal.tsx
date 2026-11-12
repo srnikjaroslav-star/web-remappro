@@ -29,6 +29,7 @@ import {
 } from '@/components/ui/dialog';
 import { useOnlineClients } from '@/lib/clientPresence';
 import { supabase } from '@/lib/supabase';
+import { statusAfterClientFileDownload, statusAfterResultDelivery } from '@/lib/orderStatus';
 import { Order, ActivityLog } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { SERVICES } from '@/data/services';
@@ -1286,7 +1287,7 @@ const ManagementPortal = () => {
         .from('orders')
         .update({
           result_file_url: publicUrl,
-          status: 'completed',
+          status: statusAfterResultDelivery(currentOrder?.status ?? 'pending'),
         })
         .eq('id', orderId);
 
@@ -1298,7 +1299,7 @@ const ManagementPortal = () => {
       console.log('[handleResultUpload] Status updated - orderId:', orderId);
       
       // Update local state immediately
-      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'completed', result_file_url: publicUrl } : o));
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: statusAfterResultDelivery(o.status), result_file_url: publicUrl } : o));
 
       // Step 3: Get order data for email
       const order = orders.find(o => o.id === orderId);
@@ -1561,7 +1562,21 @@ const ManagementPortal = () => {
         return;
       }
 
-      // Force download for Supabase Storage URLs
+      const { data: promoted, error: updateError } = await supabase
+        .from('orders')
+        .update({ status: 'processing' })
+        .eq('id', orderId)
+        .in('status', ['pending', 'paid'])
+        .select('id');
+      if (updateError) console.error('DB UPDATE ERROR:', updateError);
+      if (promoted?.length) {
+        setOrders((currentOrders) =>
+          currentOrders.map((order) =>
+            order.id === orderId ? { ...order, status: statusAfterClientFileDownload(order.status) } : order,
+          ),
+        );
+      }
+
       try {
         const response = await fetch(publicUrl);
         const blob = await response.blob();
@@ -1571,27 +1586,10 @@ const ManagementPortal = () => {
         a.download = `order-${orderNumber || 'file'}-${fileName}`;
         document.body.appendChild(a);
         a.click();
-        
-        // Nekompromisný Update: Ihned po a.click() prepíš status na 'processing'
-        console.log('Sťahujem a prepínam ID:', orderId);
-        
-        // 1. Zápis do databázy
-        const { error: updateError } = await supabase
-          .from('orders')
-          .update({ status: 'processing' })
-          .eq('id', orderId);
-        if (updateError) console.error('DB UPDATE ERROR:', updateError);
-        
-        // 2. Okamžitá zmena v UI tabuľke
-        setOrders(currentOrders => 
-          currentOrders.map(o => o.id === orderId ? { ...o, status: 'processing' } : o)
-        );
-        
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
       } catch (err) {
         console.error('Download error:', err);
-        // Fallback: open in new tab
         window.open(publicUrl, '_blank');
       }
     } catch (error) {

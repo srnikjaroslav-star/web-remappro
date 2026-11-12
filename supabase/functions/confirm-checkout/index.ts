@@ -109,7 +109,7 @@ Deno.serve(async (req) => {
       ecu_type: metadata.ecu_type || null,
       service_type: serviceTypes.length > 0 ? serviceTypes : null,
       total_price: Number(amountTotal.toFixed(2)),
-      status: "processing",
+      status: "pending",
       legal_consent: metadata.legal_consent === "true",
       customer_note: metadata.customer_note || null,
       stripe_session_id: sessionId,

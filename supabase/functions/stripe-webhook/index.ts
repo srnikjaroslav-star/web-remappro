@@ -247,7 +247,7 @@ serve(async (req) => {
         vin: vin,  // VIN column - null if not provided
         service_type: serviceTypes.length > 0 ? serviceTypes : null,
         total_price: parseFloat(amountTotal),
-        status: "processing",
+        status: "pending",
         legal_consent: legalConsent,
         customer_note: customerNote || null,
         stripe_session_id: sessionId,
