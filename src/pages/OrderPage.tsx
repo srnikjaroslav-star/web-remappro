@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
-import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import ClientProfile from '@/components/ClientProfile';
 import NavLogo from '@/components/NavLogo';
@@ -38,15 +37,16 @@ import {
   Car,
   Check,
   CheckCircle2,
+  ChevronDown,
   Coins,
   Cpu,
   File,
   Fuel,
   Gauge,
+  Languages,
   List,
   Loader2,
   LogOut,
-  Search,
   Upload,
   UserRound,
   X,
@@ -102,6 +102,12 @@ const fieldClass = (filled: boolean, hasError: boolean) => {
   return 'input-field w-full !px-3 !py-2 text-sm';
 };
 
+const headerControl =
+  'inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border border-primary/50 bg-secondary px-3 text-sm font-medium text-primary shadow-[0_0_16px_rgba(0,242,255,0.35)] transition-colors hover:border-primary hover:bg-primary/20 hover:shadow-[0_0_16px_rgba(0,242,255,0.5)]';
+
+const headerControlActive =
+  'inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border border-primary bg-primary/20 px-3 text-sm font-medium text-primary shadow-[0_0_18px_rgba(0,242,255,0.5)] transition-colors';
+
 const formatSize = (bytes: number) => {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -111,6 +117,8 @@ const formatSize = (bytes: number) => {
 const OrderPage = () => {
   const { language, setLanguage, t } = useLanguage();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const languageMenuRef = useRef<HTMLDivElement>(null);
+  const [languageOpen, setLanguageOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [authUser, setAuthUser] = useState<User | null>(null);
@@ -304,6 +312,22 @@ const OrderPage = () => {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [loginOpen]);
+
+  useEffect(() => {
+    if (!languageOpen) return;
+    const onPointer = (event: PointerEvent) => {
+      if (!languageMenuRef.current?.contains(event.target as Node)) setLanguageOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setLanguageOpen(false);
+    };
+    window.addEventListener('pointerdown', onPointer);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('pointerdown', onPointer);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [languageOpen]);
 
   const accountLabel = accountDisplayName({
     name: joinProfileName(billing.firstName, billing.lastName),
@@ -681,32 +705,57 @@ const OrderPage = () => {
               <SystemStatus />
             </div>
             <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
-              <div
-                role="group"
-                aria-label={t('language')}
-                className="inline-flex items-center rounded-lg border border-border/60 bg-black/40 p-0.5 text-xs font-semibold"
-              >
-                {(['sk', 'en'] as const).map((code) => {
-                  const active = language === code;
-                  return (
-                    <button
-                      key={code}
-                      type="button"
-                      onClick={() => setLanguage(code)}
-                      aria-pressed={active}
-                      className={`rounded-md px-2.5 py-1.5 uppercase tracking-wide transition-colors ${
-                        active
-                          ? 'bg-primary/15 text-primary shadow-[0_0_12px_rgba(0,242,255,0.35)]'
-                          : 'text-muted-foreground hover:text-foreground'
-                      }`}
-                    >
-                      {code}
-                    </button>
-                  );
-                })}
+              <div ref={languageMenuRef} className="relative shrink-0">
+                <button
+                  type="button"
+                  aria-haspopup="listbox"
+                  aria-expanded={languageOpen}
+                  aria-label={t('language')}
+                  onClick={() => setLanguageOpen((open) => !open)}
+                  className={`${languageOpen ? headerControlActive : headerControl} uppercase tracking-wide`}
+                >
+                  <Languages className="h-4 w-4" />
+                  {language}
+                  <ChevronDown className={`h-4 w-4 transition-transform ${languageOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {languageOpen && (
+                  <div
+                    role="listbox"
+                    aria-label={t('language')}
+                    className="absolute right-0 top-[calc(100%+0.375rem)] z-50 min-w-full overflow-hidden rounded-lg border border-primary/50 bg-secondary py-1 shadow-[0_0_16px_rgba(0,242,255,0.35)]"
+                  >
+                    {([
+                      ['sk', 'Slovenčina'],
+                      ['en', 'English'],
+                    ] as const).map(([code, label]) => {
+                      const selected = language === code;
+                      return (
+                        <button
+                          key={code}
+                          type="button"
+                          role="option"
+                          aria-selected={selected}
+                          onClick={() => {
+                            setLanguage(code);
+                            setLanguageOpen(false);
+                          }}
+                          className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-medium transition-colors ${
+                            selected
+                              ? 'bg-primary/20 text-primary'
+                              : 'text-primary/80 hover:bg-primary/15 hover:text-primary'
+                          }`}
+                        >
+                          <span className="w-6 uppercase tracking-wide">{code}</span>
+                          <span className="whitespace-nowrap">{label}</span>
+                          {selected && <Check className="ml-auto h-3.5 w-3.5" strokeWidth={3} />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
               {authUser ? (
-                <div className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-primary/40 bg-black/50 px-2 py-0.5">
+                <div className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-primary/50 bg-secondary px-2 py-0.5 text-primary shadow-[0_0_16px_rgba(0,242,255,0.35)]">
                   <ConnectionDot
                     online={connected}
                     label={connected ? t('connectionOnline') : t('connectionOffline')}
@@ -714,12 +763,12 @@ const OrderPage = () => {
                   <button
                     type="button"
                     onClick={() => setPortalView('profile')}
-                    className="max-w-[9rem] truncate text-sm font-semibold leading-none text-foreground transition-colors hover:text-primary"
+                    className="max-w-[9rem] truncate text-sm font-medium leading-none text-primary transition-colors hover:text-foreground"
                     title={t('myProfile')}
                   >
                     {accountLabel || '—'}
                   </button>
-                  <span className="h-4 w-px shrink-0 bg-primary/35" aria-hidden="true" />
+                  <span className="h-4 w-px shrink-0 bg-primary/50" aria-hidden="true" />
                   <button
                     type="button"
                     onClick={showCreditBalance}
@@ -731,7 +780,7 @@ const OrderPage = () => {
                   <button
                     type="button"
                     onClick={signOut}
-                    className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-primary/50 bg-primary/10 px-2.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20"
+                    className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-primary/50 bg-secondary px-2.5 text-xs font-medium text-primary shadow-[0_0_12px_rgba(0,242,255,0.28)] transition-colors hover:border-primary hover:bg-primary/20"
                   >
                     <LogOut className="h-3.5 w-3.5" />
                     {t('signOut')}
@@ -745,7 +794,7 @@ const OrderPage = () => {
                     setAuthMode('sign-in');
                     setLoginOpen(true);
                   }}
-                  className="inline-flex h-8 items-center gap-2 rounded-lg border border-border/60 bg-black/40 px-2.5 text-xs font-semibold text-muted-foreground transition-colors hover:text-primary"
+                  className="inline-flex h-8 items-center gap-2 rounded-lg border border-primary/50 bg-secondary px-2.5 text-xs font-medium text-primary shadow-[0_0_16px_rgba(0,242,255,0.35)] transition-colors hover:border-primary hover:bg-primary/20"
                 >
                   <ConnectionDot online={false} label={t('connectionOffline')} />
                   {t('signIn')}
@@ -756,11 +805,7 @@ const OrderPage = () => {
                   type="button"
                   onClick={() => setPortalView('profile')}
                   aria-pressed={portalView === 'profile'}
-                  className={`inline-flex h-9 shrink-0 items-center gap-2 rounded-md border px-3 text-sm font-bold transition-colors ${
-                    portalView === 'profile'
-                      ? 'border-primary bg-primary/25 text-primary shadow-[0_0_18px_rgba(0,242,255,0.55)]'
-                      : 'border-primary/70 bg-primary/15 text-primary shadow-[0_0_16px_rgba(0,242,255,0.4)] hover:bg-primary/25'
-                  }`}
+                  className={portalView === 'profile' ? headerControlActive : headerControl}
                 >
                   <UserRound className="h-4 w-4" />
                   {t('myProfile')}
@@ -771,20 +816,12 @@ const OrderPage = () => {
                   type="button"
                   onClick={() => setPortalView('orders')}
                   aria-pressed={portalView === 'orders'}
-                  className={`inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border px-3 text-sm font-bold transition-colors ${
-                    portalView === 'orders'
-                      ? 'border-primary bg-primary/25 text-primary shadow-[0_0_18px_rgba(0,242,255,0.55)]'
-                      : 'border-primary/70 bg-primary/15 text-primary shadow-[0_0_16px_rgba(0,242,255,0.4)] hover:bg-primary/25'
-                  }`}
+                  className={portalView === 'orders' ? headerControlActive : headerControl}
                 >
                   <List className="h-4 w-4" />
                   {t('myOrders')}
                 </button>
               )}
-              <Link to="/track" className="flex items-center gap-2 rounded-xl border border-primary/70 bg-primary/15 px-4 py-2 text-sm font-medium text-primary shadow-[0_0_16px_rgba(0,242,255,0.4)] transition-colors hover:bg-primary/25">
-                <Search className="h-4 w-4" />
-                <span className="hidden sm:inline">{t('trackOrder')}</span>
-              </Link>
             </div>
           </div>
         </header>
