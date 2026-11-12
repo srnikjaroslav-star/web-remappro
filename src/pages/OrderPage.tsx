@@ -40,6 +40,8 @@ import {
   ChevronDown,
   Coins,
   Cpu,
+  Eye,
+  EyeOff,
   File,
   Fuel,
   Gauge,
@@ -141,6 +143,7 @@ const OrderPage = () => {
   const [loginLastName, setLoginLastName] = useState('');
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(() => authRemembered());
   const [loginError, setLoginError] = useState('');
   const [loginBusy, setLoginBusy] = useState(false);
@@ -312,7 +315,10 @@ const OrderPage = () => {
   }, [authUser]);
 
   useEffect(() => {
-    if (!loginOpen) return;
+    if (!loginOpen) {
+      setShowPassword(false);
+      return;
+    }
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setLoginOpen(false);
     };
@@ -1341,16 +1347,28 @@ const OrderPage = () => {
             {authMode !== 'reset' && (
               <label className="mb-4 block">
                 <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t('signInPassword')}</span>
-                <input
-                  type="password"
-                  value={loginPassword}
-                  onChange={(event) => setLoginPassword(event.target.value)}
-                  autoComplete={authMode === 'sign-up' ? 'new-password' : 'current-password'}
-                  required
-                  minLength={6}
-                  disabled={loginBusy}
-                  className="input-field w-full !px-3 !py-2 text-sm"
-                />
+                <span className="relative block">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={loginPassword}
+                    onChange={(event) => setLoginPassword(event.target.value)}
+                    autoComplete={authMode === 'sign-up' ? 'new-password' : 'current-password'}
+                    required
+                    minLength={6}
+                    disabled={loginBusy}
+                    className="input-field w-full !py-2 !pl-3 !pr-10 text-sm"
+                  />
+                  <button
+                    type="button"
+                    aria-label={showPassword ? t('hidePassword') : t('showPassword')}
+                    aria-pressed={showPassword}
+                    disabled={loginBusy}
+                    onClick={() => setShowPassword((current) => !current)}
+                    className="absolute right-1.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded text-primary/50 transition-colors hover:text-primary disabled:opacity-50"
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </span>
               </label>
             )}
             {authMode === 'sign-in' && (
