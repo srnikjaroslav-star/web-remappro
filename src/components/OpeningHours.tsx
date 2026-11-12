@@ -8,6 +8,7 @@ import {
   normalizeSchedule,
   saveSystemSettings,
   setSystemStatusInDB,
+  settingsMatch,
   type DayKey,
   type OpeningSchedule,
   type SystemSettings,
@@ -242,7 +243,8 @@ const OpeningHours = () => {
     const handleChange = (event: Event) => {
       const detail = (event as CustomEvent<SystemSettings>).detail;
       if (!detail?.mode || !detail.schedule) return;
-      setLive({ mode: detail.mode, schedule: normalizeSchedule(detail.schedule) });
+      const next = { mode: detail.mode, schedule: normalizeSchedule(detail.schedule) };
+      setLive((current) => (settingsMatch(current, next) ? current : next));
     };
     window.addEventListener('systemStatusChange', handleChange);
     return () => {
@@ -252,6 +254,7 @@ const OpeningHours = () => {
   }, []);
 
   const chooseMode = async (mode: SystemStatusMode) => {
+    if (mode === live.mode || modeBusy) return;
     setModeBusy(true);
     const ok = await setSystemStatusInDB(mode);
     setModeBusy(false);

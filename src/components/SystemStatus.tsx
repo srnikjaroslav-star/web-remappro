@@ -146,6 +146,15 @@ export const isSystemOnline = (
   return now >= from || now < to;
 };
 
+export const settingsMatch = (left: SystemSettings, right: SystemSettings) => {
+  if (left.mode !== right.mode) return false;
+  return DAY_KEYS.every((key) => {
+    const a = left.schedule[key];
+    const b = right.schedule[key];
+    return a.open === b.open && a.from === b.from && a.to === b.to;
+  });
+};
+
 const applyDetail = (current: SystemSettings, detail: unknown): SystemSettings => {
   if (detail === 'online' || detail === 'offline' || detail === 'auto') {
     return { ...current, mode: detail };
@@ -156,7 +165,7 @@ const applyDetail = (current: SystemSettings, detail: unknown): SystemSettings =
   return current;
 };
 
-const SystemStatus = () => {
+const SystemStatus = ({ showModeLabel = false }: { showModeLabel?: boolean }) => {
   const { t } = useLanguage();
   const [settings, setSettings] = useState<SystemSettings>(fallbackSettings);
   const [loading, setLoading] = useState(true);
@@ -172,7 +181,10 @@ const SystemStatus = () => {
 
     const handleChange = (event: Event) => {
       const detail = (event as CustomEvent<unknown>).detail;
-      setSettings((current) => applyDetail(current, detail));
+      setSettings((current) => {
+        const next = applyDetail(current, detail);
+        return settingsMatch(current, next) ? current : next;
+      });
     };
     window.addEventListener('systemStatusChange', handleChange);
 
@@ -189,7 +201,11 @@ const SystemStatus = () => {
         },
         (payload) => {
           const next = (payload.new as { value?: unknown } | undefined)?.value;
-          if (next) setSettings(parseSettings(next));
+          if (!next) return;
+          setSettings((current) => {
+            const parsed = parseSettings(next);
+            return settingsMatch(current, parsed) ? current : parsed;
+          });
         },
       )
       .subscribe();
@@ -226,7 +242,7 @@ const SystemStatus = () => {
       <span className={online ? 'text-green-500' : 'text-red-500 font-bold'}>
         {online ? t('statusOnline') : t('statusOffline')}
       </span>
-      {settings.mode !== 'auto' && (
+      {showModeLabel && settings.mode !== 'auto' && (
         <span className={`text-xs ${online ? 'text-muted-foreground/60' : 'text-red-400/60'}`}>{t('statusManual')}</span>
       )}
     </div>

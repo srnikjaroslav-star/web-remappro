@@ -1723,11 +1723,12 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
 
       <div className="max-w-[1600px] mx-auto w-full px-4 flex flex-col min-h-screen">
       {/* Header */}
-      <header className="sticky top-0 z-50 w-full border-b border-primary/25 bg-background/80 backdrop-blur-sm">
-        <div className="py-3 flex items-center justify-between gap-3">
+      <header className="sticky top-0 z-50 w-full border-b border-primary/25">
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-background/80 backdrop-blur-sm" />
+        <div className="relative py-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-6 shrink-0">
             <NavLogo />
-            <SystemStatus />
+            <SystemStatus showModeLabel />
           </div>
           <div className="flex flex-nowrap items-center justify-end gap-3">
             <div className="relative w-72 shrink-0">
