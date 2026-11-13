@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Download, Search, Send } from 'lucide-react';
 import { useLanguage } from '@/i18n/LanguageContext';
 import type { TranslationKey } from '@/i18n/translations';
 import { SERVICES } from '@/data/services';
 import { loadServiceCatalog, lookupServiceName } from '@/lib/serviceCatalog';
+import { orderFileLocation, RESULT_FILE_MARK, unpackOrderFile } from '@/lib/ecuFile';
 import { supabase } from '@/lib/supabase';
 
 type ClientOrder = {
@@ -71,6 +72,43 @@ const serviceNames = (value: ClientOrder['service_type']) => {
   return value;
 };
 
+type StoredClientOrder = ClientOrder & {
+  user_id?: string | null;
+  vehicle_brand?: string | null;
+  vehicle_model?: string | null;
+  vehicle_year?: string | number | null;
+  engine?: string | null;
+  ecu?: string | null;
+  fuel?: string | null;
+  services?: string[] | string | null;
+  note?: string | null;
+};
+
+const toClientOrder = (row: StoredClientOrder): ClientOrder => {
+  const note = String(row.note ?? '');
+  const lines = note.split('\n');
+  const tagged = lines[0]?.startsWith('RP-') ? lines[0].trim() : '';
+  const engine = String(row.engine ?? '').trim();
+  const model = String(row.car_model || row.vehicle_model || '').trim();
+  const services = row.service_type ?? row.services ?? null;
+  return {
+    id: row.id,
+    order_number: row.order_number || tagged || null,
+    created_at: row.created_at,
+    car_brand: row.car_brand || row.vehicle_brand || null,
+    car_model: engine && !model.includes(engine) ? [model, engine].filter(Boolean).join(' ') : model || null,
+    fuel_type: row.fuel_type || row.fuel || null,
+    year: row.year || row.vehicle_year || null,
+    ecu_type: row.ecu_type || row.ecu || null,
+    service_type: services,
+    total_price: row.total_price ?? null,
+    status: row.status || 'pending',
+    result_file_url: row.result_file_url ?? null,
+    customer_note: row.customer_note || (tagged ? lines.slice(1).join('\n').trim() : note.trim()) || null,
+    customer_email: row.customer_email ?? null,
+  };
+};
+
 const engineLine = (note: string | null) => {
   const line = String(note ?? '').split('\n').map((part) => part.trim()).find(Boolean) ?? '';
   return line.startsWith('Motor:') ? line : '';
@@ -101,48 +139,108 @@ const MyOrders = ({ email }: { email: string }) => {
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const busy = useRef(false);
+  const downloadResult = async (order: ClientOrder) => {
+    let stored = order.result_file_url || '';
+    if (!stored || stored === 'stored') {
+      const { data } = await supabase.from('orders').select('file_url').eq('id', order.id).maybeSingle();
+      stored = unpackOrderFile(data?.file_url || '').resultFile;
+    } else {
+      stored = unpackOrderFile(stored).resultFile || stored;
+    }
+    const located = orderFileLocation(stored);
+    const href = located && 'href' in located
+      ? located.href
+      : located
+        ? supabase.storage.from(located.bucket).getPublicUrl(located.path).data.publicUrl
+        : '';
+    if (!href) return;
+    const response = await fetch(href);
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = located && 'filename' in located ? located.filename : `result-${orderLabel(order)}`;
+    document.body.appendChild(link);
+    link.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(link);
+  };
+
   const visibleOrders = orders.filter((order) =>
     (statusFilter === 'all' || order.status === statusFilter) && matchesQuery(order, query),
   );
 
   useEffect(() => {
-    const address = email.trim();
-    if (!address) {
-      setOrders([]);
-      setLoading(false);
-      return;
-    }
     let active = true;
     const load = async () => {
-      setFailed(false);
-      await loadServiceCatalog().catch(() => undefined);
-      const { data, error } = await supabase
-        .from('orders')
-        .select('id, order_number, created_at, car_brand, car_model, fuel_type, year, ecu_type, service_type, total_price, status, result_file_url, customer_note, customer_email')
-        .ilike('customer_email', address.replace(/[%_]/g, (char) => `\\${char}`))
-        .order('created_at', { ascending: false });
-      if (!active) return;
-      if (error) {
-        setFailed(true);
+      if (busy.current) return;
+      busy.current = true;
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (!active) return;
+        if (!user) {
+          setOrders([]);
+          setFailed(false);
+          setLoading(false);
+          return;
+        }
+        const catalogReady = loadServiceCatalog().catch(() => undefined);
+        const columns = 'id, user_id, created_at, vehicle_brand, vehicle_model, vehicle_year, engine, ecu, fuel, services, total_price, status, note, result_file_url';
+        let result = await supabase
+          .from('orders')
+          .select(columns)
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
+        if (result.error) {
+          result = await supabase
+            .from('orders')
+            .select('id, user_id, created_at, vehicle_brand, vehicle_model, vehicle_year, engine, ecu, fuel, services, total_price, status, note')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false });
+        }
+        const { data, error } = result;
+        await catalogReady;
+        if (!active) return;
+        if (error) {
+          console.error('My orders load error:', error);
+          setOrders([]);
+          setFailed(false);
+          setLoading(false);
+          return;
+        }
+        const ready = await supabase
+          .from('orders')
+          .select('id')
+          .eq('user_id', user.id)
+          .like('file_url', `%${RESULT_FILE_MARK}%`);
+        const withResult = new Set((ready.data || []).map((row) => row.id));
+        const own = ((data ?? []) as StoredClientOrder[])
+          .filter((order) => !order.user_id || order.user_id === user.id)
+          .map((row) => toClientOrder({
+            ...row,
+            result_file_url: row.result_file_url || (withResult.has(row.id) ? 'stored' : null),
+          }));
+        setFailed(false);
+        setOrders(own);
         setLoading(false);
-        return;
+      } finally {
+        busy.current = false;
       }
-      const own = ((data ?? []) as ClientOrder[]).filter(
-        (order) => String(order.customer_email ?? '').toLowerCase() === address.toLowerCase(),
-      );
-      setOrders(own);
-      setLoading(false);
     };
     setLoading(true);
     load();
+    const timer = window.setInterval(load, 5000);
     const channel = supabase
-      .channel(`my-orders-${address}`)
+      .channel(`my-orders-${email || 'session'}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
         load();
       })
       .subscribe();
     return () => {
       active = false;
+      window.clearInterval(timer);
       supabase.removeChannel(channel);
     };
   }, [email]);
@@ -252,6 +350,7 @@ const MyOrders = ({ email }: { email: string }) => {
                         href={telegramSupportUrl(order)}
                         target="_blank"
                         rel="noopener noreferrer"
+                        onClick={(event) => event.stopPropagation()}
                         className={`${action} border border-primary/40 bg-primary/10 text-primary hover:border-primary/70 hover:bg-primary/20 hover:shadow-[0_0_12px_rgba(0,242,255,0.28)]`}
                       >
                         <Send className="h-4 w-4" />
@@ -262,8 +361,13 @@ const MyOrders = ({ email }: { email: string }) => {
                   <td className={`${glow} text-center`}>
                     {order.status === 'completed' && order.result_file_url ? (
                       <a
-                        href={order.result_file_url}
+                        href={order.result_file_url.startsWith('http') || order.result_file_url.startsWith('data:') ? order.result_file_url : '#'}
                         download
+                        onClick={(event) => {
+                          if (order.result_file_url?.startsWith('http') || order.result_file_url?.startsWith('data:')) return;
+                          event.preventDefault();
+                          void downloadResult(order);
+                        }}
                         className={`${action} border border-primary/40 bg-primary/10 text-primary hover:bg-primary/20`}
                       >
                         <Download className="h-4 w-4" />

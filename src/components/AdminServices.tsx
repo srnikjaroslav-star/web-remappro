@@ -33,14 +33,14 @@ const categoryTone: Record<string, { text: string; color: string }> = {
 
 const categoryTextClass = (category: string) => categoryTone[category]?.text ?? 'text-white';
 
-const readInvoke = async <T,>(result: { data: T | null; error: unknown }) => {
-  if (result.data) return result.data;
-  try {
-    return await (result.error as { context?: Response }).context?.json() as T;
-  } catch {
-    return null;
-  }
+const readPrice = (value: string) => {
+  const price = Math.round(Number(value.trim().replace(',', '.')) * 100) / 100;
+  if (!Number.isFinite(price) || price < 0 || price > 100000) return null;
+  return price;
 };
+
+const missingTable = (error: { code?: string } | null) =>
+  error?.code === 'PGRST205' || error?.code === '42P01';
 
 const fieldClass = 'h-11 w-full rounded-md border border-primary/70 bg-[#0a192f] px-3 text-sm text-foreground shadow-[0_0_16px_rgba(0,242,255,0.28)] focus:border-primary focus:outline-none focus:shadow-[0_0_16px_rgba(0,242,255,0.45)]';
 const inlineClass = 'h-12 w-full min-w-0 rounded-md border border-primary/50 bg-black/50 px-2.5 text-foreground focus:border-primary focus:outline-none focus:shadow-[0_0_12px_rgba(0,242,255,0.35)]';
@@ -117,26 +117,33 @@ const AdminServices = () => {
   };
 
   const save = async (current: Draft) => {
-    const price = current.price.trim();
-    if (!current.name.trim() || !current.category.trim() || !price) {
+    const price = readPrice(current.price);
+    if (!current.name.trim() || !current.category.trim() || price === null) {
       toast.error('Vyplňte názov, kategóriu a cenu.');
       return;
     }
     setBusy(true);
-    const result = await supabase.functions.invoke('manage-services', {
-      body: {
-        action: current.id ? 'update' : 'create',
-        id: current.id || undefined,
-        name: current.name,
-        description: current.description,
-        category: current.category,
-        price,
-      },
-    });
-    const data = await readInvoke<{ ok?: boolean; code?: string }>(result);
+    const payload = {
+      name: current.name.trim(),
+      category: current.category.trim(),
+      price,
+    };
+    const saved = current.id
+      ? await supabase.from('services').update(payload).eq('id', current.id).select('id').maybeSingle()
+      : await supabase.from('services').insert(payload).select('id').maybeSingle();
+    const serviceId = saved.data?.id;
+    if (saved.error || !serviceId) {
+      setBusy(false);
+      toast.error(saved.error?.code === '42501' ? 'Na úpravu služieb nemáte oprávnenie.' : 'Službu sa nepodarilo uložiť.');
+      return;
+    }
+    const details = await supabase.from('service_details').upsert(
+      { service_id: serviceId, description: current.description.trim(), updated_at: new Date().toISOString() },
+      { onConflict: 'service_id' },
+    );
     setBusy(false);
-    if (!data?.ok) {
-      toast.error(data?.code === 'FORBIDDEN' ? 'Na úpravu služieb nemáte oprávnenie.' : 'Službu sa nepodarilo uložiť.');
+    if (details.error && !missingTable(details.error)) {
+      toast.error('Službu sa nepodarilo uložiť.');
       return;
     }
     toast.success(current.id ? 'Služba bola upravená.' : 'Služba bola pridaná.');
@@ -151,13 +158,11 @@ const AdminServices = () => {
       return;
     }
     setBusy(true);
-    const result = await supabase.functions.invoke('manage-services', {
-      body: { action: 'delete', id: service.id },
-    });
-    const data = await readInvoke<{ ok?: boolean; code?: string }>(result);
+    const details = await supabase.from('service_details').delete().eq('service_id', service.id);
+    const removed = await supabase.from('services').delete().eq('id', service.id).select('id').maybeSingle();
     setBusy(false);
     setConfirmId(null);
-    if (!data?.ok) {
+    if ((details.error && !missingTable(details.error)) || removed.error || !removed.data?.id) {
       toast.error('Službu sa nepodarilo zmazať.');
       return;
     }

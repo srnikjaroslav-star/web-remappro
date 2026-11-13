@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   Download, Upload, Eye, CheckCircle,
   RefreshCw, Search, Power, Save, Trash2, LogOut, FileText, X
@@ -19,11 +19,13 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { useOnlineClients } from '@/lib/clientPresence';
+import { orderFileLocation, packOrderFile, RESULT_FILE_MARK, unpackOrderFile, uploadOrderFile } from '@/lib/ecuFile';
 import { supabase } from '@/lib/supabase';
-import { statusAfterClientFileDownload, statusAfterResultDelivery } from '@/lib/orderStatus';
-import { Order, ActivityLog } from '@/integrations/supabase/client';
+import { statusAfterResultDelivery } from '@/lib/orderStatus';
+import { Order, ActivityLog, SUPABASE_ANON_KEY, SUPABASE_URL } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { SERVICES } from '@/data/services';
+import { loadClientBilling, orderDisplayName, readCreditBalance, saveCreditBalance } from '@/lib/clientProfile';
 import { loadServiceCatalog, lookupServiceName } from '@/lib/serviceCatalog';
 import ClientCredits from '@/components/ClientCredits';
 import AdminServices from '@/components/AdminServices';
@@ -55,6 +57,161 @@ const todayOrderRevenue = (rows: RevenueOrder[], now = new Date()) => (
   rows.reduce((sum, order) => sum + (isCreatedToday(order.created_at, now) ? pricedAmount(order) : 0), 0)
 );
 
+type StoredOrderRow = Partial<Order> & {
+  id: string;
+  user_id?: string | null;
+  vehicle_brand?: string | null;
+  vehicle_model?: string | null;
+  vehicle_year?: number | string | null;
+  engine?: string | null;
+  ecu?: string | null;
+  fuel?: string | null;
+  services?: string[] | string | null;
+  note?: string | null;
+};
+
+const serviceList = (value: StoredOrderRow['services'] | Order['service_type'] | undefined) => {
+  if (Array.isArray(value)) return value.map(String).filter(Boolean);
+  if (typeof value !== 'string' || !value.trim()) return [];
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
+  } catch {
+    return [value];
+  }
+  return [value];
+};
+
+const normalizeOrder = (row: StoredOrderRow, owner?: { name: string; email: string }): Order => {
+  const note = String(row.note ?? '');
+  const lines = note.split('\n');
+  const taggedNumber = lines[0]?.startsWith('RP-') ? lines[0].trim() : '';
+  const engine = String(row.engine ?? '').trim();
+  const model = String(row.car_model || row.vehicle_model || '').trim();
+  const services = serviceList(row.service_type?.length ? row.service_type : row.services);
+  return {
+    ...(row as Order),
+    id: row.id,
+    order_number: row.order_number || taggedNumber || null,
+    customer_name: row.customer_name || owner?.name || '',
+    customer_email: row.customer_email || owner?.email || '',
+    car_brand: row.car_brand || row.vehicle_brand || '',
+    car_model: engine && !model.includes(engine) ? [model, engine].filter(Boolean).join(' ') : model,
+    fuel_type: row.fuel_type || row.fuel || '',
+    year: Number(row.year || row.vehicle_year || 0),
+    ecu_type: row.ecu_type || row.ecu || '',
+    service_type: services,
+    total_price: Number(row.total_price || 0),
+    status: row.status || 'pending',
+    file_url: row.file_url ?? null,
+    customer_note: row.customer_note || (taggedNumber ? lines.slice(1).join('\n').trim() : note.trim()) || null,
+    created_at: row.created_at || new Date().toISOString(),
+    legal_consent: row.legal_consent ?? true,
+  };
+};
+
+const blobFromDataUrl = (dataUrl: string) => {
+  const comma = dataUrl.indexOf(',');
+  if (comma < 0) return null;
+  const mime = /data:([^;,]+)/.exec(dataUrl.slice(0, comma))?.[1] || 'application/octet-stream';
+  const binary = atob(dataUrl.slice(comma + 1));
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return new Blob([bytes], { type: mime });
+};
+
+const saveBlob = (blob: Blob, filename: string) => {
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename || 'ecu.bin';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+};
+
+const inlineDownload = (stored: string, fallbackName: string) => {
+  if (stored.startsWith('data:')) return { href: stored, filename: fallbackName };
+  if (!stored.startsWith('inline:')) return null;
+  const rest = stored.slice('inline:'.length);
+  const split = rest.indexOf(':');
+  const filename = split >= 0 ? decodeURIComponent(rest.slice(0, split)) : fallbackName;
+  const href = split >= 0 ? rest.slice(split + 1) : '';
+  return href.startsWith('data:') ? { href, filename: filename || fallbackName } : null;
+};
+
+const downloadOrderPart = async (orderId: string, part: 'client' | 'result', hint: string, fallbackName: string) => {
+  let packed = hint && hint !== 'stored' ? hint : '';
+  const hintIsFile = packed.startsWith('inline:') || packed.startsWith('data:') || packed.startsWith('http') || packed.includes(RESULT_FILE_MARK);
+  if (!hintIsFile) {
+    const { data, error } = await supabase.from('orders').select('file_url').eq('id', orderId).maybeSingle();
+    if (error) throw error;
+    packed = data?.file_url || '';
+  }
+  const unpacked = unpackOrderFile(packed);
+  const stored = part === 'result' ? unpacked.resultFile : unpacked.clientFile;
+  if (!stored) {
+    toast.error(part === 'result' ? 'Hotový súbor nie je k dispozícii' : 'Nepodarilo sa vytvoriť URL pre sťahovanie');
+    return;
+  }
+  const inline = inlineDownload(stored, fallbackName);
+  if (inline) {
+    const blob = blobFromDataUrl(inline.href);
+    if (!blob) throw new Error('Súbor sa nepodarilo prečítať');
+    saveBlob(blob, inline.filename);
+    return;
+  }
+  const located = orderFileLocation(stored);
+  if (located && 'href' in located) {
+    const blob = blobFromDataUrl(located.href);
+    if (!blob) throw new Error('Súbor sa nepodarilo prečítať');
+    saveBlob(blob, located.filename || fallbackName);
+    return;
+  }
+  if (!located?.bucket || !located.path) {
+    toast.error('Nepodarilo sa vytvoriť URL pre sťahovanie');
+    return;
+  }
+  const filename = located.path.split('/').pop() || fallbackName;
+  const candidates: string[] = [];
+  const signed = await supabase.storage.from(located.bucket).createSignedUrl(located.path, 180);
+  if (signed.data?.signedUrl) candidates.push(signed.data.signedUrl);
+  const pub = supabase.storage.from(located.bucket).getPublicUrl(located.path).data.publicUrl;
+  if (pub) candidates.push(pub);
+  if (stored.startsWith('http://') || stored.startsWith('https://')) candidates.unshift(stored);
+  let lastError = null;
+  for (const href of candidates) {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 20000);
+    try {
+      const response = await fetch(href, { signal: controller.signal });
+      if (!response.ok) throw new Error('Súbor sa nepodarilo stiahnuť');
+      saveBlob(await response.blob(), filename);
+      return;
+    } catch (error) {
+      lastError = error;
+    } finally {
+      window.clearTimeout(timer);
+    }
+  }
+  throw lastError || new Error('Súbor sa nepodarilo stiahnuť');
+};
+
+const STATUS_NOTIFY_EMAIL = 'srnik.jaroslav@gmail.com';
+const ADMIN_SECTION_KEY = 'remappro-admin-section';
+type AdminSection = 'orders' | 'clients' | 'services' | 'hours';
+
+const parseAdminSection = (value: string | null): AdminSection | null =>
+  value === 'orders' || value === 'clients' || value === 'services' || value === 'hours' ? value : null;
+
+const readAdminSection = (): AdminSection => {
+  const query = window.location.hash.split('?')[1] || '';
+  return parseAdminSection(new URLSearchParams(query).get('tab'))
+    || parseAdminSection(window.localStorage.getItem(ADMIN_SECTION_KEY))
+    || 'orders';
+};
+
 const ManagementPortal = () => {
   const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
@@ -63,6 +220,7 @@ const ManagementPortal = () => {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pendingUploadId = useRef<string | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [activeRowId, setActiveRowId] = useState<string | null>(null);
   const [editingFields, setEditingFields] = useState<Record<string, { checksum_crc: string; internal_note: string; important_note: string }>>({});
@@ -76,10 +234,27 @@ const ManagementPortal = () => {
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [financialStats, setFinancialStats] = useState<{ grossRevenue: number; todayRevenue: number } | null>(null);
-  const [section, setSection] = useState<'orders' | 'clients' | 'services' | 'hours'>('orders');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [section, setSectionState] = useState<AdminSection>(readAdminSection);
+  const setSection = (next: AdminSection) => {
+    setSectionState(next);
+    window.localStorage.setItem(ADMIN_SECTION_KEY, next);
+    const params = new URLSearchParams(searchParams);
+    if (next === 'orders') params.delete('tab');
+    else params.set('tab', next);
+    setSearchParams(params, { replace: true });
+  };
+
+  useEffect(() => {
+    const fromUrl = parseAdminSection(searchParams.get('tab'));
+    if (fromUrl) setSectionState(fromUrl);
+  }, [searchParams]);
   const onlineIds = useOnlineClients(!isCheckingAuth);
   const [cancelConfirmOrder, setCancelConfirmOrder] = useState<Order | null>(null);
   const [cancellingOrder, setCancellingOrder] = useState(false);
+  const orderOwnerRef = useRef<{ id: string; name: string; email: string }>({ id: '', name: '', email: '' });
+  const ordersBusy = useRef(false);
+  const ordersSeen = useRef(false);
 
   // Check authentication on mount - only allow specific email
   useEffect(() => {
@@ -183,21 +358,55 @@ const ManagementPortal = () => {
     }
   };
 
-  const fetchOrders = async () => {
-    setLoading(true);
+  const fetchOrders = async (silent = false) => {
+    if (silent && ordersBusy.current) return;
+    ordersBusy.current = true;
+    const showSpinner = !silent && !ordersSeen.current;
+    if (showSpinner) setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('orders')
-        .select('*')
-        .order('created_at', { ascending: false });
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user ?? null;
+      if (!user) return;
+      const billing = await loadClientBilling(user);
+      const owner = {
+        id: user?.id || '',
+        name: billing ? orderDisplayName(billing) : '',
+        email: billing?.email?.trim() || user?.email || '',
+      };
+      orderOwnerRef.current = owner;
+
+      const columns = 'id, user_id, created_at, vehicle_brand, vehicle_model, vehicle_year, engine, ecu, fuel, services, total_price, status, note';
+      let request = supabase.from('orders').select(columns).order('created_at', { ascending: false });
+      if (owner.id) request = request.eq('user_id', owner.id);
+      let result = await request;
+      if (result.error) {
+        let fallback = supabase.from('orders').select('id, user_id, created_at, vehicle_brand, vehicle_model, vehicle_year, engine, ecu, fuel, services, total_price, status, note').order('created_at', { ascending: false });
+        if (owner.id) fallback = fallback.eq('user_id', owner.id);
+        result = await fallback;
+      }
+      const { data, error } = result;
 
       if (error) throw error;
-      setOrders((data || []) as Order[]);
+      let fileRequest = supabase.from('orders').select('id').not('file_url', 'is', null);
+      if (owner.id) fileRequest = fileRequest.eq('user_id', owner.id);
+      const files = await fileRequest;
+      const withFile = new Set((files.data || []).map((row) => row.id));
+      let resultRequest = supabase.from('orders').select('id').like('file_url', `%${RESULT_FILE_MARK}%`);
+      if (owner.id) resultRequest = resultRequest.eq('user_id', owner.id);
+      const results = await resultRequest;
+      const withResult = new Set((results.data || []).map((row) => row.id));
+      ordersSeen.current = true;
+      setOrders(((data || []) as StoredOrderRow[]).map((row) => normalizeOrder({
+        ...row,
+        file_url: row.file_url || (withFile.has(row.id) ? 'stored' : null),
+        result_file_url: row.result_file_url || (withResult.has(row.id) ? 'stored' : null),
+      }, owner)));
     } catch (error) {
       console.error('Fetch error:', error);
-      toast.error('Failed to fetch orders');
+      if (!silent) toast.error('Failed to fetch orders');
     } finally {
-      setLoading(false);
+      ordersBusy.current = false;
+      if (showSpinner) setLoading(false);
     }
   };
 
@@ -207,40 +416,37 @@ const ManagementPortal = () => {
     fetchOrders();
     calculateFinancialStats();
 
-    // Set up realtime subscription for orders table
+    const refresh = () => {
+      fetchOrders(true);
+    };
+    const timer = window.setInterval(refresh, 8000);
+    const onFocus = () => refresh();
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+
     const channel = supabase
       .channel('orders-realtime')
       .on(
         'postgres_changes',
         {
-          event: '*', // Listen to all changes (INSERT, UPDATE, DELETE)
+          event: '*',
           schema: 'public',
           table: 'orders'
         },
         (payload) => {
-          console.log('Realtime update received:', payload);
-          
-          if (payload.eventType === 'INSERT') {
-            setOrders(prev => [payload.new as Order, ...prev]);
+          const row = payload.new as StoredOrderRow | undefined;
+          if (payload.eventType === 'INSERT' && (!row?.user_id || row.user_id === orderOwnerRef.current.id)) {
             toast.info('New order received!');
-          } else if (payload.eventType === 'UPDATE') {
-            setOrders(prev => prev.map(order => 
-              order.id === payload.new.id ? (payload.new as Order) : order
-            ));
-          } else if (payload.eventType === 'DELETE') {
-            setOrders(prev => prev.filter(order => order.id !== payload.old.id));
           }
+          refresh();
         }
       )
-      .subscribe((status) => {
-        console.log('Realtime subscription status:', status);
-        if (status === 'SUBSCRIBED') {
-          console.log('Successfully subscribed to orders realtime updates');
-        }
-      });
+      .subscribe();
 
     return () => {
-      console.log('Cleaning up realtime subscription');
+      window.clearInterval(timer);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
       supabase.removeChannel(channel);
     };
   }, [isCheckingAuth]);
@@ -309,74 +515,67 @@ const ManagementPortal = () => {
   };
 
   const sendStatusEmail = async (order: Order, status: string) => {
-    // STRICT BLOCK: If status is 'cancelled', DO NOT send any emails
     if (status === 'cancelled' || order.status === 'cancelled') {
       console.warn('[sendStatusEmail] BLOCKED: Status is cancelled - email sending is forbidden');
       throw new Error('Email sending blocked: Order is cancelled. Credit note workflow must be used instead.');
     }
-    
+
+    const orderId = order.order_number || order.id.slice(0, 8).toUpperCase();
+    const payload = {
+      orderId: order.id,
+      orderNumber: orderId,
+      customerEmail: STATUS_NOTIFY_EMAIL,
+      customerName: order.customer_name || '',
+      carBrand: order.car_brand || '',
+      carModel: order.car_model || '',
+      year: order.year || 0,
+      status,
+    };
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 8000);
     try {
-      const orderId = order.order_number || order.id.slice(0, 8).toUpperCase();
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://kivqvwdfujsnuwfxjtcz.supabase.co';
-      // Use anon key for client-side calls - Edge Function will use its own RESEND_API_KEY
-      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-      
-      console.log('[sendStatusEmail] Sending email for order:', {
-        orderId,
-        orderNumber: orderId,
-        customerEmail: order.customer_email,
-        status,
-      });
-      
-      // Call Edge Function via direct fetch (same method as admin notifications)
-      const response = await fetch(`${supabaseUrl}/functions/v1/status-email`, {
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/status-email`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${anonKey}`,
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          apikey: SUPABASE_ANON_KEY,
         },
-        body: JSON.stringify({
-          orderId: order.id,
-          orderNumber: orderId,
-          customerEmail: order.customer_email,
-          customerName: order.customer_name || '',
-          carBrand: order.car_brand || '',
-          carModel: order.car_model || '',
-          year: order.year || 0,
-          status: status,
-        }),
+        body: JSON.stringify(payload),
+        signal: controller.signal,
       });
-
-      const responseData = await response.json();
-      console.log('[sendStatusEmail] Response:', response.status, responseData);
-
-      if (!response.ok) {
-        console.error('[sendStatusEmail] HTTP error:', {
-          status: response.status,
-          statusText: response.statusText,
-          body: responseData,
-        });
-        throw new Error(responseData.error || `HTTP ${response.status}: ${response.statusText}`);
+      const responseData = await response.json().catch(() => ({}));
+      if (!response.ok || responseData.success === false) {
+        throw new Error(responseData.error || responseData.message || `HTTP ${response.status}`);
       }
-
-      if (responseData.success === false) {
-        console.error('[sendStatusEmail] Email sending failed:', {
-          error: responseData.error,
-          details: responseData.details,
-        });
-        throw new Error(responseData.error || 'Email sending failed');
-      }
-
-      console.log('[sendStatusEmail] Email sent successfully');
       return responseData;
     } catch (error: any) {
-      console.error('[sendStatusEmail] Error details:', {
-        message: error.message,
-        stack: error.stack,
-        name: error.name,
-      });
-      throw error;
+      const message = error?.name === 'AbortError' ? 'Email request timed out' : (error?.message || 'Failed to fetch');
+      console.error('[sendStatusEmail]', message);
+      throw new Error(message);
+    } finally {
+      window.clearTimeout(timer);
     }
+  };
+
+  const notifyStatusChange = (order: Order, status: string) => {
+    window.setTimeout(() => {
+      void sendStatusEmail(order, status)
+        .then(() => {
+          toast.success('Email o zmene stavu bol odoslaný');
+        })
+        .catch((emailError: any) => {
+          console.error('[notifyStatusChange] Email sending failed:', emailError);
+          const errorMsg = emailError?.message || 'Neznáma chyba';
+          if (errorMsg.includes('RESEND_API_KEY') || errorMsg.includes('API key')) {
+            toast.error('Chyba: RESEND_API_KEY nie je nastavený alebo je neplatný');
+          } else if (errorMsg.includes('domain') || errorMsg.includes('verified')) {
+            toast.error('Chyba: Emailová doména nie je overená v Resend');
+          } else {
+            toast.error(`Chyba pri odosielaní emailu: ${errorMsg}`);
+          }
+        });
+    }, 0);
   };
 
   // Log activity function
@@ -421,9 +620,12 @@ const ManagementPortal = () => {
   // Calculate financial statistics
   const calculateFinancialStats = async () => {
     try {
-      const result = await supabase
-        .from('orders')
-        .select('total_price, status, created_at');
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user;
+      if (!user) return;
+      let request = supabase.from('orders').select('total_price, status, created_at');
+      if (user?.id) request = request.eq('user_id', user.id);
+      const result = await request;
       const ordersData = result.data || [];
       const error = result.error;
 
@@ -460,11 +662,12 @@ const ManagementPortal = () => {
     try {
       const updateData: { status: string } = { status: newStatus };
 
-      const { data, error } = await supabase
-        .from('orders')
-        .update(updateData)
-        .eq('id', orderId)
-        .select();
+      const { data, error } = await Promise.race([
+        supabase.from('orders').update(updateData).eq('id', orderId).select('id'),
+        new Promise<never>((_, reject) => {
+          window.setTimeout(() => reject(new Error('Časový limit aktualizácie stavu')), 12000);
+        }),
+      ]);
 
       console.log('Update response:', { data, error });
 
@@ -481,55 +684,19 @@ const ManagementPortal = () => {
         return;
       }
       
-      // For non-cancelled statuses, proceed with normal email workflows
-      if (newStatus !== previousStatus && order && order.customer_email && newStatus !== 'cancelled') {
-        // Send email for status changes to processing or completed (EXPLICITLY excluding cancelled)
-        if (newStatus === 'processing' || newStatus === 'completed') {
-          try {
-            await sendStatusEmail(order, newStatus);
-            toast.success('Status aktualizovaný a email odoslaný klientovi');
-          } catch (emailError: any) {
-            console.error('[executeStatusChange] Email sending failed:', {
-              error: emailError,
-              message: emailError?.message,
-              stack: emailError?.stack,
-              orderId: order.id,
-              customerEmail: order.customer_email,
-            });
-            
-            // Show detailed error message
-            const errorMsg = emailError?.message || 'Neznáma chyba';
-            if (errorMsg.includes('RESEND_API_KEY') || errorMsg.includes('API key')) {
-              toast.error('Chyba: RESEND_API_KEY nie je nastavený alebo je neplatný');
-            } else if (errorMsg.includes('domain') || errorMsg.includes('verified')) {
-              toast.error('Chyba: Emailová doména nie je overená v Resend');
-            } else {
-              toast.error(`Chyba pri odosielaní emailu: ${errorMsg}`);
-            }
-            toast.success('Status aktualizovaný (email sa nepodarilo odoslať)');
-          }
-        } else {
-          const statusLabels: Record<string, string> = {
-            'pending': 'Čakajúce',
-            'processing': 'V Procese',
-            'completed': 'Dokončené',
-            'paid': 'Zaplatené',
-            'cancelled': 'Zrušené'
-          };
-          toast.success(`Stav zmenený na: ${statusLabels[newStatus] || newStatus}`);
-        }
-      } else {
-        const statusLabels: Record<string, string> = {
-          'pending': 'Čakajúce',
-          'processing': 'V Procese',
-          'completed': 'Dokončené',
-          'paid': 'Zaplatené',
-          'cancelled': 'Zrušené'
-        };
-        toast.success(`Stav zmenený na: ${statusLabels[newStatus] || newStatus}`);
+      const statusLabels: Record<string, string> = {
+        pending: 'Čakajúce',
+        processing: 'V Procese',
+        completed: 'Dokončené',
+        paid: 'Zaplatené',
+        cancelled: 'Zrušené',
+      };
+      toast.success(`Stav zmenený na: ${statusLabels[newStatus] || newStatus}`);
+      if (newStatus !== previousStatus && order && (newStatus === 'processing' || newStatus === 'completed')) {
+        notifyStatusChange(order, newStatus);
       }
 
-      await fetchOrders();
+      void fetchOrders(true);
     } catch (error: any) {
       console.error('Update error:', error);
       toast.error(`Chyba pri aktualizácii statusu: ${error.message || 'Neznáma chyba'}`);
@@ -539,18 +706,6 @@ const ManagementPortal = () => {
       }
       await fetchOrders();
     }
-  };
-
-  const readFunctionData = async <T,>(invoked: { data: T | null; error: { context?: Response; message?: string } | null }) => {
-    let data = invoked.data;
-    if (invoked.error && !data) {
-      try {
-        data = await invoked.error.context?.json();
-      } catch {
-        data = null;
-      }
-    }
-    return data;
   };
 
   const markOrderCancelled = (orderId: string) => {
@@ -565,18 +720,19 @@ const ManagementPortal = () => {
       return;
     }
 
-    const { data: invoiceRows, error: invoiceError } = await supabase
-      .from('invoices')
-      .select('user_id, amount, payment_method')
-      .eq('order_id', order.id);
-    if (invoiceError) {
-      toast.error(`Faktúru sa nepodarilo načítať: ${invoiceError.message}`);
+    const current = await supabase.from('orders').select('user_id,total_price,status').eq('id', order.id).maybeSingle();
+    if (current.error || !current.data) {
+      toast.error(current.error?.message || 'Objednávku sa nepodarilo načítať.');
       return;
     }
-
-    const creditInvoices = (invoiceRows ?? []).filter((row) => row.payment_method === 'credits' && row.user_id);
-    const refundTotal = Math.round(creditInvoices.reduce((sum, row) => sum + Number(row.amount), 0) * 100) / 100;
-    const userId = creditInvoices[0]?.user_id as string | undefined;
+    if (current.data.status === 'cancelled') {
+      toast.info('Objednávka je už zrušená.');
+      setCancelConfirmOrder(null);
+      return;
+    }
+    const price = Math.round(Math.abs(Number(current.data.total_price) || 0) * 100) / 100;
+    const userId = String(current.data.user_id || '');
+    const shouldRefund = price > 0 && /^[0-9a-f-]{36}$/i.test(userId);
 
     const { data: updated, error: updateError } = await supabase
       .from('orders')
@@ -588,27 +744,22 @@ const ManagementPortal = () => {
       return;
     }
 
-    if (refundTotal > 0 && userId) {
-      const adjusted = await supabase.functions.invoke('manage-clients', {
-        body: { action: 'adjust', userId, amount: refundTotal, direction: 'add' },
-      });
-      const adjustment = await readFunctionData<{ ok?: boolean; code?: string; message?: string }>(adjusted);
-      if (adjusted.error || !adjustment?.ok) {
-        markOrderCancelled(order.id);
-        setCancelConfirmOrder(null);
-        await fetchOrders();
-        await calculateFinancialStats();
-        toast.error(adjustment?.message || 'Objednávka je zrušená, ale kredity sa nepodarilo vrátiť.');
-        return;
-      }
+    let refunded = !shouldRefund;
+    if (shouldRefund) {
+      const balance = await readCreditBalance(userId);
+      const next = Math.round((balance + price) * 100) / 100;
+      refunded = await saveCreditBalance(userId, next);
     }
 
     markOrderCancelled(order.id);
     setCancelConfirmOrder(null);
-    await fetchOrders();
-    await calculateFinancialStats();
+    void fetchOrders(true);
+    if (shouldRefund && !refunded) {
+      toast.error('Objednávka je zrušená, ale kredity sa nepodarilo vrátiť.');
+      return;
+    }
     toast.success(
-      refundTotal > 0
+      shouldRefund
         ? 'Objednávka bola zrušená a kredity boli vrátené klientovi.'
         : 'Objednávka bola zrušená.',
     );
@@ -619,27 +770,7 @@ const ManagementPortal = () => {
     if (!order || cancellingOrder) return;
     setCancellingOrder(true);
     try {
-      const invoked = await supabase.functions.invoke('manage-clients', {
-        body: { action: 'cancel-order', orderId: order.id },
-      });
-      const data = await readFunctionData<{ ok?: boolean; refunded?: number; code?: string; message?: string }>(invoked);
-      if (data?.ok) {
-        markOrderCancelled(order.id);
-        setCancelConfirmOrder(null);
-        await fetchOrders();
-        await calculateFinancialStats();
-        toast.success(
-          data.refunded && data.refunded > 0
-            ? 'Objednávka bola zrušená a kredity boli vrátené klientovi.'
-            : 'Objednávka bola zrušená.',
-        );
-        return;
-      }
-      if (data?.code === 'INVALID_AMOUNT') {
-        await cancelOrderDirectly(order);
-        return;
-      }
-      toast.error(data?.message || 'Objednávku sa nepodarilo zrušiť.');
+      await cancelOrderDirectly(order);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Objednávku sa nepodarilo zrušiť.');
     } finally {
@@ -783,9 +914,8 @@ const ManagementPortal = () => {
 
   const handleResultUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !selectedOrderId) return;
-
-    const orderId = selectedOrderId; // Store in local variable for clarity
+    const orderId = pendingUploadId.current || selectedOrderId;
+    if (!file || !orderId) return;
     
     // Strict Upload Lock: Check if invoice already exists
     const order = orders.find(o => o.id === orderId);
@@ -812,19 +942,6 @@ const ManagementPortal = () => {
     }
     
     try {
-      // Step 1: Upload file to storage
-      const fileName = `result-${Date.now()}-${file.name}`;
-      const { error: uploadError } = await supabase.storage
-        .from('modified-files')
-        .upload(fileName, file);
-
-      if (uploadError) throw uploadError;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('modified-files')
-        .getPublicUrl(fileName);
-
-      // CRITICAL: Check if order is cancelled - if so, abort invoice generation
       const currentOrder = orders.find(o => o.id === orderId);
       if (currentOrder?.status === 'cancelled') {
         console.warn('[handleResultUpload] Order is CANCELLED - aborting invoice generation');
@@ -832,322 +949,110 @@ const ManagementPortal = () => {
         setUploadingId(null);
         return;
       }
-      
-      // Step 2: Update status to 'completed' FIRST (Status First)
-      console.log('[handleResultUpload] Step 1: Updating status to completed for orderId:', orderId);
+
+      const { data: { session } } = await supabase.auth.getSession();
+      const storedResult = await uploadOrderFile(file, session?.user?.id || 'admin');
+      const existing = await supabase.from('orders').select('file_url').eq('id', orderId).maybeSingle();
+      if (existing.error) throw existing.error;
+      const packedFile = packOrderFile(unpackOrderFile(existing.data?.file_url || '').clientFile, storedResult);
+      const nextStatus = statusAfterResultDelivery(currentOrder?.status ?? 'pending');
+
       const { error: updateError } = await supabase
         .from('orders')
         .update({
-          result_file_url: publicUrl,
-          status: statusAfterResultDelivery(currentOrder?.status ?? 'pending'),
+          file_url: packedFile,
+          status: nextStatus,
         })
         .eq('id', orderId);
 
-      if (updateError) {
-        console.error('[handleResultUpload] Status update failed:', updateError);
-        throw updateError;
-      }
-      
-      console.log('[handleResultUpload] Status updated - orderId:', orderId);
-      
-      // Update local state immediately
-      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: statusAfterResultDelivery(o.status), result_file_url: publicUrl } : o));
+      if (updateError) throw updateError;
 
-      // Step 3: Get order data for email
-      const order = orders.find(o => o.id === orderId);
-      if (!order) {
-        console.error('[handleResultUpload] Order not found in local state, fetching...');
-        // Fetch order from DB if not in local state
-        const { data: fetchedOrder } = await supabase
-          .from('orders')
-          .select('*')
-          .eq('id', orderId)
-          .single();
-        
-        if (!fetchedOrder) {
-          throw new Error('Order not found after status update');
-        }
-        
-        // Use fetched order
-        const finalOrder = fetchedOrder as Order;
-        
-        // Step 4: Send email notification (Email Second)
-        if (finalOrder.customer_email) {
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: nextStatus, result_file_url: 'stored' } : o));
+      setDetailOrder(current => current?.id === orderId ? { ...current, status: nextStatus, result_file_url: 'stored' } : current);
+      toast.success('Stav zmenený na: Dokončené');
+      if (currentOrder && nextStatus === 'completed') notifyStatusChange(currentOrder, 'completed');
+
+      const invoiceOrder = currentOrder;
+      if (invoiceOrder && nextStatus === 'completed') {
+        void (async () => {
           try {
-            const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://kivqvwdfujsnuwfxjtcz.supabase.co';
-            const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-            
-            console.log('[handleResultUpload] Step 2: Sending order-ready email for orderId:', orderId);
-            console.log('[handleResultUpload] Email data:', {
-              orderId: finalOrder.id,
-              orderNumber: finalOrder.order_number,
-              customerEmail: finalOrder.customer_email,
-              resultFileUrl: publicUrl,
-            });
-            
-            const response = await fetch(`${supabaseUrl}/functions/v1/order-ready`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${anonKey}`,
-              },
-              body: JSON.stringify({
-                orderId: finalOrder.id,
-                orderNumber: finalOrder.order_number || '',
-                customerEmail: finalOrder.customer_email,
-                customerName: finalOrder.customer_name || '',
-                carBrand: finalOrder.car_brand || '',
-                carModel: finalOrder.car_model || '',
-                resultFileUrl: publicUrl,
-                importantNote: finalOrder.important_note || null,
-              }),
-            });
-
-            const responseData = await response.json();
-            console.log('[handleResultUpload] Email sent - response:', response.status, responseData);
-
-            if (!response.ok || responseData.success === false) {
-              console.error('[handleResultUpload] Email notification failed:', {
-                status: response.status,
-                error: responseData.error,
-                details: responseData.details,
-              });
-              toast.success('Result file uploaded! (Email notification failed)');
-            } else {
-              console.log('[handleResultUpload] Email sent successfully');
-              toast.success('Result file uploaded and customer notified via email!');
-            }
-          } catch (emailError) {
-            console.error('[handleResultUpload] Email notification error:', emailError);
-            toast.success('Result file uploaded! (Email notification failed)');
-          }
-        } else {
-          console.warn('[handleResultUpload] No customer email found for order:', orderId);
-          toast.success('Result file uploaded and status updated to completed');
-        }
-
-        // Step 5: Generate invoice asynchronously (Invoice at the end, async, non-blocking)
-        // This runs in separate try-catch and doesn't block previous steps
-        // Upload -> Status Completed -> Invoice
-        (async () => {
-          try {
-            console.log('[handleResultUpload] Step 3: Invoice started - generating invoice for orderId:', orderId);
-            
             const { data: invoiceData, error: invoiceError } = await supabase.functions.invoke('generate-invoice', {
               body: {
-                orderId: finalOrder.id,
-                orderNumber: finalOrder.order_number || '',
-                customerName: finalOrder.customer_name || 'Customer',
-                customerEmail: finalOrder.customer_email,
+                orderId: invoiceOrder.id,
+                orderNumber: invoiceOrder.order_number || '',
+                customerName: invoiceOrder.customer_name || 'Customer',
+                customerEmail: invoiceOrder.customer_email,
                 items: [{
                   name: 'ECU Tuning Service',
-                  price: parseFloat(finalOrder.total_price?.toString() || '0'),
+                  price: parseFloat(invoiceOrder.total_price?.toString() || '0'),
                 }],
-                totalAmount: parseFloat(finalOrder.total_price?.toString() || '0'),
-                brand: finalOrder.car_brand || undefined,
-                model: finalOrder.car_model || undefined,
-                fuelType: finalOrder.fuel_type || undefined,
-                year: finalOrder.year ? parseInt(finalOrder.year.toString()) : undefined,
-                ecuType: finalOrder.ecu_type || undefined,
-                vin: finalOrder.vin || undefined,
+                totalAmount: parseFloat(invoiceOrder.total_price?.toString() || '0'),
+                brand: invoiceOrder.car_brand || undefined,
+                model: invoiceOrder.car_model || undefined,
+                fuelType: invoiceOrder.fuel_type || undefined,
+                year: invoiceOrder.year ? parseInt(invoiceOrder.year.toString()) : undefined,
+                ecuType: invoiceOrder.ecu_type || undefined,
+                vin: invoiceOrder.vin || undefined,
               },
             });
-
-            console.log('[handleResultUpload] Invoice generation response:', invoiceData, invoiceError);
-
-            if (invoiceError || !invoiceData || invoiceData.success === false) {
-              console.error('[handleResultUpload] Invoice generation failed (non-fatal):', {
-                error: invoiceError,
-                data: invoiceData,
-              });
-            } else {
-              console.log('[handleResultUpload] Invoice generated and sent successfully');
-              // Strict Upload Lock: Update local state with invoice number to permanently lock the button
-              if (invoiceData.invoiceNumber) {
-                setOrders(prev => prev.map(o => 
-                  o.id === finalOrder.id 
-                    ? { ...o, invoice_number: invoiceData.invoiceNumber, invoice_url: invoiceData.invoiceUrl || null }
-                    : o
-                ));
-              }
+            if (!invoiceError && invoiceData?.invoiceNumber) {
+              setOrders(prev => prev.map(o =>
+                o.id === invoiceOrder.id
+                  ? { ...o, invoice_number: invoiceData.invoiceNumber, invoice_url: invoiceData.invoiceUrl || null }
+                  : o
+              ));
             }
           } catch (invoiceError) {
             console.error('[handleResultUpload] Invoice generation error (non-fatal):', invoiceError);
-            // Non-fatal - invoice can be generated later, status and email are already done
-          }
-        })();
-      } else {
-        // Order found in local state
-        if (order.customer_email) {
-          try {
-            const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://kivqvwdfujsnuwfxjtcz.supabase.co';
-            const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-            
-            console.log('[handleResultUpload] Step 2: Sending order-ready email for orderId:', orderId);
-            console.log('[handleResultUpload] Email data:', {
-              orderId: order.id,
-              orderNumber: order.order_number,
-              customerEmail: order.customer_email,
-              resultFileUrl: publicUrl,
-            });
-            
-            const response = await fetch(`${supabaseUrl}/functions/v1/order-ready`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${anonKey}`,
-              },
-              body: JSON.stringify({
-                orderId: order.id,
-                orderNumber: order.order_number || '',
-                customerEmail: order.customer_email,
-                customerName: order.customer_name || '',
-                carBrand: order.car_brand || '',
-                carModel: order.car_model || '',
-                resultFileUrl: publicUrl,
-                importantNote: order.important_note || null,
-              }),
-            });
-
-            const responseData = await response.json();
-            console.log('[handleResultUpload] Email sent - response:', response.status, responseData);
-
-            if (!response.ok || responseData.success === false) {
-              console.error('[handleResultUpload] Email notification failed:', {
-                status: response.status,
-                error: responseData.error,
-                details: responseData.details,
-              });
-              toast.success('Result file uploaded! (Email notification failed)');
-            } else {
-              console.log('[handleResultUpload] Email sent successfully');
-              toast.success('Result file uploaded and customer notified via email!');
-            }
-          } catch (emailError) {
-            console.error('[handleResultUpload] Email notification error:', emailError);
-            toast.success('Result file uploaded! (Email notification failed)');
-          }
-        } else {
-          console.warn('[handleResultUpload] No customer email found for order:', orderId);
-          toast.success('Result file uploaded and status updated to completed');
-        }
-
-        // Step 5: Generate invoice asynchronously (Invoice at the end, async, non-blocking)
-        // Upload -> Status Completed -> Invoice
-        (async () => {
-          try {
-            console.log('[handleResultUpload] Step 3: Invoice started - generating invoice for orderId:', orderId);
-            
-            const { data: invoiceData, error: invoiceError } = await supabase.functions.invoke('generate-invoice', {
-              body: {
-                orderId: order.id,
-                orderNumber: order.order_number || '',
-                customerName: order.customer_name || 'Customer',
-                customerEmail: order.customer_email,
-                items: [{
-                  name: 'ECU Tuning Service',
-                  price: parseFloat(order.total_price?.toString() || '0'),
-                }],
-                totalAmount: parseFloat(order.total_price?.toString() || '0'),
-                brand: order.car_brand || undefined,
-                model: order.car_model || undefined,
-                fuelType: order.fuel_type || undefined,
-                year: order.year ? parseInt(order.year.toString()) : undefined,
-                ecuType: order.ecu_type || undefined,
-                vin: order.vin || undefined,
-              },
-            });
-
-            console.log('[handleResultUpload] Invoice generation response:', invoiceData, invoiceError);
-
-            if (invoiceError || !invoiceData || invoiceData.success === false) {
-              console.error('[handleResultUpload] Invoice generation failed (non-fatal):', {
-                error: invoiceError,
-                data: invoiceData,
-              });
-            } else {
-              console.log('[handleResultUpload] Invoice generated and sent successfully');
-              // Strict Upload Lock: Update local state with invoice number to permanently lock the button
-              if (invoiceData.invoiceNumber) {
-                setOrders(prev => prev.map(o => 
-                  o.id === order.id 
-                    ? { ...o, invoice_number: invoiceData.invoiceNumber, invoice_url: invoiceData.invoiceUrl || null }
-                    : o
-                ));
-              }
-            }
-          } catch (invoiceError) {
-            console.error('[handleResultUpload] Invoice generation error (non-fatal):', invoiceError);
-            // Non-fatal - invoice can be generated later, status and email are already done
           }
         })();
       }
-      
-      fetchOrders();
-      
-      // On success: Keep button disabled (upload completed, no need to reset)
-      // The button will be hidden/replaced when order status changes to 'completed'
-      // Only reset on error to allow retry
+
+      setUploadingId(null);
+      pendingUploadId.current = null;
+      setSelectedOrderId(null);
+      void fetchOrders(true);
     } catch (error) {
       console.error('[handleResultUpload] Upload error:', error);
-      toast.error('Failed to upload result file');
-      // Only reset on error to allow retry
+      toast.error('Hotový súbor sa nepodarilo uložiť');
       setUploadingId(null);
+      pendingUploadId.current = null;
       setSelectedOrderId(null);
     }
   };
 
-  const triggerUpload = (orderId: string) => {
-    setSelectedOrderId(orderId);
-    fileInputRef.current?.click();
+  const handleResultDownload = async (order: Order) => {
+    try {
+      await downloadOrderPart(
+        order.id,
+        'result',
+        order.result_file_url || '',
+        `result-${order.order_number || order.id.slice(0, 8)}`,
+      );
+    } catch (error) {
+      console.error('Result download error:', error);
+      toast.error('Hotový súbor sa nepodarilo stiahnuť');
+    }
   };
 
-  const handleDownload = async (fileName: string, orderNumber: string, orderId: string) => {
+  const handleClientFileDownload = async (order: Order) => {
     try {
-      // Create Public URL from file name
-      const { data: { publicUrl } } = supabase.storage
-        .from('tunes')
-        .getPublicUrl(fileName);
-
-      if (!publicUrl) {
-        toast.error('Nepodarilo sa vytvoriť URL pre sťahovanie');
-        return;
-      }
-
-      const { data: promoted, error: updateError } = await supabase
-        .from('orders')
-        .update({ status: 'processing' })
-        .eq('id', orderId)
-        .in('status', ['pending', 'paid'])
-        .select('id');
-      if (updateError) console.error('DB UPDATE ERROR:', updateError);
-      if (promoted?.length) {
-        setOrders((currentOrders) =>
-          currentOrders.map((order) =>
-            order.id === orderId ? { ...order, status: statusAfterClientFileDownload(order.status) } : order,
-          ),
-        );
-      }
-
-      try {
-        const response = await fetch(publicUrl);
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `order-${orderNumber || 'file'}-${fileName}`;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-      } catch (err) {
-        console.error('Download error:', err);
-        window.open(publicUrl, '_blank');
-      }
+      await downloadOrderPart(
+        order.id,
+        'client',
+        order.file_url || '',
+        `client-${order.order_number || order.id.slice(0, 8)}`,
+      );
     } catch (error) {
-      console.error('Error creating download URL:', error);
+      console.error('Client download error:', error);
       toast.error('Chyba pri sťahovaní súboru');
     }
+  };
+
+  const triggerUpload = (orderId: string) => {
+    pendingUploadId.current = orderId;
+    setSelectedOrderId(orderId);
+    fileInputRef.current?.click();
   };
 
   const filteredOrders = orders.filter((order) => {
@@ -1511,7 +1416,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                         <div className="flex h-full w-full flex-nowrap items-stretch gap-0 p-0">
                           {order.file_url ? (
                             <button
-                              onClick={() => handleDownload(order.file_url!, order.order_number || order.id.slice(0, 8), order.id)}
+                              onClick={() => void handleClientFileDownload(order)}
                               className={`${actionCell} text-yellow-500 hover:bg-yellow-500/20 hover:border-yellow-500/40`}
                               title="Stiahnuť súbor zákazníka"
                             >
@@ -1732,7 +1637,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                       <p className="mb-1 text-xs text-muted-foreground">Súbor zákazníka</p>
                       {detailOrder.file_url ? (
                         <button
-                          onClick={() => handleDownload(detailOrder.file_url!, detailOrder.order_number || detailOrder.id.slice(0, 8), detailOrder.id)}
+                          onClick={() => void handleClientFileDownload(detailOrder)}
                           className="flex h-9 w-full items-center justify-center gap-1.5 rounded-lg border border-primary/40 bg-transparent px-2 text-center text-xs leading-tight text-foreground"
                         >
                           <Download className="w-4 h-4" />
@@ -1745,14 +1650,15 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                     <div className="min-w-0">
                       <p className="mb-1 text-xs text-muted-foreground">Hotový súbor</p>
                       {detailOrder.result_file_url ? (
-                        <a
-                          href={detailOrder.result_file_url}
-                          download
-                          className="flex h-9 w-full items-center justify-center gap-1.5 rounded-lg border border-primary/40 bg-primary/15 px-2 text-center text-xs font-medium leading-tight text-primary"
+                        <button
+                          type="button"
+                          onClick={() => triggerUpload(detailOrder.id)}
+                          disabled={uploadingId === detailOrder.id}
+                          className="flex h-9 w-full items-center justify-center gap-1.5 rounded-lg border border-primary/40 bg-primary/15 px-2 text-center text-xs font-medium leading-tight text-primary disabled:cursor-not-allowed"
                         >
                           <Eye className="w-4 h-4" />
-                          Stiahnuť hotový súbor
-                        </a>
+                          Odoslať hotový Súbor
+                        </button>
                       ) : detailOrder.invoice_number ? (
                         <div className="space-y-2">
                           <p className="text-muted-foreground text-sm">Súbor už bol odoslaný</p>
@@ -1774,11 +1680,9 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                             <>
                               <p className="text-muted-foreground text-sm">Hotový súbor ešte nie je nahraný</p>
                               <button
-                                onClick={() => {
-                                  setDetailOrder(null);
-                                  triggerUpload(detailOrder.id);
-                                }}
-                                disabled={uploadingId === detailOrder.id || detailOrder.invoice_number}
+                                type="button"
+                                onClick={() => triggerUpload(detailOrder.id)}
+                                disabled={uploadingId === detailOrder.id || !!detailOrder.invoice_number}
                                 className={`flex h-9 w-full items-center justify-center gap-1.5 rounded-lg px-2 text-center text-xs leading-tight ${
                                   uploadingId === detailOrder.id
                                     ? 'cursor-not-allowed border border-white/10 bg-white/5 text-gray-400'
@@ -1797,7 +1701,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                                 ) : (
                                   <>
                                     <Upload className="w-4 h-4" />
-                                    Nahrať hotový súbor
+                                    Odoslať hotový Súbor
                                   </>
                                 )}
                               </button>

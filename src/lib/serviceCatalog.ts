@@ -98,14 +98,23 @@ export const groupCatalog = (services: CatalogService[]) => {
   }));
 };
 
-export const loadServiceCatalog = async (): Promise<CatalogService[]> => {
-  const { data, error } = await client()
-    .from('services')
-    .select('id,name,price,category')
-    .order('category', { ascending: true })
-    .order('name', { ascending: true });
+const readServices = async () => {
+  const query = (source: SupabaseClient) =>
+    source
+      .from('services')
+      .select('id,name,price,category')
+      .order('category', { ascending: true })
+      .order('name', { ascending: true });
 
-  if (error) throw error;
+  const primary = await query(supabase);
+  if (!primary.error) return primary.data;
+  const backup = await query(client());
+  if (backup.error) throw backup.error;
+  return backup.data;
+};
+
+export const loadServiceCatalog = async (): Promise<CatalogService[]> => {
+  const data = await readServices();
   const descriptions = await loadDescriptions();
   const services = normalize(data).map((service) => ({
     ...service,

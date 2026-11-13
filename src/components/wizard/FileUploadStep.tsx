@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { Upload, File, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { uploadOrderFile } from '@/lib/ecuFile';
 import { supabase } from '@/lib/supabase';
 
 interface FileUploadStepProps {
@@ -32,21 +33,14 @@ const FileUploadStep = ({ onFileUploaded, onBack, onSubmit, isSubmitting }: File
         setUploadProgress((prev) => Math.min(prev + 10, 90));
       }, 200);
 
-      const fileName = `${Date.now()}-${selectedFile.name}`;
-      const { data, error: uploadError } = await supabase.storage
-        .from('tunes')
-        .upload(fileName, selectedFile);
+      const { data: authData } = await supabase.auth.getUser();
+      const storedFile = await uploadOrderFile(selectedFile, authData.user?.id || 'guest');
 
       clearInterval(progressInterval);
 
-      if (uploadError) {
-        throw uploadError;
-      }
-
-      // Store only the file name (not the full URL) in file_url column
       setUploadProgress(100);
       setUploadComplete(true);
-      onFileUploaded(fileName);
+      onFileUploaded(storedFile);
     } catch (err) {
       console.error('Upload error:', err);
       setError(err instanceof Error ? err.message : 'Upload failed');

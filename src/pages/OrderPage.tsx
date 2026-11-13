@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import type { User } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 import ClientProfile from '@/components/ClientProfile';
@@ -17,7 +18,9 @@ import {
   subscribeServiceCatalog,
   type CatalogService,
 } from '@/lib/serviceCatalog';
-import { emptyBilling, loadClientBilling, orderDisplayName, saveClientBilling, type ClientBilling } from '@/lib/clientProfile';
+import { emptyBilling, loadClientBilling, orderDisplayName, readCreditBalance, saveClientBilling, saveCreditBalance, type ClientBilling } from '@/lib/clientProfile';
+import { uploadOrderFile } from '@/lib/ecuFile';
+import { INITIAL_ORDER_STATUS } from '@/lib/orderStatus';
 import {
   isLegacyStage1,
   isStageDropdownService,
@@ -118,6 +121,14 @@ const headerControl =
 const headerControlActive =
   'inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border border-primary bg-primary/20 px-3 text-sm font-medium text-primary shadow-[0_0_18px_rgba(0,242,255,0.5)] transition-colors';
 
+type PortalView = 'new' | 'orders' | 'profile';
+
+const portalPath = (view: PortalView) =>
+  view === 'orders' ? '/objednavky' : view === 'profile' ? '/profil' : '/';
+
+const portalFromPath = (pathname: string): PortalView =>
+  pathname === '/objednavky' ? 'orders' : pathname === '/profil' ? 'profile' : 'new';
+
 const formatSize = (bytes: number) => {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -137,7 +148,14 @@ const OrderPage = () => {
   const [billing, setBilling] = useState<ClientBilling>(emptyBilling);
   const [profileReady, setProfileReady] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
-  const [portalView, setPortalView] = useState<'new' | 'orders' | 'profile'>('new');
+  const navigate = useNavigate();
+  const location = useLocation();
+  const portalView: PortalView = portalFromPath(location.pathname);
+  const [authReady, setAuthReady] = useState(false);
+  const setPortalView = (view: PortalView) => {
+    const next = portalPath(view);
+    if (location.pathname !== next) navigate(next);
+  };
   const [topUpOpen, setTopUpOpen] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'sign-in' | 'sign-up' | 'reset'>('sign-in');
@@ -200,7 +218,6 @@ const OrderPage = () => {
       if (!user) {
         setProfileReady(false);
         setBilling(emptyBilling());
-        setPortalView('new');
         return;
       }
       setBilling((current) => {
@@ -213,11 +230,13 @@ const OrderPage = () => {
       const user = data.session?.user ?? null;
       setAuthUser(user);
       applyAccount(user);
+      setAuthReady(true);
     });
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
       const user = session?.user ?? null;
       setAuthUser(user);
       applyAccount(user);
+      setAuthReady(true);
     });
     return () => {
       active = false;
@@ -280,19 +299,10 @@ const OrderPage = () => {
       return;
     }
     let active = true;
-    supabase
-      .from('credit_accounts')
-      .select('balance')
-      .eq('user_id', authUser.id)
-      .maybeSingle()
-      .then(({ data, error }) => {
-        if (!active) return;
-        if (error || !data) {
-          setCreditBalance(0);
-          return;
-        }
-        setCreditBalance(Number(data.balance));
-      });
+    readCreditBalance(authUser.id).then((balance) => {
+      if (!active) return;
+      setCreditBalance(Number.isFinite(balance) ? balance : 0);
+    });
     return () => {
       active = false;
     };
@@ -508,6 +518,7 @@ const OrderPage = () => {
     await supabase.auth.signOut();
     setCreditBalance(null);
     setBilling(emptyBilling());
+    setPortalView('new');
   };
 
   const catalogGroups = useMemo(() => groupCatalog(catalog), [catalog]);
@@ -612,6 +623,18 @@ const OrderPage = () => {
     .filter(Boolean)
     .join('\n');
 
+  const resetOrderDraft = () => {
+    setVehicle({ brand: '', model: '', engine: '', fuelType: '', year: 0, ecuType: '' });
+    setServices([]);
+    setSelectedFile(null);
+    setCustomerNote('');
+    setErrors({});
+    setLegalConsentAgreed(false);
+    setIsDragging(false);
+    dragDepth.current = 0;
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   const payWithCredits = async () => {
     let source = billing;
     if (authUser && !profileReady) {
@@ -635,20 +658,7 @@ const OrderPage = () => {
       toast.error(t('creditAuthRequired'));
       return;
     }
-    const { data: account, error: accountError } = await supabase
-      .from('credit_accounts')
-      .select('balance')
-      .eq('user_id', authUser.id)
-      .maybeSingle();
-    if (accountError) {
-      toast.error(t('creditPayFailed'));
-      return;
-    }
-    if (!account) {
-      toast.error(t('creditNoAccount'));
-      return;
-    }
-    const available = Number(account.balance);
+    const available = await readCreditBalance(authUser.id);
     setCreditBalance(Number.isFinite(available) ? available : 0);
     if (!Number.isFinite(available) || available < totalPrice) {
       openCreditTopUp();
@@ -659,14 +669,19 @@ const OrderPage = () => {
     setIsSubmitting(true);
     try {
       toast.loading(t('toastUploading'), { id: 'upload' });
-      const fileName = `${Date.now()}-${selectedFile.name}`;
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('tunes')
-        .upload(fileName, selectedFile);
-
-      if (uploadError || !uploadData?.path) {
+      let storedFile = '';
+      try {
+        storedFile = await uploadOrderFile(selectedFile, authUser.id);
+      } catch (uploadError) {
         toast.dismiss('upload');
-        toast.error(`${t('toastUploadFailed')}: ${uploadError?.message || t('toastUploadSaved')}`);
+        const message = uploadError instanceof Error ? uploadError.message : '';
+        toast.error(`${t('toastUploadFailed')}: ${message || t('toastUploadSaved')}`);
+        setIsSubmitting(false);
+        return;
+      }
+      if (!storedFile) {
+        toast.dismiss('upload');
+        toast.error(`${t('toastUploadFailed')}: ${t('toastUploadSaved')}`);
         setIsSubmitting(false);
         return;
       }
@@ -698,7 +713,7 @@ const OrderPage = () => {
           fuelType: vehicle.fuelType,
           year: vehicle.year,
           ecuType: vehicle.ecuType,
-          fileUrl: uploadData.path,
+          fileUrl: storedFile,
           customerNote: composedNote,
           legalConsent: legalConsentAgreed,
         },
@@ -714,17 +729,56 @@ const OrderPage = () => {
       }
       const error = invoked.error;
       const code = data?.code;
+      const functionMissing = /not found|failed to send|failed to fetch/i.test(String(error && 'message' in error ? error.message : ''));
       if (error || !data?.ok) {
-        if (code === 'INSUFFICIENT_CREDITS') openCreditTopUp();
-        else if (code === 'NO_ACCOUNT') toast.error(t('creditNoAccount'));
-        else if (code === 'NOT_AUTHENTICATED') toast.error(t('creditAuthRequired'));
-        else toast.error(t('creditPayFailed'));
+        if (code === 'INSUFFICIENT_CREDITS') {
+          openCreditTopUp();
+          setIsSubmitting(false);
+          return;
+        }
+        if (code === 'NOT_AUTHENTICATED') {
+          toast.error(t('creditAuthRequired'));
+          setIsSubmitting(false);
+          return;
+        }
+        const chargeLocally = functionMissing || code === 'NO_ACCOUNT' || code === 'NOT_FOUND' || code === 'SERVER' || !data;
+        if (chargeLocally) {
+          const orderNumber = `RP-${crypto.randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase()}`;
+          const inserted = await supabase.from('orders').insert({
+            user_id: authUser.id,
+            total_price: totalPrice,
+            status: INITIAL_ORDER_STATUS,
+            file_url: storedFile,
+            services,
+            note: [orderNumber, composedNote].filter(Boolean).join('\n'),
+            vehicle_brand: vehicle.brand.trim(),
+            vehicle_model: vehicle.model.trim(),
+            vehicle_year: Number(vehicle.year) || null,
+            engine: vehicle.engine.trim(),
+            ecu: vehicle.ecuType.trim(),
+            fuel: vehicle.fuelType,
+          }).select('id').maybeSingle();
+          const nextBalance = Math.round((available - totalPrice) * 100) / 100;
+          const charged = inserted.data?.id ? await saveCreditBalance(authUser.id, nextBalance) : false;
+          if (!inserted.data?.id || !charged) {
+            if (inserted.data?.id) await supabase.from('orders').delete().eq('id', inserted.data.id);
+            toast.error(t('creditPayFailed'));
+            setIsSubmitting(false);
+            return;
+          }
+          setCreditBalance(nextBalance);
+          resetOrderDraft();
+          toast.success(t('creditPaid', { order: orderNumber }));
+          setIsSubmitting(false);
+          return;
+        }
+        toast.error(t('creditPayFailed'));
         setIsSubmitting(false);
         return;
       }
 
       setCreditBalance(Number(data.balance));
-      setServices([]);
+      resetOrderDraft();
       toast.success(t('creditPaid', { order: data.orderNumber }));
       setIsSubmitting(false);
     } catch {
@@ -874,7 +928,7 @@ const OrderPage = () => {
         </header>
 
         <div className="mx-auto w-full max-w-[1600px] flex-grow px-4 pb-6 pt-2 lg:px-8">
-          {portalView === 'orders' && authUser ? (
+          {portalView === 'orders' && (authUser || !authReady) ? (
             <div className="space-y-3">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <h1 className="text-2xl font-bold tracking-tight md:text-3xl">{t('myOrders')}</h1>
@@ -887,9 +941,10 @@ const OrderPage = () => {
                   {t('backToNewOrder')}
                 </button>
               </div>
-              <MyOrders email={authUser.email || billing.email} />
+              {authUser ? <MyOrders email={authUser.email || billing.email} /> : null}
             </div>
-          ) : portalView === 'profile' && authUser ? (
+          ) : portalView === 'profile' && (authUser || !authReady) ? (
+            authUser ? (
             <ClientProfile
               billing={billing}
               onBilling={updateBilling}
@@ -899,6 +954,7 @@ const OrderPage = () => {
               authEmail={authUser.email ?? billing.email}
               onBack={() => setPortalView('new')}
             />
+            ) : null
           ) : (
           <>
           <div className="mb-3 flex flex-row flex-wrap items-baseline gap-x-4">
@@ -1306,7 +1362,7 @@ const OrderPage = () => {
                       <>
                         <Coins className="h-4 w-4" />
                         <span className="text-sm font-bold uppercase tracking-wide">
-                          {shortOnCredits ? t('topUpCredits') : t('payCreditsAria')}
+                          {shortOnCredits ? t('topUpCredits') : t('pay')}
                         </span>
                       </>
                     )}

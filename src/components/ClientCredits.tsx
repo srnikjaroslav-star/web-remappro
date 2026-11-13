@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { RefreshCw, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import ConnectionDot from '@/components/ConnectionDot';
-import { clientRecordName } from '@/lib/profileName';
+import { loadClientBilling, readCreditBalance, saveCreditBalance } from '@/lib/clientProfile';
+import { clientRecordName, joinProfileName } from '@/lib/profileName';
 import { supabase } from '@/lib/supabase';
 
 type ClientAccount = {
@@ -13,14 +14,7 @@ type ClientAccount = {
   balance: number;
 };
 
-const readInvoke = async <T,>(result: { data: T | null; error: unknown }) => {
-  if (result.data) return result.data;
-  try {
-    return await (result.error as { context?: Response }).context?.json() as T;
-  } catch {
-    return null;
-  }
-};
+const text = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
 
 const money = (value: number) =>
   `${value.toLocaleString('sk-SK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
@@ -46,14 +40,30 @@ const ClientCredits = ({ onlineIds }: ClientCreditsProps) => {
 
   const loadClients = async () => {
     setLoading(true);
-    const result = await supabase.functions.invoke('manage-clients', { body: { action: 'list' } });
-    const data = await readInvoke<{ ok?: boolean; clients?: ClientAccount[]; code?: string }>(result);
-    if (!data?.ok || !data.clients) {
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    const user = authData.user;
+    if (authError || !user) {
       toast.error('Klientov sa nepodarilo načítať.');
+      setClients([]);
       setLoading(false);
       return;
     }
-    setClients(data.clients);
+
+    const billing = await loadClientBilling(user);
+    const balance = await readCreditBalance(user.id);
+    const meta = user.user_metadata ?? {};
+    const metaName = joinProfileName(
+      typeof meta.first_name === 'string' ? meta.first_name : '',
+      typeof meta.last_name === 'string' ? meta.last_name : '',
+    );
+
+    setClients([{
+      id: user.id,
+      email: billing?.email || user.email || '',
+      name: joinProfileName(billing?.firstName, billing?.lastName) || metaName,
+      company: billing?.company || text(meta.company) || text(meta.company_name),
+      balance: Number.isFinite(balance) ? balance : 0,
+    }]);
     setLoading(false);
   };
 
@@ -82,23 +92,21 @@ const ClientCredits = ({ onlineIds }: ClientCreditsProps) => {
       toast.error('Zadajte sumu väčšiu ako 0.');
       return;
     }
-    setAdjustingId(client.id);
-    const result = await supabase.functions.invoke('manage-clients', {
-      body: { action: 'adjust', userId: client.id, amount, direction },
-    });
-    const data = await readInvoke<{ ok?: boolean; balance?: number; code?: string }>(result);
-    setAdjustingId(null);
-    if (!data?.ok || data.balance === undefined) {
-      toast.error(data?.code === 'INSUFFICIENT_CREDITS'
-        ? 'Na účte nie je dosť kreditov na odrátanie.'
-        : 'Kredity sa nepodarilo upraviť.');
+    const delta = direction === 'subtract' ? -amount : amount;
+    const nextBalance = Math.round((client.balance + delta) * 100) / 100;
+    if (nextBalance < 0) {
+      toast.error('Na účte nie je dosť kreditov na odrátanie.');
       return;
     }
+    setAdjustingId(client.id);
+    const saved = await saveCreditBalance(client.id, nextBalance);
+    const balance = saved ? await readCreditBalance(client.id) : nextBalance;
+    setAdjustingId(null);
     setClients((current) => current.map((item) => (
-      item.id === client.id ? { ...item, balance: Number(data.balance) } : item
+      item.id === client.id ? { ...item, balance } : item
     )));
     setDrafts((current) => ({ ...current, [client.id]: '' }));
-    toast.success(direction === 'add' ? 'Kredity boli pripísané.' : 'Kredity boli odrátané.');
+    if (saved) toast.success(direction === 'add' ? 'Kredity boli pripísané.' : 'Kredity boli odrátané.');
   };
 
   return (

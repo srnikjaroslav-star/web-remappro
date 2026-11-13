@@ -51,6 +51,8 @@ const AppShell = () => {
           {/* Koreň aplikácie je objednávkový formulár. */}
           <Route path="/" element={<OrderPage />} />
           <Route path="/order" element={<OrderPage />} />
+          <Route path="/objednavky" element={<OrderPage />} />
+          <Route path="/profil" element={<OrderPage />} />
 
           {/* TRACKING: Toto je kľúčová cesta pre tvoj link z emailu */}
           <Route path="/track" element={<TrackPage />} />
