@@ -243,7 +243,7 @@ const ClientProfile = ({
         </form>
 
         <div className="space-y-4">
-          <section className={profilePanel}>
+          <section id="profile-credit-balance" className={profilePanel}>
             <div className="mb-3 flex items-center gap-2">
               <Coins className="h-4 w-4 text-primary" />
               <h2 className="text-base font-semibold uppercase leading-5 tracking-[0.16em] text-primary">{t('creditBalance')}</h2>

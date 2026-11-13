@@ -137,6 +137,7 @@ const OrderPage = () => {
   const [profileReady, setProfileReady] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const [portalView, setPortalView] = useState<'new' | 'orders' | 'profile'>('new');
+  const [focusCreditBalance, setFocusCreditBalance] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'sign-in' | 'sign-up' | 'reset'>('sign-in');
   const [loginFirstName, setLoginFirstName] = useState('');
@@ -315,6 +316,15 @@ const OrderPage = () => {
   }, [authUser]);
 
   useEffect(() => {
+    if (!focusCreditBalance || portalView !== 'profile') return;
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById('profile-credit-balance')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setFocusCreditBalance(false);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [focusCreditBalance, portalView]);
+
+  useEffect(() => {
     if (!loginOpen) {
       setShowPassword(false);
       return;
@@ -396,6 +406,17 @@ const OrderPage = () => {
 
   const showCreditBalance = () => {
     document.getElementById('order-credit-balance')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
+  const openCreditTopUp = () => {
+    if (!authUser) {
+      setLoginError('');
+      setAuthMode('sign-in');
+      setLoginOpen(true);
+      return;
+    }
+    setFocusCreditBalance(true);
+    setPortalView('profile');
   };
 
   const signIn = async (event: React.FormEvent) => {
@@ -510,6 +531,7 @@ const OrderPage = () => {
   );
 
   const totalPrice = selectedItems.reduce((total, service) => total + service.price, 0);
+  const shortOnCredits = creditBalance !== null && creditBalance < totalPrice;
 
   const setVehicleField = (field: keyof VehicleData, value: string | number) => {
     setVehicle((current) => ({ ...current, [field]: value }));
@@ -638,7 +660,7 @@ const OrderPage = () => {
     const available = Number(account.balance);
     setCreditBalance(Number.isFinite(available) ? available : 0);
     if (!Number.isFinite(available) || available < totalPrice) {
-      toast.error(t('creditInsufficient'));
+      openCreditTopUp();
       return;
     }
     if (!selectedFile) return;
@@ -702,7 +724,7 @@ const OrderPage = () => {
       const error = invoked.error;
       const code = data?.code;
       if (error || !data?.ok) {
-        if (code === 'INSUFFICIENT_CREDITS') toast.error(t('creditInsufficient'));
+        if (code === 'INSUFFICIENT_CREDITS') openCreditTopUp();
         else if (code === 'NO_ACCOUNT') toast.error(t('creditNoAccount'));
         else if (code === 'NOT_AUTHENTICATED') toast.error(t('creditAuthRequired'));
         else toast.error(t('creditPayFailed'));
@@ -1278,13 +1300,13 @@ const OrderPage = () => {
                   </div>
                   <button
                     type="button"
-                    onClick={payWithCredits}
-                    disabled={isSubmitting}
-                    aria-busy={isSubmitting}
-                    aria-label={t('payCreditsAria')}
+                    onClick={shortOnCredits ? openCreditTopUp : payWithCredits}
+                    disabled={isSubmitting && !shortOnCredits}
+                    aria-busy={isSubmitting && !shortOnCredits}
+                    aria-label={shortOnCredits ? t('topUpCreditsAria') : t('payCreditsAria')}
                     className="btn-primary flex min-h-[52px] w-full items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {isSubmitting ? (
+                    {isSubmitting && !shortOnCredits ? (
                       <>
                         <Loader2 className="h-5 w-5 animate-spin" />
                         <span className="text-sm font-bold uppercase tracking-wide">{t('payCreditsLoading')}</span>
@@ -1292,7 +1314,9 @@ const OrderPage = () => {
                     ) : (
                       <>
                         <Coins className="h-4 w-4" />
-                        <span className="text-sm font-bold uppercase tracking-wide">{t('payCreditsAria')}</span>
+                        <span className="text-sm font-bold uppercase tracking-wide">
+                          {shortOnCredits ? t('topUpCredits') : t('payCreditsAria')}
+                        </span>
                       </>
                     )}
                   </button>
