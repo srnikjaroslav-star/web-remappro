@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 import ClientProfile from '@/components/ClientProfile';
+import CreditTopUpModal from '@/components/CreditTopUpModal';
 import NavLogo from '@/components/NavLogo';
 import MyOrders from '@/components/MyOrders';
 import StageYearSelect from '@/components/StageYearSelect';
@@ -137,7 +138,7 @@ const OrderPage = () => {
   const [profileReady, setProfileReady] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const [portalView, setPortalView] = useState<'new' | 'orders' | 'profile'>('new');
-  const [focusCreditBalance, setFocusCreditBalance] = useState(false);
+  const [topUpOpen, setTopUpOpen] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'sign-in' | 'sign-up' | 'reset'>('sign-in');
   const [loginFirstName, setLoginFirstName] = useState('');
@@ -316,15 +317,6 @@ const OrderPage = () => {
   }, [authUser]);
 
   useEffect(() => {
-    if (!focusCreditBalance || portalView !== 'profile') return;
-    const frame = window.requestAnimationFrame(() => {
-      document.getElementById('profile-credit-balance')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      setFocusCreditBalance(false);
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [focusCreditBalance, portalView]);
-
-  useEffect(() => {
     if (!loginOpen) {
       setShowPassword(false);
       return;
@@ -415,8 +407,7 @@ const OrderPage = () => {
       setLoginOpen(true);
       return;
     }
-    setFocusCreditBalance(true);
-    setPortalView('profile');
+    setTopUpOpen(true);
   };
 
   const signIn = async (event: React.FormEvent) => {
@@ -1328,6 +1319,7 @@ const OrderPage = () => {
           )}
         </div>
       </div>
+      {topUpOpen && <CreditTopUpModal onClose={() => setTopUpOpen(false)} />}
       {loginOpen && (
         <div
           className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4"
