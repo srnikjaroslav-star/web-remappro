@@ -1371,7 +1371,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                       const selected = active && edge !== 'last' ? picked : '';
                       return `px-4 py-1 align-middle border-r border-slate-800/60 ${selected}`;
                     };
-                    const actionCell = 'inline-flex h-full min-h-8 flex-1 basis-0 items-center justify-center overflow-hidden border-l border-slate-700/50 bg-cyan-950/30 transition-all duration-200';
+                    const actionCell = 'inline-flex h-full min-h-8 flex-1 basis-0 items-center justify-center shadow-[inset_0_0_0_2px_currentColor] transition-colors duration-200';
                     const vehicle = [order.car_brand, order.car_model].map((part) => String(part ?? '').trim()).filter(Boolean).join(' ');
                     const documents: { number: string; href: string; title: string }[] = [];
                     if (order.invoice_number) {
@@ -1453,19 +1453,19 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                           {order.file_url ? (
                             <button
                               onClick={() => void handleClientFileDownload(order)}
-                              className={`${actionCell} text-yellow-500 hover:bg-yellow-500/20 hover:border-yellow-500/40`}
+                              className={`${actionCell} bg-yellow-400/10 text-yellow-400 hover:bg-yellow-400/20`}
                               title="Stiahnuť súbor zákazníka"
                             >
-                              <Download className="w-5 h-5" />
+                              <Download className="h-5 w-5" />
                             </button>
                           ) : (
-                            <span className={`${actionCell} text-slate-600 cursor-not-allowed`} title="Súbor nie je k dispozícii">
-                              <Download className="w-5 h-5" />
+                            <span className={`${actionCell} cursor-not-allowed bg-slate-800/40 text-slate-500`} title="Súbor nie je k dispozícii">
+                              <Download className="h-5 w-5" />
                             </span>
                           )}
                           {order.status === 'completed' ? (
-                            <span className={`${actionCell} text-emerald-500 hover:bg-emerald-500/20 hover:border-emerald-500/40`} title="Hotový súbor je nahraný">
-                              <CheckCircle className="w-5 h-5" />
+                            <span className={`${actionCell} bg-emerald-400/10 text-emerald-400`} title="Hotový súbor je nahraný">
+                              <CheckCircle className="h-5 w-5" />
                             </span>
                           ) : (
                             <button
@@ -1473,8 +1473,8 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                               disabled={uploadingId === order.id || (order.status !== 'pending' && order.status !== 'processing')}
                               className={`${actionCell} ${
                                 uploadingId === order.id || (order.status !== 'pending' && order.status !== 'processing')
-                                  ? 'text-slate-500 cursor-not-allowed'
-                                  : 'text-emerald-500 hover:bg-emerald-500/20 hover:border-emerald-500/40'
+                                  ? 'cursor-not-allowed bg-slate-800/40 text-slate-500'
+                                  : 'bg-emerald-400/10 text-emerald-400 hover:bg-emerald-400/20'
                               }`}
                               title={
                                 uploadingId === order.id
@@ -1484,15 +1484,15 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                                     : 'Súbor sa dá odoslať vo stave Čakajúce alebo V procese'
                               }
                             >
-                              <Upload className={`w-5 h-5 ${uploadingId === order.id ? 'animate-pulse' : ''}`} />
+                              <Upload className={`h-5 w-5 ${uploadingId === order.id ? 'animate-pulse' : ''}`} />
                             </button>
                           )}
                           <button
                             onClick={() => setDetailOrder(order)}
-                            className={`${actionCell} text-cyan-400 hover:bg-cyan-500/20 hover:border-cyan-500/40`}
+                            className={`${actionCell} bg-cyan-400/10 text-cyan-400 hover:bg-cyan-400/20`}
                             title="Zobraziť detail objednávky"
                           >
-                            <FileText className="w-5 h-5" />
+                            <FileText className="h-5 w-5" />
                           </button>
                           <button
                             type="button"
@@ -1500,10 +1500,10 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                               event.stopPropagation();
                               setCancelConfirmOrder(order);
                             }}
-                            className={`${actionCell} text-red-500 hover:bg-red-500/20 hover:border-red-500/40`}
+                            className={`${actionCell} bg-red-500/10 text-red-400 hover:bg-red-500/20`}
                             title="Zmazať objednávku"
                           >
-                            <Trash2 className="w-5 h-5" />
+                            <Trash2 className="h-5 w-5" />
                           </button>
                         </div>
                       </td>
