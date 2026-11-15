@@ -40,8 +40,16 @@ const STATUS_CLASS: Record<string, string> = {
   paid: 'text-cyan-300',
 };
 
-const STATUS_FILTERS = ['all', 'pending', 'processing', 'completed'] as const;
+const STATUS_FILTERS = ['all', 'pending', 'processing', 'completed', 'cancelled'] as const;
 type StatusFilter = (typeof STATUS_FILTERS)[number];
+
+const FILTER_COLOR: Record<StatusFilter, string> = {
+  all: '#00eaff',
+  pending: '#facc15',
+  processing: '#06b6d4',
+  completed: '#22c55e',
+  cancelled: '#ef4444',
+};
 
 const fold = (value: string) =>
   value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -247,8 +255,8 @@ const MyOrders = ({ email }: { email: string }) => {
 
   return (
     <div className="overflow-hidden rounded-xl border border-primary/25 bg-black/45 shadow-[0_0_30px_hsl(185_100%_50%/0.08)] backdrop-blur-xl">
-      <div className="flex flex-col gap-3 border-b border-primary/30 bg-[#0a192f] px-4 py-3 lg:flex-row lg:items-center">
-        <label className="relative block min-w-0 flex-1">
+      <div className="flex flex-col gap-3 border-b border-primary/30 bg-[#0a192f] px-4 py-3 sm:flex-row sm:items-center sm:justify-end">
+        <label className="relative block w-full min-w-0 max-w-md shrink-0 sm:w-[28rem]">
           <span className="sr-only">{t('myOrdersSearch')}</span>
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-primary/70" />
           <input
@@ -259,26 +267,19 @@ const MyOrders = ({ email }: { email: string }) => {
             className="h-[42px] w-full rounded-md border border-primary/70 bg-transparent py-2 pl-9 pr-4 text-base leading-6 text-foreground shadow-[0_0_16px_rgba(0,242,255,0.28)] placeholder:text-muted-foreground transition-shadow hover:border-primary hover:shadow-[0_0_16px_rgba(0,242,255,0.45)] focus:border-primary focus:outline-none focus:shadow-[0_0_16px_rgba(0,242,255,0.45)]"
           />
         </label>
-        <div className="flex flex-wrap gap-2" role="group" aria-label={t('myOrdersStatus')}>
-          {STATUS_FILTERS.map((filter) => {
-            const active = statusFilter === filter;
-            return (
-              <button
-                key={filter}
-                type="button"
-                aria-pressed={active}
-                onClick={() => setStatusFilter(filter)}
-                className={`inline-flex h-[42px] items-center rounded-md border px-3 text-sm font-bold uppercase tracking-wide transition-colors ${
-                  active
-                    ? 'border-primary bg-primary/20 text-primary shadow-[0_0_16px_rgba(0,242,255,0.35)]'
-                    : 'border-primary/35 bg-transparent text-slate-300 hover:border-primary/70 hover:text-primary'
-                }`}
-              >
-                {filter === 'all' ? t('myOrdersFilterAll') : t(STATUS_KEY[filter])}
-              </button>
-            );
-          })}
-        </div>
+        <select
+          value={statusFilter}
+          aria-label={t('myOrdersStatus')}
+          onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
+          className="admin-filter-select h-[42px] w-44 shrink-0 !rounded-lg !border !border-primary !bg-primary/25 px-4 py-2 text-left !text-base font-semibold shadow-[0_0_18px_rgba(0,242,255,0.55)] transition-shadow hover:!border-primary hover:!bg-primary/35 hover:shadow-[0_0_22px_rgba(0,242,255,0.7)] focus:outline-none"
+          style={{ color: FILTER_COLOR[statusFilter] }}
+        >
+          {STATUS_FILTERS.map((filter) => (
+            <option key={filter} value={filter} style={{ color: FILTER_COLOR[filter], backgroundColor: '#050505', fontSize: '16px' }}>
+              {filter === 'all' ? t('myOrdersFilterAll') : t(STATUS_KEY[filter])}
+            </option>
+          ))}
+        </select>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full border-collapse text-base">
