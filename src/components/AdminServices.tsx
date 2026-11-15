@@ -361,12 +361,12 @@ const AdminServices = () => {
                           </button>
                         </div>
                       ) : (
-                        <div className="flex h-12 w-full">
-                          <button type="button" onClick={() => beginEdit(service)} className="inline-flex h-full min-w-0 flex-1 items-center justify-center gap-2 border-0 bg-cyan-500/15 px-3 text-sm font-bold uppercase tracking-wide text-cyan-300 transition-colors hover:bg-cyan-500/25">
+                        <div className="flex h-8 w-full">
+                          <button type="button" onClick={() => beginEdit(service)} className="inline-flex h-full min-w-0 flex-1 items-center justify-center gap-2 border-2 border-cyan-400 bg-cyan-500/15 px-3 text-sm font-bold uppercase tracking-wide text-cyan-300 transition-colors hover:bg-cyan-500/25">
                             <Pencil className="h-4 w-4 shrink-0" />
                             Upraviť
                           </button>
-                          <button type="button" disabled={busy} onClick={() => remove(service)} className="inline-flex h-full min-w-0 flex-1 items-center justify-center gap-2 border-l-2 border-l-cyan-300/80 bg-red-500/15 px-3 text-sm font-bold uppercase tracking-wide text-red-400 transition-colors hover:bg-red-500/25 disabled:opacity-60">
+                          <button type="button" disabled={busy} onClick={() => remove(service)} className="inline-flex h-full min-w-0 flex-1 items-center justify-center gap-2 border-2 border-red-500 bg-red-500/15 px-3 text-sm font-bold uppercase tracking-wide text-red-400 transition-colors hover:bg-red-500/25 disabled:opacity-60">
                             <Trash2 className="h-4 w-4 shrink-0" />
                             {confirmId === service.id ? 'Potvrdiť' : 'Zmazať'}
                           </button>
