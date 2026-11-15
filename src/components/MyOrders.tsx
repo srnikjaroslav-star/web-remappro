@@ -123,7 +123,7 @@ const telegramSupportUrl = (order: ClientOrder) => {
   const model = order.car_model?.trim() ?? '';
   const vehicle = brand && model ? ` (${brand} ${model})` : '';
   const text = `Ahoj, mám otázku k objednávke #${label}${vehicle}`;
-  return `https://t.me/${TELEGRAM_SUPPORT_USERNAME}?text=${encodeURIComponent(text)}`;
+  return `tg://resolve?domain=${TELEGRAM_SUPPORT_USERNAME}&text=${encodeURIComponent(text)}`;
 };
 
 const money = (value: number | string | null) => {
@@ -342,21 +342,19 @@ const MyOrders = ({ email }: { email: string }) => {
                     <p className="text-xl font-bold leading-none text-primary">{money(order.total_price)}</p>
                   </td>
                   <td className={`${cell} whitespace-nowrap`}>
-                    <span className="inline-flex items-center gap-3">
+                    <div className="flex items-center justify-between gap-3">
                       <span className={`text-sm font-bold uppercase tracking-wide ${STATUS_CLASS[order.status] || 'text-white'}`}>
                         {STATUS_KEY[order.status] ? t(STATUS_KEY[order.status]) : order.status}
                       </span>
                       <a
                         href={telegramSupportUrl(order)}
-                        target="_blank"
-                        rel="noopener noreferrer"
                         onClick={(event) => event.stopPropagation()}
-                        className={`${action} border border-primary/40 bg-primary/10 text-primary hover:border-primary/70 hover:bg-primary/20 hover:shadow-[0_0_12px_rgba(0,242,255,0.28)]`}
+                        className={`${action} shrink-0 border border-primary/40 bg-primary/10 text-primary hover:border-primary/70 hover:bg-primary/20 hover:shadow-[0_0_12px_rgba(0,242,255,0.28)]`}
                       >
                         <Send className="h-4 w-4" />
                         {t('orderSupport')}
                       </a>
-                    </span>
+                    </div>
                   </td>
                   <td className={`${glow} text-center`}>
                     {order.status === 'completed' && order.result_file_url ? (

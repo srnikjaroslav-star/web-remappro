@@ -19,7 +19,7 @@ import {
   subscribeServiceCatalog,
   type CatalogService,
 } from '@/lib/serviceCatalog';
-import { emptyBilling, loadClientBilling, orderDisplayName, readCreditBalance, recordPortalVisit, saveClientBilling, saveCreditBalance, type ClientBilling } from '@/lib/clientProfile';
+import { emptyBilling, loadClientBilling, orderDisplayName, readCreditBalance, releasePortalVisit, saveClientBilling, saveCreditBalance, trackPortalAuth, type ClientBilling } from '@/lib/clientProfile';
 import { uploadOrderFile } from '@/lib/ecuFile';
 import { INITIAL_ORDER_STATUS } from '@/lib/orderStatus';
 import {
@@ -141,6 +141,8 @@ const OrderPage = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const languageMenuRef = useRef<HTMLDivElement>(null);
   const languageSyncUser = useRef('');
+  const activeVisitUser = useRef('');
+  const visitSessionOpen = useRef(false);
   const [languageOpen, setLanguageOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -244,27 +246,39 @@ const OrderPage = () => {
       applyLanguage(user);
       setAuthReady(true);
     });
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
       const user = session?.user ?? null;
       setAuthUser(user);
       applyAccount(user);
       applyLanguage(user);
       setAuthReady(true);
+      if (event === 'SIGNED_OUT') {
+        visitSessionOpen.current = false;
+        releasePortalVisit(activeVisitUser.current);
+        activeVisitUser.current = '';
+        return;
+      }
+      const email = user?.email?.trim();
+      if (event === 'INITIAL_SESSION') {
+        visitSessionOpen.current = Boolean(user && email);
+        if (!user || !email) return;
+        activeVisitUser.current = user.id;
+        trackPortalAuth('INITIAL_SESSION', user.id, email);
+        return;
+      }
+      if (event !== 'SIGNED_IN' || !user || !email) return;
+      const newLogin = !visitSessionOpen.current;
+      visitSessionOpen.current = true;
+      activeVisitUser.current = user.id;
+      if (!newLogin) return;
+      releasePortalVisit(user.id);
+      trackPortalAuth('SIGNED_IN', user.id, email);
     });
     return () => {
       active = false;
       subscription.subscription.unsubscribe();
     };
   }, []);
-
-  useEffect(() => {
-    const email = authUser?.email?.trim();
-    if (!authUser || !email) return;
-    const key = `rp-portal-visit:${authUser.id}`;
-    const counted = window.sessionStorage.getItem(key) === '1';
-    if (!counted) window.sessionStorage.setItem(key, '1');
-    void recordPortalVisit(authUser.id, email, !counted);
-  }, [authUser?.id, authUser?.email]);
 
   useEffect(() => {
     if (!authUser) return;

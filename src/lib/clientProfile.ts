@@ -289,6 +289,59 @@ const activityFromPacked = (packed: PackedProfile | null): PortalActivity => ({
 
 let portalVisitChain: Promise<void> = Promise.resolve();
 const countedPortalUsers = new Set<string>();
+const visitStorageKey = (userId: string) => `rp-portal-visit:${userId}`;
+
+const visitAlreadyCounted = (userId: string) => {
+  try {
+    return window.sessionStorage.getItem(visitStorageKey(userId)) === '1';
+  } catch {
+    return false;
+  }
+};
+
+const rememberVisitCounted = (userId: string) => {
+  try {
+    window.sessionStorage.setItem(visitStorageKey(userId), '1');
+  } catch {
+    /* sessionStorage can be blocked */
+  }
+};
+
+export const releasePortalVisit = (userId = '') => {
+  if (userId) countedPortalUsers.delete(userId);
+  else countedPortalUsers.clear();
+  try {
+    const prefix = 'rp-portal-visit:';
+    const keys: string[] = [];
+    for (let index = 0; index < window.sessionStorage.length; index += 1) {
+      const key = window.sessionStorage.key(index);
+      if (!key?.startsWith(prefix)) continue;
+      if (!userId || key === visitStorageKey(userId)) keys.push(key);
+    }
+    keys.forEach((key) => window.sessionStorage.removeItem(key));
+  } catch {
+    /* sessionStorage can be blocked */
+  }
+};
+
+// A fresh SIGNED_IN with no stored flag is a new login. A flag left from the
+// current browser session means the session was only restored, so the count stays.
+export const trackPortalAuth = (
+  event: 'SIGNED_IN' | 'INITIAL_SESSION',
+  userId: string,
+  email: string,
+) => {
+  const freshLogin = event === 'SIGNED_IN';
+  const alreadyCounted = visitAlreadyCounted(userId);
+  if (freshLogin && alreadyCounted) return;
+  if (!alreadyCounted) countedPortalUsers.delete(userId);
+  if (alreadyCounted) {
+    void recordPortalVisit(userId, email, false);
+    return;
+  }
+  rememberVisitCounted(userId);
+  void recordPortalVisit(userId, email, true);
+};
 
 const writePortalVisit = async (userId: string, email: string, countVisit: boolean) => {
   const id = await currentUserId(userId);
@@ -406,3 +459,13 @@ export const loadClientBilling = async (user: User): Promise<ClientBilling | nul
   await saveClientBilling(user.id, filled);
   return filled;
 };
+
+if (typeof window !== 'undefined') {
+  const marker = window as Window & { __rpPortalVisitLogout?: boolean };
+  if (!marker.__rpPortalVisitLogout) {
+    marker.__rpPortalVisitLogout = true;
+    supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') releasePortalVisit();
+    });
+  }
+}
