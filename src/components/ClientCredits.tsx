@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { RefreshCw, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import ConnectionDot from '@/components/ConnectionDot';
-import { loadClientBilling, readCreditBalance, saveCreditBalance } from '@/lib/clientProfile';
+import { loadClientBilling, loadPortalActivityByClient, readCreditBalance, saveCreditBalance, type PortalActivity } from '@/lib/clientProfile';
 import { clientRecordName, joinProfileName } from '@/lib/profileName';
 import { supabase } from '@/lib/supabase';
 
@@ -19,10 +19,25 @@ const text = (value: unknown) => (typeof value === 'string' ? value.trim() : '')
 const money = (value: number) =>
   `${value.toLocaleString('sk-SK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 
-const sheetGrid = 'grid w-full grid-cols-[minmax(220px,max-content)_minmax(max-content,1fr)_max-content_20.25rem] text-base';
+const formatActivity = (value: string | null) => {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleString('sk-SK', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
+const sheetGrid = 'grid w-full grid-cols-[minmax(220px,max-content)_minmax(180px,1fr)_6.5rem_11.5rem_max-content_20.25rem] text-base';
 const nameCell = 'flex min-w-[220px] items-center whitespace-nowrap border-r border-slate-500 px-3 py-2 text-left';
 const emailCell = 'flex min-w-max items-center whitespace-nowrap border-r border-slate-500 px-3 py-2 text-left';
-const balanceCell = 'flex shrink-0 items-center whitespace-nowrap py-2 pl-3 pr-2';
+const balanceCell = 'flex shrink-0 items-center whitespace-nowrap border-r border-slate-500 py-2 pl-3 pr-2';
+const visitsCell = 'flex shrink-0 items-center justify-center whitespace-nowrap border-r border-slate-500 px-3 py-2 text-center';
+const activityCell = 'flex shrink-0 items-center whitespace-nowrap border-r border-slate-500 px-3 py-2';
 const creditCell = 'flex shrink-0 items-center whitespace-nowrap';
 const headChrome = 'sticky top-0 z-50 border-b border-primary/30 bg-[#0a192f] text-sm font-bold uppercase tracking-wide text-white';
 
@@ -37,6 +52,7 @@ const ClientCredits = ({ onlineIds }: ClientCreditsProps) => {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [adjustingId, setAdjustingId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [activity, setActivity] = useState<Record<string, PortalActivity>>({});
 
   const loadClients = async () => {
     setLoading(true);
@@ -57,13 +73,16 @@ const ClientCredits = ({ onlineIds }: ClientCreditsProps) => {
       typeof meta.last_name === 'string' ? meta.last_name : '',
     );
 
-    setClients([{
+    const rows = [{
       id: user.id,
       email: billing?.email || user.email || '',
       name: joinProfileName(billing?.firstName, billing?.lastName) || metaName,
       company: billing?.company || text(meta.company) || text(meta.company_name),
       balance: Number.isFinite(balance) ? balance : 0,
-    }]);
+    }];
+    const stats = await loadPortalActivityByClient(rows);
+    setClients(rows);
+    setActivity(Object.fromEntries(stats));
     setLoading(false);
   };
 
@@ -116,12 +135,12 @@ const ClientCredits = ({ onlineIds }: ClientCreditsProps) => {
           <div className="inline-flex h-[42px] shrink-0 items-center gap-2 rounded-md border border-primary/70 bg-primary/15 px-4 text-sm font-bold uppercase tracking-wide text-primary shadow-[0_0_16px_rgba(0,242,255,0.28)]">
             <ConnectionDot online decorative label="Prihlásení" />
             <span>Prihlásení</span>
-            <span className="text-3xl font-bold leading-none tabular-nums text-green-500 [text-shadow:0_0_6px_rgba(34,197,94,1),0_0_14px_rgba(34,197,94,0.85)]">{loading ? '—' : onlineCount}</span>
+            <span className="text-2xl font-bold leading-none tabular-nums text-green-400">{loading ? '—' : onlineCount}</span>
           </div>
           <div className="inline-flex h-[42px] shrink-0 items-center gap-2 rounded-md border border-primary/70 bg-primary/15 px-4 text-sm font-bold uppercase tracking-wide text-primary shadow-[0_0_16px_rgba(0,242,255,0.28)]">
             <ConnectionDot online={false} decorative label="Odhlásení" />
             <span>Odhlásení</span>
-            <span className="text-3xl font-bold leading-none tabular-nums text-red-500 [text-shadow:0_0_6px_rgba(239,68,68,1),0_0_14px_rgba(239,68,68,0.85)]">{loading ? '—' : offlineCount}</span>
+            <span className="text-2xl font-bold leading-none tabular-nums text-red-400">{loading ? '—' : offlineCount}</span>
           </div>
         </div>
         <div className="relative w-56 shrink-0">
@@ -146,17 +165,19 @@ const ClientCredits = ({ onlineIds }: ClientCreditsProps) => {
               <th className={`${nameCell} ${headChrome}`}>Meno</th>
               <th className={`${emailCell} ${headChrome}`}>E-mail</th>
               <th className={`${balanceCell} ${headChrome} justify-center text-center`}>Zostatok</th>
+              <th className={`${visitsCell} ${headChrome}`}>Návštevy</th>
+              <th className={`${activityCell} ${headChrome}`}>Posledná aktivita</th>
               <th className={`${creditCell} ${headChrome} justify-center px-2 py-2 text-center`}>Úprava kreditov</th>
             </tr>
           </thead>
           <tbody className="contents">
             {loading ? (
               <tr className="contents">
-                <td colSpan={4} className="col-span-4 py-12 text-center text-muted-foreground">Načítavam klientov...</td>
+                <td colSpan={6} className="col-span-6 py-12 text-center text-muted-foreground">Načítavam klientov...</td>
               </tr>
             ) : visible.length === 0 ? (
               <tr className="contents">
-                <td colSpan={4} className="col-span-4 py-12 text-center text-muted-foreground">Žiadni klienti</td>
+                <td colSpan={6} className="col-span-6 py-12 text-center text-muted-foreground">Žiadni klienti</td>
               </tr>
             ) : visible.map((client) => {
               const busy = adjustingId === client.id;
@@ -181,6 +202,12 @@ const ClientCredits = ({ onlineIds }: ClientCreditsProps) => {
                   </td>
                   <td className={`${balanceCell} ${rowBg}${picked} justify-end text-right`}>
                     <span className="text-base font-bold leading-none tabular-nums text-primary">{money(client.balance)}</span>
+                  </td>
+                  <td className={`${visitsCell} ${rowBg}${picked}`}>
+                    <span className="text-base font-bold leading-none tabular-nums text-white">{activity[client.id]?.visits ?? 0}</span>
+                  </td>
+                  <td className={`${activityCell} ${rowBg}${picked}`}>
+                    <span className="text-sm font-medium leading-none text-white">{formatActivity(activity[client.id]?.lastVisit ?? null)}</span>
                   </td>
                   <td className={`${creditCell} ${rowBg} items-stretch self-stretch p-0`} onClick={(event) => event.stopPropagation()}>
                     <div className="grid h-full min-h-10 w-full grid-cols-3 items-stretch overflow-hidden rounded-md border border-primary/35 bg-cyan-950/35 shadow-[0_0_16px_rgba(0,242,255,0.08)]">

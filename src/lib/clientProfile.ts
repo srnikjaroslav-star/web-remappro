@@ -29,6 +29,13 @@ type PackedProfile = {
   city?: string;
   postalCode?: string;
   creditBalance?: number;
+  portalVisits?: number;
+  lastPortalVisit?: string;
+};
+
+export type PortalActivity = {
+  visits: number;
+  lastVisit: string | null;
 };
 
 export const emptyBilling = (): ClientBilling => ({
@@ -91,7 +98,7 @@ const rowToBilling = (row: Record<string, unknown> | null, fallbackEmail: string
   taxId: text(row?.tax_id),
 });
 
-const packAddress = (billing: ClientBilling, creditBalance?: number) => {
+const packAddress = (billing: ClientBilling, creditBalance?: number, previous?: PackedProfile | null) => {
   const packed: PackedProfile = {
     firstName: billing.firstName.trim(),
     lastName: billing.lastName.trim(),
@@ -102,6 +109,9 @@ const packAddress = (billing: ClientBilling, creditBalance?: number) => {
     postalCode: billing.postalCode.trim(),
   };
   if (creditBalance !== undefined && Number.isFinite(creditBalance)) packed.creditBalance = creditBalance;
+  const visits = Number(previous?.portalVisits);
+  if (Number.isFinite(visits) && visits > 0) packed.portalVisits = visits;
+  if (previous?.lastPortalVisit) packed.lastPortalVisit = previous.lastPortalVisit;
   return PACKED_ADDRESS + JSON.stringify(packed);
 };
 
@@ -202,12 +212,14 @@ export const saveClientBilling = async (
     if (!basic.error) return { ok: true as const };
   }
 
+  const storedProfile = await supabase.from('client_profiles').select('address').eq('id', id).maybeSingle();
+  const previousProfile = unpackAddress(text((storedProfile.data as { address?: unknown } | null)?.address));
   const compact = await supabase.from('client_profiles').upsert({
     id,
     company_name: billing.company.trim(),
     ico: billing.vatId.trim(),
     dic: billing.taxId.trim(),
-    address: packAddress(billing, await readPackedCredit(id)),
+    address: packAddress(billing, await readPackedCredit(id), previousProfile),
   }, { onConflict: 'id' });
   if (!compact.error) return { ok: true as const };
   return { ok: false as const };
@@ -259,14 +271,109 @@ export const saveCreditBalance = async (userId: string, balance: number) => {
   const profile = await supabase.from('client_profiles').select(COMPACT_COLUMNS).eq('id', id).maybeSingle();
   const row = (profile.data ?? null) as Record<string, unknown> | null;
   const billing = row ? compactToBilling(row, '') : emptyBilling();
+  const previousProfile = unpackAddress(text(row?.address));
   const saved = await supabase.from('client_profiles').upsert({
     id,
     company_name: text(row?.company_name),
     ico: text(row?.ico),
     dic: text(row?.dic),
-    address: packAddress(billing, next),
+    address: packAddress(billing, next, previousProfile),
   }, { onConflict: 'id' });
   return !saved.error;
+};
+
+const activityFromPacked = (packed: PackedProfile | null): PortalActivity => ({
+  visits: Number(packed?.portalVisits) || 0,
+  lastVisit: packed?.lastPortalVisit || null,
+});
+
+let portalVisitChain: Promise<void> = Promise.resolve();
+const countedPortalUsers = new Set<string>();
+
+const writePortalVisit = async (userId: string, email: string, countVisit: boolean) => {
+  const id = await currentUserId(userId);
+  const emailKey = email.trim().toLowerCase();
+  if (!id || !emailKey) return;
+  const now = new Date().toISOString();
+
+  const existing = await supabase
+    .from('client_portal_activity')
+    .select('visit_count')
+    .eq('email', emailKey)
+    .maybeSingle();
+  if (!existing.error) {
+    const current = Number(existing.data?.visit_count) || 0;
+    const visitCount = current + (countVisit ? 1 : 0);
+    const write = existing.data
+      ? await supabase.from('client_portal_activity').update({ visit_count: visitCount, last_visit: now }).eq('email', emailKey)
+      : await supabase.from('client_portal_activity').insert({ email: emailKey, visit_count: visitCount, last_visit: now });
+    if (!write.error) return;
+  }
+
+  const profile = await supabase.from('client_profiles').select(COMPACT_COLUMNS).eq('id', id).maybeSingle();
+  if (profile.error) return;
+  const row = (profile.data ?? null) as Record<string, unknown> | null;
+  const rawAddress = text(row?.address);
+  const packed = rawAddress ? unpackAddress(rawAddress) : {};
+  if (rawAddress && !packed) return;
+  const visits = (Number(packed.portalVisits) || 0) + (countVisit ? 1 : 0);
+  const nextPacked: PackedProfile = {
+    ...packed,
+    email: text(packed.email) || email.trim(),
+    portalVisits: visits,
+    lastPortalVisit: now,
+  };
+  await supabase.from('client_profiles').upsert({
+    id,
+    company_name: text(row?.company_name),
+    ico: text(row?.ico),
+    dic: text(row?.dic),
+    address: PACKED_ADDRESS + JSON.stringify(nextPacked),
+  }, { onConflict: 'id' });
+};
+
+export const recordPortalVisit = (userId: string, email: string, countVisit: boolean) => {
+  let increment = countVisit;
+  if (increment) {
+    if (countedPortalUsers.has(userId)) increment = false;
+    else countedPortalUsers.add(userId);
+  }
+  const job = portalVisitChain.then(() => writePortalVisit(userId, email, increment));
+  portalVisitChain = job.then(() => undefined, () => undefined);
+  return job;
+};
+
+export const loadPortalActivityByClient = async (clients: Array<{ id: string; email: string }>) => {
+  const byEmail = new Map<string, PortalActivity>();
+  const byId = new Map<string, PortalActivity>();
+
+  const table = await supabase.from('client_portal_activity').select('email, visit_count, last_visit');
+  if (!table.error && Array.isArray(table.data)) {
+    for (const row of table.data as Array<{ email?: string; visit_count?: number; last_visit?: string | null }>) {
+      const email = text(row.email).toLowerCase();
+      if (!email) continue;
+      byEmail.set(email, { visits: Number(row.visit_count) || 0, lastVisit: row.last_visit ?? null });
+    }
+  }
+
+  const profiles = await supabase.from('client_profiles').select('id, address');
+  if (!profiles.error && Array.isArray(profiles.data)) {
+    for (const row of profiles.data as Array<{ id?: string; address?: string }>) {
+      const packed = unpackAddress(text(row.address));
+      if (!packed?.portalVisits && !packed?.lastPortalVisit) continue;
+      const activity = activityFromPacked(packed);
+      if (row.id) byId.set(row.id, activity);
+      const email = text(packed.email).toLowerCase();
+      if (email && !byEmail.has(email)) byEmail.set(email, activity);
+    }
+  }
+
+  const result = new Map<string, PortalActivity>();
+  for (const client of clients) {
+    const email = client.email.trim().toLowerCase();
+    result.set(client.id, (email && byEmail.get(email)) || byId.get(client.id) || { visits: 0, lastVisit: null });
+  }
+  return result;
 };
 
 export const loadClientBilling = async (user: User): Promise<ClientBilling | null> => {

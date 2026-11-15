@@ -19,7 +19,7 @@ import {
   subscribeServiceCatalog,
   type CatalogService,
 } from '@/lib/serviceCatalog';
-import { emptyBilling, loadClientBilling, orderDisplayName, readCreditBalance, saveClientBilling, saveCreditBalance, type ClientBilling } from '@/lib/clientProfile';
+import { emptyBilling, loadClientBilling, orderDisplayName, readCreditBalance, recordPortalVisit, saveClientBilling, saveCreditBalance, type ClientBilling } from '@/lib/clientProfile';
 import { uploadOrderFile } from '@/lib/ecuFile';
 import { INITIAL_ORDER_STATUS } from '@/lib/orderStatus';
 import {
@@ -256,6 +256,15 @@ const OrderPage = () => {
       subscription.subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    const email = authUser?.email?.trim();
+    if (!authUser || !email) return;
+    const key = `rp-portal-visit:${authUser.id}`;
+    const counted = window.sessionStorage.getItem(key) === '1';
+    if (!counted) window.sessionStorage.setItem(key, '1');
+    void recordPortalVisit(authUser.id, email, !counted);
+  }, [authUser?.id, authUser?.email]);
 
   useEffect(() => {
     if (!authUser) return;
