@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   Download, Upload, Eye, CheckCircle,
-  RefreshCw, Search, Power, Save, Trash2, LogOut, FileText, X
+  Search, Power, Save, Trash2, LogOut, FileText, X
 } from 'lucide-react';
 import SystemStatus, { fetchSystemStatusFromDB, setSystemStatusInDB, isSystemOnline, SystemStatusMode } from '@/components/SystemStatus';
 import NavLogo from '@/components/NavLogo';
@@ -1251,10 +1251,6 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
               <Power className={`w-4 h-4 ${statusLoading ? 'animate-spin' : ''}`} />
               {statusLoading ? 'Updating...' : statusMode === 'online' ? 'Force ONLINE' : statusMode === 'offline' ? 'Force OFFLINE' : 'Auto (Schedule)'}
             </button>
-            <button onClick={fetchOrders} className="flex h-[42px] items-center gap-2 rounded-lg border border-primary/50 bg-primary/20 px-4 text-base text-primary shadow-[0_0_16px_rgba(0,242,255,0.35)] transition-colors hover:border-primary hover:bg-primary/30 hover:shadow-[0_0_16px_rgba(0,242,255,0.5)]">
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              Refresh
-            </button>
             <button
               onClick={handleLogout}
               className="flex h-[42px] items-center gap-2 rounded-lg border border-primary/50 bg-primary/20 px-4 text-base text-primary shadow-[0_0_16px_rgba(0,242,255,0.35)] transition-colors hover:border-primary hover:bg-primary/30 hover:shadow-[0_0_16px_rgba(0,242,255,0.5)]"
@@ -1299,34 +1295,40 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
         </div>
         {section === 'clients' ? <ClientCredits onlineIds={onlineIds} /> : section === 'services' ? <AdminServices /> : section === 'hours' ? <OpeningHours /> : (
         <>
-        <div className="mb-3 grid w-full grid-cols-5 gap-3">
-          <div className="min-w-0 rounded-none border-t-4 border-t-cyan-400 bg-[#0f172a] px-3 py-2.5 shadow-[inset_0_0_28px_rgba(34,211,238,0.14)]">
+        <div className="mb-3 grid w-full grid-cols-6 gap-2">
+          <div className="min-w-0 rounded-none border-t-4 border-t-cyan-400 bg-[#0f172a] px-2.5 py-2 shadow-[inset_0_0_28px_rgba(34,211,238,0.14)]">
             <p className="truncate text-xs font-extrabold uppercase tracking-wide text-white">Celkové tržby</p>
-            <p className="mt-1 text-3xl font-black leading-none text-cyan-400">
+            <p className="mt-1 truncate text-2xl font-black leading-none text-cyan-400">
               {(financialStats?.grossRevenue ?? 0).toFixed(2)} €
             </p>
           </div>
-          <div className="min-w-0 rounded-none border-t-4 border-t-sky-400 bg-[#0f172a] px-3 py-2.5 shadow-[inset_0_0_28px_rgba(56,189,248,0.14)]">
+          <div className="min-w-0 rounded-none border-t-4 border-t-sky-400 bg-[#0f172a] px-2.5 py-2 shadow-[inset_0_0_28px_rgba(56,189,248,0.14)]">
             <p className="truncate text-xs font-extrabold uppercase tracking-wide text-white">Dnešné tržby</p>
-            <p className="mt-1 text-3xl font-black leading-none text-sky-400">
+            <p className="mt-1 truncate text-2xl font-black leading-none text-sky-400">
               {(financialStats?.todayRevenue ?? 0).toFixed(2)} €
             </p>
           </div>
-          <div className="min-w-0 rounded-none border-t-4 border-t-[#eab308] bg-[#0f172a] px-3 py-2.5 shadow-[inset_0_0_28px_rgba(234,179,8,0.16)]">
+          <div className="min-w-0 rounded-none border-t-4 border-t-[#eab308] bg-[#0f172a] px-2.5 py-2 shadow-[inset_0_0_28px_rgba(234,179,8,0.16)]">
             <p className="truncate text-xs font-extrabold uppercase tracking-wide text-white">Čakajúce</p>
-            <p className="mt-1 text-3xl font-black leading-none text-[#facc15]">
+            <p className="mt-1 truncate text-2xl font-black leading-none text-[#facc15]">
               {orders.filter((order) => order.status === 'pending').length}
             </p>
           </div>
-          <div className="min-w-0 rounded-none border-t-4 border-t-[#06b6d4] bg-[#0f172a] px-3 py-2.5 shadow-[inset_0_0_28px_rgba(6,182,212,0.16)]">
+          <div className="min-w-0 rounded-none border-t-4 border-t-[#06b6d4] bg-[#0f172a] px-2.5 py-2 shadow-[inset_0_0_28px_rgba(6,182,212,0.16)]">
             <p className="truncate text-xs font-extrabold uppercase tracking-wide text-white">V procese</p>
-            <p className="mt-1 text-3xl font-black leading-none text-[#06b6d4]">
+            <p className="mt-1 truncate text-2xl font-black leading-none text-[#06b6d4]">
               {orders.filter((order) => order.status === 'processing').length}
             </p>
           </div>
-          <div className="min-w-0 rounded-none border-t-4 border-t-[#ef4444] bg-[#0f172a] px-3 py-2.5 shadow-[inset_0_0_28px_rgba(239,68,68,0.14)]">
+          <div className="min-w-0 rounded-none border-t-4 border-t-[#22c55e] bg-[#0f172a] px-2.5 py-2 shadow-[inset_0_0_28px_rgba(34,197,94,0.16)]">
+            <p className="truncate text-xs font-extrabold uppercase tracking-wide text-white">Dokončené</p>
+            <p className="mt-1 truncate text-2xl font-black leading-none text-green-400">
+              {orders.filter((order) => order.status === 'completed').length}
+            </p>
+          </div>
+          <div className="min-w-0 rounded-none border-t-4 border-t-[#ef4444] bg-[#0f172a] px-2.5 py-2 shadow-[inset_0_0_28px_rgba(239,68,68,0.14)]">
             <p className="truncate text-xs font-extrabold uppercase tracking-wide text-white">Zrušené</p>
-            <p className="mt-1 text-3xl font-black leading-none text-[#ef4444]">
+            <p className="mt-1 truncate text-2xl font-black leading-none text-[#ef4444]">
               {orders.filter((order) => order.status === 'cancelled').length}
             </p>
           </div>
