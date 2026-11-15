@@ -82,8 +82,40 @@ const serviceList = (value: StoredOrderRow['services'] | Order['service_type'] |
   return [value];
 };
 
+const CRC_MARK = '[[rp-crc]]';
+const IMPORTANT_MARK = '[[rp-important]]';
+
+const splitAdminNote = (raw: string) => {
+  const crc = raw.match(/\[\[rp-crc\]\]([^\n]*)/)?.[1]?.trim() ?? '';
+  const important = raw.match(/\[\[rp-important\]\]([\s\S]*)$/)?.[1]?.trim() ?? '';
+  const visible = raw
+    .replace(/\n?\[\[rp-crc\]\][^\n]*/g, '')
+    .replace(/\n?\[\[rp-important\]\][\s\S]*$/g, '')
+    .trim();
+  return { visible, crc, important };
+};
+
+const packAdminNote = (
+  raw: string,
+  field: 'checksum_crc' | 'important_note',
+  value: string | null,
+) => {
+  const current = splitAdminNote(raw);
+  const crc = field === 'checksum_crc' ? (value ?? '') : current.crc;
+  const important = field === 'important_note' ? (value ?? '') : current.important;
+  return [current.visible, crc ? `${CRC_MARK}${crc}` : '', important ? `${IMPORTANT_MARK}${important}` : '']
+    .filter(Boolean)
+    .join('\n');
+};
+
+const columnMissing = (error: { code?: string; message?: string } | null) =>
+  error?.code === '42703'
+  || error?.code === 'PGRST204'
+  || /column .* does not exist|schema cache/i.test(error?.message ?? '');
+
 const normalizeOrder = (row: StoredOrderRow, owner?: { name: string; email: string }): Order => {
-  const note = String(row.note ?? '');
+  const packed = splitAdminNote(String(row.note ?? ''));
+  const note = packed.visible;
   const lines = note.split('\n');
   const taggedNumber = lines[0]?.startsWith('RP-') ? lines[0].trim() : '';
   const engine = String(row.engine ?? '').trim();
@@ -105,6 +137,8 @@ const normalizeOrder = (row: StoredOrderRow, owner?: { name: string; email: stri
     status: row.status || 'pending',
     file_url: row.file_url ?? null,
     customer_note: row.customer_note || (taggedNumber ? lines.slice(1).join('\n').trim() : note.trim()) || null,
+    checksum_crc: row.checksum_crc || packed.crc || null,
+    important_note: row.important_note || packed.important || null,
     created_at: row.created_at || new Date().toISOString(),
     legal_consent: row.legal_consent ?? true,
   };
@@ -375,7 +409,7 @@ const ManagementPortal = () => {
       };
       orderOwnerRef.current = owner;
 
-      const columns = 'id, user_id, created_at, vehicle_brand, vehicle_model, vehicle_year, engine, ecu, fuel, services, total_price, status, note';
+      const columns = 'id, user_id, created_at, vehicle_brand, vehicle_model, vehicle_year, engine, ecu, fuel, services, total_price, status, note, checksum_crc, important_note';
       let request = supabase.from('orders').select(columns).order('created_at', { ascending: false });
       if (owner.id) request = request.eq('user_id', owner.id);
       let result = await request;
@@ -817,29 +851,39 @@ const ManagementPortal = () => {
     }
   };
 
+  const persistOrderField = async (
+    orderId: string,
+    field: 'checksum_crc' | 'important_note',
+    value: string | null,
+  ) => {
+    const columnUpdate = await supabase.from('orders').update({ [field]: value }).eq('id', orderId).select('id');
+    if (!columnUpdate.error) return;
+    if (!columnMissing(columnUpdate.error)) throw columnUpdate.error;
+
+    const existing = await supabase.from('orders').select('note').eq('id', orderId).maybeSingle();
+    if (existing.error) throw existing.error;
+    const note = packAdminNote(String(existing.data?.note ?? ''), field, value);
+    const noteUpdate = await supabase.from('orders').update({ note }).eq('id', orderId).select('id');
+    if (noteUpdate.error) throw noteUpdate.error;
+  };
+
   const handleSaveFields = async (orderId: string) => {
-    const fields = editingFields[orderId];
-    if (!fields) return;
+    const order = orders.find((item) => item.id === orderId);
+    const crc = (editingFields[orderId]?.checksum_crc ?? order?.checksum_crc ?? '').trim();
 
     setSavingId(orderId);
     try {
-      const { error } = await supabase
-        .from('orders')
-        .update({
-          checksum_crc: fields.checksum_crc || null,
-          internal_note: fields.internal_note || null
-        })
-        .eq('id', orderId);
-
-      if (error) throw error;
-      toast.success('Admin fields saved');
-      await fetchOrders();
-      // Clear the editing state
-      setEditingFields(prev => {
-        const newState = { ...prev };
-        delete newState[orderId];
-        return newState;
+      const stored = crc || null;
+      await persistOrderField(orderId, 'checksum_crc', stored);
+      setOrders((prev) => prev.map((item) => (item.id === orderId ? { ...item, checksum_crc: stored } : item)));
+      setDetailOrder((current) => (current?.id === orderId ? { ...current, checksum_crc: stored } : current));
+      toast.success('CRC uložené');
+      setEditingFields((prev) => {
+        const next = { ...prev };
+        delete next[orderId];
+        return next;
       });
+      await fetchOrders(true);
     } catch (error) {
       console.error('Save error:', error);
       toast.error('Failed to save fields');
@@ -868,23 +912,13 @@ const ManagementPortal = () => {
   const [savedImportantNote, setSavedImportantNote] = useState<string | null>(null);
 
   const handleSaveImportantNote = async (orderId: string) => {
-    if (!importantNote.trim() && !detailOrder?.important_note) {
-      toast.warning('Please enter a message or delete existing one');
-      return;
-    }
-
     setSavingImportantNote(orderId);
     try {
       const sanitizedNote = importantNote.trim() ? sanitizeText(importantNote) : null;
+      await persistOrderField(orderId, 'important_note', sanitizedNote);
+      setOrders((prev) => prev.map((item) => (item.id === orderId ? { ...item, important_note: sanitizedNote } : item)));
       
-      const { error } = await supabase
-        .from('orders')
-        .update({ important_note: sanitizedNote })
-        .eq('id', orderId);
-
-      if (error) throw error;
-      
-      toast.success('Important message saved');
+      toast.success('Poznámka uložená');
       
       // Refresh orders to get latest data
       await fetchOrders();
@@ -915,7 +949,8 @@ const ManagementPortal = () => {
     
     // Strict Upload Lock: Check if invoice already exists
     const order = orders.find(o => o.id === orderId);
-    if (order?.invoice_number) {
+    const canSendFile = order?.status === 'pending' || order?.status === 'processing';
+    if (order?.invoice_number && !canSendFile) {
       console.warn('[handleResultUpload] Invoice already sent for order:', orderId, 'Invoice:', order.invoice_number);
       toast.warning('Faktúra už bola odoslaná pre túto objednávku');
       if (e.target) {
@@ -969,7 +1004,7 @@ const ManagementPortal = () => {
       if (currentOrder && nextStatus === 'completed') notifyStatusChange(currentOrder, 'completed');
 
       const invoiceOrder = currentOrder;
-      if (invoiceOrder && nextStatus === 'completed') {
+      if (invoiceOrder && nextStatus === 'completed' && !invoiceOrder.invoice_number) {
         void (async () => {
           try {
             const { data: invoiceData, error: invoiceError } = await supabase.functions.invoke('generate-invoice', {
@@ -1032,6 +1067,9 @@ const ManagementPortal = () => {
   };
 
   const handleClientFileDownload = async (order: Order) => {
+    if (order.status === 'pending') {
+      void executeStatusChange(order.id, 'processing');
+    }
     try {
       await downloadOrderPart(
         order.id,
@@ -1423,24 +1461,26 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                               <Download className="w-5 h-5" />
                             </span>
                           )}
-                          {order.status === 'completed' || order.result_file_url ? (
+                          {order.status === 'completed' ? (
                             <span className={`${actionCell} text-emerald-500 hover:bg-emerald-500/20 hover:border-emerald-500/40`} title="Hotový súbor je nahraný">
-                              <CheckCircle className="w-5 h-5" />
-                            </span>
-                          ) : order.invoice_number ? (
-                            <span className={`${actionCell} text-slate-500 cursor-not-allowed`} title="Súbor odoslaný">
                               <CheckCircle className="w-5 h-5" />
                             </span>
                           ) : (
                             <button
                               onClick={() => triggerUpload(order.id)}
-                              disabled={uploadingId === order.id}
+                              disabled={uploadingId === order.id || (order.status !== 'pending' && order.status !== 'processing')}
                               className={`${actionCell} ${
-                                uploadingId === order.id
+                                uploadingId === order.id || (order.status !== 'pending' && order.status !== 'processing')
                                   ? 'text-slate-500 cursor-not-allowed'
                                   : 'text-emerald-500 hover:bg-emerald-500/20 hover:border-emerald-500/40'
                               }`}
-                              title={uploadingId === order.id ? 'Odosielam...' : 'Nahrať hotový súbor'}
+                              title={
+                                uploadingId === order.id
+                                  ? 'Odosielam...'
+                                  : order.status === 'pending' || order.status === 'processing'
+                                    ? 'Nahrať hotový súbor'
+                                    : 'Súbor sa dá odoslať vo stave Čakajúce alebo V procese'
+                              }
                             >
                               <Upload className={`w-5 h-5 ${uploadingId === order.id ? 'animate-pulse' : ''}`} />
                             </button>
@@ -1525,11 +1565,42 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                             {getDisplayAmount(detailOrder).toFixed(2)}€
                           </p>
                         </div>
+                        <div className="col-span-2">
+                          <p className="text-sm font-semibold text-primary">Číslo Faktúry</p>
+                          {!detailOrder.invoice_number && !detailOrder.credit_note_number ? (
+                            <p className="text-foreground">—</p>
+                          ) : (
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                              {detailOrder.invoice_number && (
+                                <a
+                                  href={detailOrder.invoice_url || '#'}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-2 text-green-400 hover:text-green-300 underline"
+                                >
+                                  <FileText className="w-4 h-4" />
+                                  <span className="break-all font-mono">{detailOrder.invoice_number}</span>
+                                </a>
+                              )}
+                              {detailOrder.credit_note_number && (
+                                <a
+                                  href={detailOrder.credit_note_pdf || '#'}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-2 text-red-500 hover:text-red-400 underline"
+                                >
+                                  <FileText className="w-4 h-4" />
+                                  <span className="break-all font-mono">{detailOrder.credit_note_number}</span>
+                                </a>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </section>
 
                     <section className="min-w-0 rounded-lg border border-[rgba(0,242,255,0.25)] bg-[#070b10] p-2.5">
-                      <h3 className="mb-1.5 border-b border-primary/20 pb-1 text-sm font-semibold text-foreground">
+                      <h3 className="mb-1.5 border-b border-primary/20 pb-1 text-sm font-semibold text-primary">
                         Vozidlo
                       </h3>
                       <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
@@ -1553,7 +1624,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                     </section>
 
                     <section className="min-w-0 rounded-lg border border-[rgba(0,242,255,0.25)] bg-[#070b10] p-2.5">
-                      <h3 className="mb-1.5 border-b border-primary/20 pb-1 text-sm font-semibold text-foreground">
+                      <h3 className="mb-1.5 border-b border-primary/20 pb-1 text-sm font-semibold text-primary">
                         Poznámka zákazníka
                       </h3>
                       <p className="break-words whitespace-pre-wrap text-foreground">{detailOrder.customer_note || '—'}</p>
@@ -1562,7 +1633,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
 
                   <div className="flex min-w-0 flex-col gap-1">
                     <section className="min-w-0 rounded-lg border border-[rgba(0,242,255,0.25)] bg-[#070b10] p-2.5">
-                      <h3 className="mb-1.5 border-b border-primary/20 pb-1 text-sm font-semibold text-foreground">
+                      <h3 className="mb-1.5 border-b border-primary/20 pb-1 text-sm font-semibold text-primary">
                         Zákazník
                       </h3>
                       <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
@@ -1577,140 +1648,15 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                       </div>
                     </section>
 
-                    <div className="grid grid-cols-2 gap-2">
                     <section className="min-w-0 rounded-lg border border-[rgba(0,242,255,0.25)] bg-[#070b10] p-2.5">
-                      <h3 className="mb-1.5 border-b border-primary/20 pb-1 text-sm font-semibold text-foreground">
+                      <h3 className="mb-1.5 border-b border-primary/20 pb-1 text-sm font-semibold text-primary">
                         Služby
                       </h3>
                       <p className="break-words text-foreground">{getServiceNames(detailOrder.service_type) || '—'}</p>
                     </section>
 
                     <section className="min-w-0 rounded-lg border border-[rgba(0,242,255,0.25)] bg-[#070b10] p-2.5">
-                      <h3 className="mb-1.5 border-b border-primary/20 pb-1 text-sm font-semibold text-foreground">
-                        Faktúra a Dobropis
-                      </h3>
-                      {!detailOrder.invoice_number && !detailOrder.credit_note_number ? (
-                        <p className="text-sm text-muted-foreground">—</p>
-                      ) : (
-                      <div className="space-y-1.5">
-                      {detailOrder.invoice_number && (
-                        <div>
-                          <p className="text-sm text-muted-foreground mb-2">Faktúra</p>
-                          <a
-                            href={detailOrder.invoice_url || '#'}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-2 text-green-400 hover:text-green-300 underline"
-                          >
-                            <FileText className="w-4 h-4" />
-                            <span className="break-all font-mono">{detailOrder.invoice_number}</span>
-                          </a>
-                        </div>
-                      )}
-                      {detailOrder.credit_note_number && (
-                        <div>
-                          <p className="text-sm text-muted-foreground mb-2">Dobropis</p>
-                          <a
-                            href={detailOrder.credit_note_pdf || '#'}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-2 text-red-500 hover:text-red-400 underline"
-                          >
-                            <FileText className="w-4 h-4" />
-                            <span className="break-all font-mono">{detailOrder.credit_note_number}</span>
-                          </a>
-                        </div>
-                      )}
-                      </div>
-                      )}
-                    </section>
-                    </div>
-
-                    <section className="min-w-0 rounded-lg border border-[rgba(0,242,255,0.25)] bg-[#070b10] p-2.5">
-                      <h3 className="mb-1.5 border-b border-primary/20 pb-1 text-sm font-semibold text-foreground">Súbory</h3>
-                      <div className="grid grid-cols-2 gap-2">
-                    <div className="min-w-0">
-                      <p className="mb-1 text-xs text-muted-foreground">Súbor zákazníka</p>
-                      {detailOrder.file_url ? (
-                        <button
-                          onClick={() => void handleClientFileDownload(detailOrder)}
-                          className="flex h-9 w-full items-center justify-center gap-1.5 rounded-lg border border-primary/40 bg-transparent px-2 text-center text-xs leading-tight text-foreground"
-                        >
-                          <Download className="w-4 h-4" />
-                          Stiahnuť súbor zákazníka
-                        </button>
-                      ) : (
-                        <p className="text-muted-foreground text-sm">Súbor nie je k dispozícii</p>
-                      )}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="mb-1 text-xs text-muted-foreground">Hotový súbor</p>
-                      {detailOrder.result_file_url ? (
-                        <button
-                          type="button"
-                          onClick={() => triggerUpload(detailOrder.id)}
-                          disabled={uploadingId === detailOrder.id}
-                          className="flex h-9 w-full items-center justify-center gap-1.5 rounded-lg border border-primary/40 bg-primary/15 px-2 text-center text-xs font-medium leading-tight text-primary disabled:cursor-not-allowed"
-                        >
-                          <Eye className="w-4 h-4" />
-                          Odoslať hotový Súbor
-                        </button>
-                      ) : detailOrder.invoice_number ? (
-                        <div className="space-y-2">
-                          <p className="text-muted-foreground text-sm">Súbor už bol odoslaný</p>
-                          <button
-                            disabled={true}
-                            className="flex h-9 w-full cursor-not-allowed items-center justify-center rounded-lg border border-white/10 bg-secondary px-2 text-center text-xs text-muted-foreground"
-                          >
-                            <span>Súbor odoslaný</span>
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          {uploadingId === detailOrder.id ? (
-                            <div className="flex items-center gap-2 text-gray-400">
-                              <span className="animate-pulse">⏳</span>
-                              <span className="text-sm">Odosielam faktúru a notifikáciu klientovi...</span>
-                            </div>
-                          ) : (
-                            <>
-                              <p className="text-muted-foreground text-sm">Hotový súbor ešte nie je nahraný</p>
-                              <button
-                                type="button"
-                                onClick={() => triggerUpload(detailOrder.id)}
-                                disabled={uploadingId === detailOrder.id || !!detailOrder.invoice_number}
-                                className={`flex h-9 w-full items-center justify-center gap-1.5 rounded-lg px-2 text-center text-xs leading-tight ${
-                                  uploadingId === detailOrder.id
-                                    ? 'cursor-not-allowed border border-white/10 bg-white/5 text-gray-400'
-                                    : detailOrder.invoice_number
-                                    ? 'cursor-not-allowed border border-white/10 bg-secondary text-muted-foreground'
-                                    : 'border border-primary/40 bg-primary/15 font-medium text-primary'
-                                }`}
-                              >
-                                {uploadingId === detailOrder.id ? (
-                                  <>
-                                    <span className="animate-pulse">⏳</span>
-                                    <span>Odosielam...</span>
-                                  </>
-                                ) : detailOrder.invoice_number ? (
-                                  <span>Súbor odoslaný</span>
-                                ) : (
-                                  <>
-                                    <Upload className="w-4 h-4" />
-                                    Odoslať hotový Súbor
-                                  </>
-                                )}
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                    </section>
-
-                    <section className="min-w-0 rounded-lg border border-[rgba(0,242,255,0.25)] bg-[#070b10] p-2.5">
-                      <h3 className="mb-1.5 border-b border-primary/20 pb-1 text-sm font-semibold text-foreground">
+                      <h3 className="mb-1.5 border-b border-primary/20 pb-1 text-sm font-semibold text-primary">
                         CRC
                       </h3>
                       <div className="flex flex-wrap items-center gap-3">
@@ -1733,7 +1679,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                         <button
                           type="button"
                           onClick={() => setDetailOrder(null)}
-                          className="rounded-lg border border-transparent bg-secondary px-4 py-2 text-foreground transition-all duration-200 hover:border-cyan-400/60 hover:bg-gray-800 hover:text-white hover:shadow-[0_0_16px_rgba(0,242,255,0.22)]"
+                          className="rounded-lg bg-red-500/20 px-4 py-2 text-red-500 transition-colors hover:bg-red-500/30"
                         >
                           Zrušiť
                         </button>
@@ -1843,7 +1789,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                         <button
                           type="button"
                           onClick={() => setDetailOrder(null)}
-                          className="rounded-lg border border-transparent bg-secondary px-4 py-2 text-foreground transition-all duration-200 hover:border-cyan-400/60 hover:bg-gray-800 hover:text-white hover:shadow-[0_0_16px_rgba(0,242,255,0.22)]"
+                          className="rounded-lg bg-red-500/20 px-4 py-2 text-red-500 transition-colors hover:bg-red-500/30"
                         >
                           Zrušiť
                         </button>
