@@ -515,11 +515,6 @@ const ManagementPortal = () => {
   };
 
   const sendStatusEmail = async (order: Order, status: string) => {
-    if (status === 'cancelled' || order.status === 'cancelled') {
-      console.warn('[sendStatusEmail] BLOCKED: Status is cancelled - email sending is forbidden');
-      throw new Error('Email sending blocked: Order is cancelled. Credit note workflow must be used instead.');
-    }
-
     const orderId = order.order_number || order.id.slice(0, 8).toUpperCase();
     const payload = {
       orderId: order.id,
@@ -763,6 +758,7 @@ const ManagementPortal = () => {
         ? 'Objednávka bola zrušená a kredity boli vrátené klientovi.'
         : 'Objednávka bola zrušená.',
     );
+    notifyStatusChange(order, 'cancelled');
   };
 
   const confirmCancelOrder = async () => {

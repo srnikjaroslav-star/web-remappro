@@ -10,6 +10,7 @@ import StageYearSelect from '@/components/StageYearSelect';
 import ConnectionDot from '@/components/ConnectionDot';
 import SystemStatus from '@/components/SystemStatus';
 import { useLanguage } from '@/i18n/LanguageContext';
+import { saveProfileLanguage, syncAccountLanguage } from '@/lib/clientLanguage';
 import type { TranslationKey } from '@/i18n/translations';
 import {
   formatServicePrice,
@@ -139,6 +140,7 @@ const OrderPage = () => {
   const { language, setLanguage, t } = useLanguage();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const languageMenuRef = useRef<HTMLDivElement>(null);
+  const languageSyncUser = useRef('');
   const [languageOpen, setLanguageOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -225,17 +227,28 @@ const OrderPage = () => {
         return { ...current, email: user.email };
       });
     };
+    const applyLanguage = (user: User | null) => {
+      if (!user) {
+        languageSyncUser.current = '';
+        return;
+      }
+      if (languageSyncUser.current === user.id) return;
+      languageSyncUser.current = user.id;
+      void syncAccountLanguage(user, setLanguage);
+    };
     supabase.auth.getSession().then(({ data }) => {
       if (!active) return;
       const user = data.session?.user ?? null;
       setAuthUser(user);
       applyAccount(user);
+      applyLanguage(user);
       setAuthReady(true);
     });
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
       const user = session?.user ?? null;
       setAuthUser(user);
       applyAccount(user);
+      applyLanguage(user);
       setAuthReady(true);
     });
     return () => {
@@ -839,6 +852,7 @@ const OrderPage = () => {
                           onClick={() => {
                             setLanguage(code);
                             setLanguageOpen(false);
+                            if (authUser) void saveProfileLanguage(authUser.id, code === 'en' ? 'EN' : 'SK');
                           }}
                           className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-medium transition-colors ${
                             selected
