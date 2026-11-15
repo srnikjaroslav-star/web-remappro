@@ -25,7 +25,7 @@ import { statusAfterResultDelivery } from '@/lib/orderStatus';
 import { Order, ActivityLog, SUPABASE_ANON_KEY, SUPABASE_URL } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { SERVICES } from '@/data/services';
-import { loadClientBilling, orderDisplayName, readCreditBalance, saveCreditBalance } from '@/lib/clientProfile';
+import { loadClientBilling, orderDisplayName, readCreditBalance, restoreClientCredits, saveCreditBalance, settleClientCredits } from '@/lib/clientProfile';
 import { loadServiceCatalog, lookupServiceName } from '@/lib/serviceCatalog';
 import ClientCredits from '@/components/ClientCredits';
 import AdminServices from '@/components/AdminServices';
@@ -56,6 +56,40 @@ const isCreatedToday = (createdAt?: string | null, now = new Date()) => {
 const todayOrderRevenue = (rows: RevenueOrder[], now = new Date()) => (
   rows.reduce((sum, order) => sum + (isCreatedToday(order.created_at, now) ? pricedAmount(order) : 0), 0)
 );
+
+type BillableOrder = {
+  user_id?: string | null;
+  total_price?: number | string | null;
+  invoice_number?: string | null;
+  result_file_url?: string | null;
+  file_url?: string | null;
+};
+
+const repeatWorkCompletion = (order: BillableOrder, storedFileUrl?: string) => {
+  const source = storedFileUrl ?? (order.file_url && order.file_url !== 'stored' ? order.file_url : '');
+  if (unpackOrderFile(source).resultFile) return true;
+  if (storedFileUrl !== undefined) return false;
+  return order.result_file_url === 'stored' || Boolean(order.result_file_url && order.result_file_url !== 'stored');
+};
+
+const clientIdOf = (order: object | null | undefined) => {
+  if (!order || !('user_id' in order)) return '';
+  const id = String((order as { user_id?: string | null }).user_id || '').trim();
+  return /^[0-9a-f-]{36}$/i.test(id) ? id : '';
+};
+
+const chargeRepeatCompletion = async (order: BillableOrder) => {
+  const price = Math.round(Math.abs(Number(order.total_price) || 0) * 100) / 100;
+  if (price <= 0) return { ok: true, charged: false, price: 0 };
+  const settled = await settleClientCredits(clientIdOf(order), price);
+  if (settled.ok) return { ok: true, charged: true, price };
+  toast.error(
+    settled.code === 'insufficient'
+      ? 'Na kredite klienta nie je dosť prostriedkov. Dokončenie bolo zastavené.'
+      : 'Kredity sa nepodarilo strhnúť. Dokončenie bolo zastavené.',
+  );
+  return { ok: false, charged: false, price };
+};
 
 type StoredOrderRow = Partial<Order> & {
   id: string;
@@ -684,6 +718,15 @@ const ManagementPortal = () => {
     // Find the order before update
     const order = orders.find(o => o.id === orderId);
     const previousStatus = order?.status;
+    const rebill = newStatus === 'completed'
+      && previousStatus !== 'completed'
+      && Boolean(order && repeatWorkCompletion(order));
+    let chargedPrice = 0;
+    if (rebill && order) {
+      const charge = await chargeRepeatCompletion(order);
+      if (!charge.ok) return;
+      chargedPrice = charge.charged ? charge.price : 0;
+    }
     
     // Optimistic UI update
     setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o)));
@@ -720,7 +763,11 @@ const ManagementPortal = () => {
         paid: 'Zaplatené',
         cancelled: 'Zrušené',
       };
-      toast.success(`Stav zmenený na: ${statusLabels[newStatus] || newStatus}`);
+      toast.success(
+        chargedPrice > 0
+          ? `Stav zmenený na: ${statusLabels[newStatus] || newStatus}. Z kreditu bolo strhnutých ${chargedPrice.toFixed(2)} €.`
+          : `Stav zmenený na: ${statusLabels[newStatus] || newStatus}`,
+      );
       if (newStatus !== previousStatus && order && (newStatus === 'processing' || newStatus === 'completed')) {
         notifyStatusChange(order, newStatus);
       }
@@ -728,6 +775,10 @@ const ManagementPortal = () => {
       void fetchOrders(true);
     } catch (error: any) {
       console.error('Update error:', error);
+      if (chargedPrice > 0 && clientIdOf(order)) {
+        const restored = await restoreClientCredits(clientIdOf(order), chargedPrice);
+        if (!restored) toast.error('Stav sa nepodarilo uložiť a strhnuté kredity sa nepodarilo vrátiť.');
+      }
       toast.error(`Chyba pri aktualizácii statusu: ${error.message || 'Neznáma chyba'}`);
       // Revert optimistic update
       if (order) {
@@ -966,6 +1017,7 @@ const ManagementPortal = () => {
     }
     
     setUploadingId(orderId);
+    let chargedUpload: { userId: string; price: number } | null = null;
     
     // Reset file input to allow same file selection again
     if (e.target) {
@@ -983,9 +1035,26 @@ const ManagementPortal = () => {
 
       const { data: { session } } = await supabase.auth.getSession();
       const storedResult = await uploadOrderFile(file, session?.user?.id || 'admin');
-      const existing = await supabase.from('orders').select('file_url').eq('id', orderId).maybeSingle();
+      const existing = await supabase.from('orders').select('file_url, user_id, total_price').eq('id', orderId).maybeSingle();
       if (existing.error) throw existing.error;
-      const packedFile = packOrderFile(unpackOrderFile(existing.data?.file_url || '').clientFile, storedResult);
+      const storedFileUrl = existing.data?.file_url || '';
+      const billable: BillableOrder = {
+        user_id: existing.data?.user_id || clientIdOf(currentOrder),
+        total_price: existing.data?.total_price ?? currentOrder?.total_price,
+        invoice_number: currentOrder?.invoice_number,
+        result_file_url: currentOrder?.result_file_url,
+        file_url: storedFileUrl,
+      };
+      const rebill = repeatWorkCompletion(billable, storedFileUrl);
+      const charge = rebill ? await chargeRepeatCompletion(billable) : { ok: true, charged: false, price: 0 };
+      if (charge.charged) chargedUpload = { userId: clientIdOf(billable), price: charge.price };
+      if (!charge.ok) {
+        setUploadingId(null);
+        pendingUploadId.current = null;
+        setSelectedOrderId(null);
+        return;
+      }
+      const packedFile = packOrderFile(unpackOrderFile(storedFileUrl).clientFile, storedResult);
       const nextStatus = statusAfterResultDelivery(currentOrder?.status ?? 'pending');
 
       const { error: updateError } = await supabase
@@ -1000,7 +1069,11 @@ const ManagementPortal = () => {
 
       setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: nextStatus, result_file_url: 'stored' } : o));
       setDetailOrder(current => current?.id === orderId ? { ...current, status: nextStatus, result_file_url: 'stored' } : current);
-      toast.success('Stav zmenený na: Dokončené');
+      toast.success(
+        charge.charged
+          ? `Stav zmenený na: Dokončené. Z kreditu bolo strhnutých ${charge.price.toFixed(2)} €.`
+          : 'Stav zmenený na: Dokončené',
+      );
       if (currentOrder && nextStatus === 'completed') notifyStatusChange(currentOrder, 'completed');
 
       const invoiceOrder = currentOrder;
@@ -1045,6 +1118,10 @@ const ManagementPortal = () => {
       void fetchOrders(true);
     } catch (error) {
       console.error('[handleResultUpload] Upload error:', error);
+      if (chargedUpload?.userId) {
+        const restored = await restoreClientCredits(chargedUpload.userId, chargedUpload.price);
+        if (!restored) toast.error('Súbor sa nepodarilo uložiť a strhnuté kredity sa nepodarilo vrátiť.');
+      }
       toast.error('Hotový súbor sa nepodarilo uložiť');
       setUploadingId(null);
       pendingUploadId.current = null;

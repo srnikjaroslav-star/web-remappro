@@ -225,8 +225,7 @@ export const saveClientBilling = async (
   return { ok: false as const };
 };
 
-export const readCreditBalance = async (userId: string) => {
-  const id = await currentUserId(userId);
+const readExactCreditBalance = async (id: string) => {
   const account = await supabase
     .from('credit_accounts')
     .select('balance')
@@ -239,10 +238,9 @@ export const readCreditBalance = async (userId: string) => {
   return (await readPackedCredit(id)) ?? 0;
 };
 
-export const saveCreditBalance = async (userId: string, balance: number) => {
-  const id = await currentUserId(userId);
-  if (!id || !Number.isFinite(balance) || balance < 0) return false;
+const writeExactCreditBalance = async (id: string, balance: number) => {
   const next = Math.round(balance * 100) / 100;
+  if (!id || !Number.isFinite(next) || next < 0) return false;
 
   const existing = await supabase
     .from('credit_accounts')
@@ -280,6 +278,54 @@ export const saveCreditBalance = async (userId: string, balance: number) => {
     address: packAddress(billing, next, previousProfile),
   }, { onConflict: 'id' });
   return !saved.error;
+};
+
+const creditWrites = new Map<string, Promise<unknown>>();
+
+const enqueueCreditWrite = <T>(id: string, job: () => Promise<T>) => {
+  const previous = creditWrites.get(id) ?? Promise.resolve();
+  const run = previous.then(job, job);
+  creditWrites.set(id, run.then(() => undefined, () => undefined));
+  return run;
+};
+
+export const readCreditBalance = async (userId: string) => {
+  const id = await currentUserId(userId);
+  return readExactCreditBalance(id);
+};
+
+export const saveCreditBalance = async (userId: string, balance: number) => {
+  const id = await currentUserId(userId);
+  if (!id || !Number.isFinite(balance) || balance < 0) return false;
+  return writeExactCreditBalance(id, balance);
+};
+
+export const settleClientCredits = (userId: string, amount: number) => {
+  const id = userId.trim();
+  const price = Math.round(Number(amount) * 100) / 100;
+  if (!/^[0-9a-f-]{36}$/i.test(id) || !Number.isFinite(price) || price <= 0) {
+    return Promise.resolve({ ok: false as const, code: 'missing' as const });
+  }
+  return enqueueCreditWrite(id, async () => {
+    const balance = await readExactCreditBalance(id);
+    if (!Number.isFinite(balance) || balance < price) {
+      return { ok: false as const, code: 'insufficient' as const };
+    }
+    const saved = await writeExactCreditBalance(id, balance - price);
+    return saved
+      ? { ok: true as const, balance: Math.round((balance - price) * 100) / 100 }
+      : { ok: false as const, code: 'failed' as const };
+  });
+};
+
+export const restoreClientCredits = (userId: string, amount: number) => {
+  const id = userId.trim();
+  const price = Math.round(Number(amount) * 100) / 100;
+  if (!/^[0-9a-f-]{36}$/i.test(id) || !Number.isFinite(price) || price <= 0) return Promise.resolve(false);
+  return enqueueCreditWrite(id, async () => {
+    const balance = await readExactCreditBalance(id);
+    return writeExactCreditBalance(id, balance + price);
+  });
 };
 
 const activityFromPacked = (packed: PackedProfile | null): PortalActivity => ({
