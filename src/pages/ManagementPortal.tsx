@@ -1369,9 +1369,9 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                     const picked = active ? 'bg-[#0b2430] shadow-[inset_0_0_18px_rgba(0,242,255,0.16)]' : '';
                     const cell = (edge: 'first' | 'mid' | 'last' | 'fill') => {
                       const selected = active && edge !== 'last' ? picked : '';
-                      return `px-4 py-2 align-middle border-r border-slate-800/60 ${selected}`;
+                      return `px-4 py-1 align-middle border-r border-slate-800/60 ${selected}`;
                     };
-                    const actionCell = 'inline-flex h-full min-h-[48px] flex-1 basis-0 items-center justify-center overflow-hidden border-l border-slate-700/50 bg-cyan-950/30 transition-all duration-200';
+                    const actionCell = 'inline-flex h-full min-h-8 flex-1 basis-0 items-center justify-center overflow-hidden border-l border-slate-700/50 bg-cyan-950/30 transition-all duration-200';
                     const vehicle = [order.car_brand, order.car_model].map((part) => String(part ?? '').trim()).filter(Boolean).join(' ');
                     const documents: { number: string; href: string; title: string }[] = [];
                     if (order.invoice_number) {
@@ -1420,12 +1420,12 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                         </p>
                       </td>
                       <td className={`${cell('mid')} w-full min-w-[320px]`}>
-                        <div>
-                          <p className="whitespace-nowrap text-lg font-bold leading-none text-cyan-400" title={order.customer_name}>{order.customer_name}</p>
-                          <p className="whitespace-nowrap text-xs leading-none text-white" title={order.customer_email}>{order.customer_email}</p>
+                        <div className="flex min-w-0 items-baseline gap-x-2">
+                          <p className="min-w-0 truncate whitespace-nowrap text-lg font-bold leading-none text-cyan-400" title={order.customer_name}>{order.customer_name}</p>
+                          <p className="shrink-0 whitespace-nowrap text-xs leading-none text-white" title={order.customer_email}>{order.customer_email}</p>
                         </div>
                       </td>
-                      <td className={`min-w-[8.5rem] whitespace-nowrap border-r border-slate-800/60 p-4 text-center align-middle ${picked}`}>
+                      <td className={`min-w-[8.5rem] whitespace-nowrap border-r border-slate-800/60 px-4 py-1 text-center align-middle ${picked}`}>
                         <p className={`flex items-center justify-center text-xl font-bold leading-none ${
                           order.status === 'cancelled' 
                             ? 'text-red-500' 
@@ -1438,7 +1438,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                         <select
                           value={order.status}
                           onChange={(e) => handleStatusChange(order.id, e.target.value)}
-                          className={`status-cell-select flex h-full min-h-[48px] w-full cursor-pointer appearance-none items-center justify-center border-0 px-4 text-center font-bold outline-none ${STATUS_CELL_CLASS[order.status] || STATUS_CELL_CLASS.pending}`}
+                          className={`status-cell-select flex h-full min-h-8 w-full cursor-pointer appearance-none items-center justify-center border-0 px-4 text-center font-bold outline-none ${STATUS_CELL_CLASS[order.status] || STATUS_CELL_CLASS.pending}`}
                         >
                           {order.status === 'cancelled' && (
                             <option value="cancelled" disabled hidden>Zrušené</option>
