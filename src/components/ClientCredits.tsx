@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { RefreshCw, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { toast } from 'sonner';
 import ConnectionDot from '@/components/ConnectionDot';
 import { loadClientBilling, loadPortalActivityByClient, readCreditBalance, saveCreditBalance, type PortalActivity } from '@/lib/clientProfile';
@@ -153,10 +153,6 @@ const ClientCredits = ({ onlineIds }: ClientCreditsProps) => {
             className="h-[42px] w-full rounded-md border border-primary/70 bg-transparent py-2 pl-9 pr-4 text-base leading-6 text-foreground shadow-[0_0_16px_rgba(0,242,255,0.28)] placeholder:text-muted-foreground transition-shadow hover:border-primary hover:shadow-[0_0_16px_rgba(0,242,255,0.45)] focus:border-primary focus:outline-none focus:shadow-[0_0_16px_rgba(0,242,255,0.45)]"
           />
         </div>
-        <button type="button" onClick={loadClients} className="inline-flex h-[42px] shrink-0 items-center gap-2 rounded-md border border-primary/70 bg-primary/15 px-4 text-sm font-bold uppercase tracking-wide text-primary shadow-[0_0_16px_rgba(0,242,255,0.28)] transition-colors hover:border-primary hover:bg-primary/25 hover:shadow-[0_0_16px_rgba(0,242,255,0.45)]">
-          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          Obnoviť
-        </button>
       </div>
       <div className="overflow-x-auto">
         <table className={sheetGrid}>
