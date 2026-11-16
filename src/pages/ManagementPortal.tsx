@@ -25,6 +25,7 @@ import { statusAfterResultDelivery } from '@/lib/orderStatus';
 import { Order, ActivityLog, SUPABASE_ANON_KEY, SUPABASE_URL } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { SERVICES } from '@/data/services';
+import { mailLanguageForClient } from '@/lib/clientLanguage';
 import { loadClientBilling, orderDisplayName, readCreditBalance, restoreClientCredits, saveCreditBalance, settleClientCredits } from '@/lib/clientProfile';
 import { loadServiceCatalog, lookupServiceName } from '@/lib/serviceCatalog';
 import ClientCredits from '@/components/ClientCredits';
@@ -584,6 +585,17 @@ const ManagementPortal = () => {
 
   const sendStatusEmail = async (order: Order, status: string) => {
     const orderId = order.order_number || order.id.slice(0, 8).toUpperCase();
+    const clientUserId = clientIdOf(order);
+    let language = await mailLanguageForClient(order.id, clientUserId);
+    const session = await supabase.auth.getSession();
+    if (clientUserId && session.data.session?.user?.id === clientUserId) {
+      try {
+        const stored = localStorage.getItem('remappro-language');
+        if (stored === 'en' || stored === 'sk') language = stored;
+      } catch {
+        /* private mode */
+      }
+    }
     const payload = {
       orderId: order.id,
       orderNumber: orderId,
@@ -593,6 +605,8 @@ const ManagementPortal = () => {
       carModel: order.car_model || '',
       year: order.year || 0,
       status,
+      ...(clientUserId ? { clientUserId } : {}),
+      ...(language ? { language, lang: language } : {}),
     };
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), 8000);
@@ -603,6 +617,7 @@ const ManagementPortal = () => {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
           apikey: SUPABASE_ANON_KEY,
+          ...(language ? { 'x-client-language': language } : {}),
         },
         body: JSON.stringify(payload),
         signal: controller.signal,

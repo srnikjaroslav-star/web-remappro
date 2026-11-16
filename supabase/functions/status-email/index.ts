@@ -7,7 +7,7 @@ const SENDER = "REMAPPRO <info@remappro.eu>";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-client-language",
 };
 
 interface StatusEmailRequest {
@@ -19,6 +19,9 @@ interface StatusEmailRequest {
   carModel: string;
   year: number;
   status: string;
+  language?: string;
+  lang?: string;
+  clientUserId?: string;
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -40,11 +43,15 @@ const handler = async (req: Request): Promise<Response> => {
       carBrand,
       carModel,
       status,
+      language,
+      lang,
+      clientUserId,
     }: StatusEmailRequest = await req.json();
 
-    console.log(`Sending status email for order ${orderNumber} to ${customerEmail}, status: ${status}`);
+    const requestedLanguage = language || lang || req.headers.get("x-client-language") || "";
+    console.log(`Sending status email for order ${orderNumber} to ${customerEmail}, status: ${status}, language: ${requestedLanguage || "lookup"}`);
 
-    const mail = await loadOrderMailContext(orderId, customerEmail, customerName);
+    const mail = await loadOrderMailContext(orderId, customerEmail, customerName, requestedLanguage, clientUserId);
     if (!mail.recipient) {
       throw new Error("Customer email is required");
     }

@@ -781,6 +781,7 @@ const OrderPage = () => {
           fileUrl: storedFile,
           customerNote: composedNote,
           legalConsent: legalConsentAgreed,
+          language: language === 'en' ? 'EN' : 'SK',
         },
       });
 
@@ -823,6 +824,9 @@ const OrderPage = () => {
             ecu: vehicle.ecuType.trim(),
             fuel: vehicle.fuelType,
           }).select('id').maybeSingle();
+          if (inserted.data?.id) {
+            await supabase.from('orders').update({ language: language === 'en' ? 'EN' : 'SK' }).eq('id', inserted.data.id);
+          }
           const nextBalance = Math.round((available - totalPrice) * 100) / 100;
           const charged = inserted.data?.id ? await saveCreditBalance(authUser.id, nextBalance) : false;
           if (!inserted.data?.id || !charged) {

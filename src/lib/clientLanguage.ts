@@ -20,6 +20,26 @@ export const saveProfileLanguage = async (userId: string, language: ProfileLangu
   await writeProfileColumn(userId, language).catch(() => undefined);
 };
 
+export const mailLanguageForClient = async (orderId: string, userId: string): Promise<'en' | 'sk' | null> => {
+  let orderLanguage: ProfileLanguage | null = null;
+  let resolvedUserId = userId.trim();
+  const order = await supabase.from('orders').select('language, user_id').eq('id', orderId).maybeSingle();
+  if (!order.error && order.data) {
+    orderLanguage = profileLanguage((order.data as { language?: unknown }).language);
+    const rowUserId = String((order.data as { user_id?: string | null }).user_id || '').trim();
+    if (rowUserId) resolvedUserId = rowUserId;
+  }
+  let profile = resolvedUserId ? await readProfileColumn(resolvedUserId) : null;
+  if (!profile && resolvedUserId) {
+    const session = await supabase.auth.getSession();
+    const user = session.data.session?.user;
+    if (user?.id === resolvedUserId) profile = profileLanguage(user.user_metadata?.language);
+  }
+  if (orderLanguage === 'EN' || profile === 'EN') return 'en';
+  if (orderLanguage === 'SK' || profile === 'SK') return 'sk';
+  return null;
+};
+
 const readProfileColumn = async (userId: string) => {
   for (const column of ['user_id', 'id'] as const) {
     const result = await supabase.from('client_profiles').select('language').eq(column, userId).maybeSingle();

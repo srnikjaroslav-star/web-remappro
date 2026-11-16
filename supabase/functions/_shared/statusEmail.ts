@@ -37,72 +37,144 @@ const readLanguage = async (
     if (fromProfile) return fromProfile;
   }
 
-  const { data: userData } = await supabase.auth.admin.getUserById(userId);
-  const metadata = userData?.user?.user_metadata ?? {};
-  return normalizeMailLanguage(metadata.language ?? metadata.lang ?? metadata.locale);
+  try {
+    const { data: userData } = await supabase.auth.admin.getUserById(userId);
+    const metadata = userData?.user?.user_metadata ?? {};
+    const fromMetadata = normalizeMailLanguage(metadata.language ?? metadata.lang ?? metadata.locale);
+    if (fromMetadata) return fromMetadata;
+  } catch (error) {
+    console.warn("[status-email] Auth metadata lookup failed:", error);
+  }
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  if (!supabaseUrl || !serviceKey) return null;
+  try {
+    const response = await fetch(`${supabaseUrl}/auth/v1/admin/users/${userId}`, {
+      headers: {
+        Authorization: `Bearer ${serviceKey}`,
+        apikey: serviceKey,
+      },
+    });
+    if (!response.ok) return null;
+    const user = await response.json();
+    const metadata = user?.user_metadata ?? {};
+    return normalizeMailLanguage(metadata.language ?? metadata.lang ?? metadata.locale);
+  } catch (error) {
+    console.warn("[status-email] Auth admin lookup failed:", error);
+    return null;
+  }
 };
 
-const findUserId = async (
+const missingColumn = (error: { code?: string; message?: string } | null) =>
+  error?.code === "42703"
+  || error?.code === "PGRST204"
+  || /column .* does not exist|schema cache/i.test(error?.message ?? "");
+
+const firstUserId = (rows: { user_id?: string | null }[] | null | undefined) =>
+  String(rows?.find((row) => String(row.user_id || "").trim())?.user_id || "").trim();
+
+const collectUserIds = async (
   supabase: ReturnType<typeof createClient>,
   orderId: string,
   customerEmail: string,
+  knownUserIds: string[] = [],
 ) => {
-  if (orderId) {
-    const byId = await supabase.from("orders").select("user_id").eq("id", orderId).maybeSingle();
-    const orderUserId = String((byId.data as { user_id?: string | null } | null)?.user_id || "");
-    if (!byId.error && orderUserId) return orderUserId;
+  const ids: string[] = [];
+  const add = (userId: string) => {
+    const value = userId.trim();
+    if (value && !ids.includes(value)) ids.push(value);
+  };
+  knownUserIds.forEach(add);
 
+  if (orderId) {
     const ledger = await supabase
       .from("credit_transactions")
       .select("user_id")
       .eq("order_id", orderId)
-      .limit(1)
-      .maybeSingle();
-    const ledgerUserId = String((ledger.data as { user_id?: string | null } | null)?.user_id || "");
-    if (!ledger.error && ledgerUserId) return ledgerUserId;
+      .limit(1);
+    if (!ledger.error) add(firstUserId(ledger.data as { user_id?: string | null }[] | null));
+
+    const invoice = await supabase
+      .from("invoices")
+      .select("user_id")
+      .eq("order_id", orderId)
+      .limit(1);
+    if (!invoice.error) add(firstUserId(invoice.data as { user_id?: string | null }[] | null));
   }
 
   const email = customerEmail.trim().toLowerCase();
-  if (!email) return "";
-
-  for (const column of ["user_id", "id"] as const) {
+  if (email) {
     const profile = await supabase
       .from("client_profiles")
-      .select(column)
-      .eq("email", email)
-      .maybeSingle();
-    const profileUserId = String((profile.data as Record<string, unknown> | null)?.[column] || "");
-    if (!profile.error && profileUserId) return profileUserId;
+      .select("user_id")
+      .ilike("email", email)
+      .limit(1);
+    if (!profile.error) add(firstUserId(profile.data as { user_id?: string | null }[] | null));
   }
 
-  return "";
+  return ids;
+};
+
+const readLanguageByEmail = async (
+  supabase: ReturnType<typeof createClient>,
+  customerEmail: string,
+) => {
+  const email = customerEmail.trim().toLowerCase();
+  if (!email) return null;
+  const profile = await supabase
+    .from("client_profiles")
+    .select("language")
+    .ilike("email", email)
+    .limit(1);
+  if (profile.error) return null;
+  return normalizeMailLanguage((profile.data?.[0] as { language?: unknown } | undefined)?.language);
 };
 
 const readOrderCustomer = async (
   supabase: ReturnType<typeof createClient>,
   orderId: string,
 ) => {
-  if (!orderId) return { email: "", name: "" };
-  const { data, error } = await supabase
-    .from("orders")
-    .select("customer_email, customer_name")
-    .eq("id", orderId)
-    .maybeSingle();
-  if (error || !data) return { email: "", name: "" };
-  const row = data as { customer_email?: string | null; customer_name?: string | null };
-  return {
-    email: String(row.customer_email || "").trim(),
-    name: String(row.customer_name || "").trim(),
-  };
+  const empty = { email: "", name: "", language: "", userId: "" };
+  if (!orderId) return empty;
+  const attempts = [
+    "customer_email, customer_name, language, user_id",
+    "customer_email, customer_name, user_id",
+    "user_id",
+  ];
+  for (const columns of attempts) {
+    const result = await supabase.from("orders").select(columns).eq("id", orderId).maybeSingle();
+    if (result.error) {
+      if (missingColumn(result.error)) continue;
+      return empty;
+    }
+    const row = result.data as {
+      customer_email?: string | null;
+      customer_name?: string | null;
+      language?: string | null;
+      user_id?: string | null;
+    } | null;
+    if (!row) return empty;
+    return {
+      email: String(row.customer_email || "").trim(),
+      name: String(row.customer_name || "").trim(),
+      language: String(row.language || "").trim(),
+      userId: String(row.user_id || "").trim(),
+    };
+  }
+  return empty;
 };
 
 export const loadOrderMailContext = async (
   orderId: string,
   payloadEmail: string,
   payloadName: string,
+  explicitLanguage?: unknown,
+  clientUserId?: string,
 ) => {
+  const explicit = normalizeMailLanguage(explicitLanguage);
   const fallback = {
-    lang: "SK" as MailLanguage,
+    lang: (explicit === "EN" ? "EN" : "SK") as MailLanguage,
     recipient: payloadEmail.trim(),
     copyTo: "",
     customerName: payloadName.trim(),
@@ -121,13 +193,30 @@ export const loadOrderMailContext = async (
       ? requested
       : "";
     const customerName = orderCustomer.name || fallback.customerName;
-    let lang: MailLanguage = "SK";
+    const orderLanguage = normalizeMailLanguage(orderCustomer.language);
+    let clientLanguage: MailLanguage | null = null;
     try {
-      const userId = await findUserId(supabase, orderId, recipient);
-      if (userId) lang = (await readLanguage(supabase, userId)) || "SK";
+      const userIds = await collectUserIds(supabase, orderId, orderCustomer.email, [
+        clientUserId || "",
+        orderCustomer.userId,
+      ]);
+      for (const userId of userIds) {
+        const stored = await readLanguage(supabase, userId);
+        if (stored === "EN") {
+          clientLanguage = "EN";
+          break;
+        }
+        if (stored === "SK") clientLanguage = clientLanguage || "SK";
+      }
+      if (clientLanguage !== "EN") {
+        const byEmail = await readLanguageByEmail(supabase, orderCustomer.email);
+        if (byEmail === "EN") clientLanguage = "EN";
+        else if (byEmail) clientLanguage = clientLanguage || byEmail;
+      }
     } catch (error) {
       console.warn("[status-email] Language lookup failed, using Slovak:", error);
     }
+    const lang: MailLanguage = explicit === "EN" || orderLanguage === "EN" || clientLanguage === "EN" ? "EN" : "SK";
     return { lang, recipient, copyTo, customerName };
   } catch (error) {
     console.warn("[status-email] Order lookup failed, using request data:", error);
@@ -174,7 +263,7 @@ const copy = {
       vehicle
         ? `Your order ${orderNumber} for vehicle ${vehicle}.`
         : `Your order ${orderNumber}.`,
-    processing: "Your file is currently being worked on.",
+    processing: "Your order is currently being processed.",
     completed: "Your file is ready to use.",
     download: "Download File",
     cancelled:
@@ -182,9 +271,9 @@ const copy = {
     pending: "Your order has been received. Thank you.",
     other: (status: string) => `Your order status has been updated: ${status}.`,
     subject: {
-      processing: (orderNumber: string) => `Order ${orderNumber} in progress - REMAPPRO`,
-      completed: (orderNumber: string) => `Order ${orderNumber} completed - REMAPPRO`,
-      cancelled: (orderNumber: string) => `Order ${orderNumber} cancelled - REMAPPRO`,
+      processing: (orderNumber: string) => `Order ${orderNumber} is in progress - REMAPPRO`,
+      completed: (orderNumber: string) => `Order ${orderNumber} is completed - REMAPPRO`,
+      cancelled: (orderNumber: string) => `Order ${orderNumber} is cancelled - REMAPPRO`,
       pending: (orderNumber: string) => `Order ${orderNumber} received - REMAPPRO`,
       other: (orderNumber: string) => `Order ${orderNumber} status update - REMAPPRO`,
     },
@@ -206,7 +295,7 @@ export const renderStatusEmail = (input: {
   const customerName = input.customerName.trim();
   const vehicle = input.vehicle.trim();
   const detail = key === "processing"
-    ? text.processing
+    ? (language === "EN" ? `Your order ${orderNumber} is currently being processed.` : text.processing)
     : key === "completed"
     ? text.completed
     : key === "cancelled"

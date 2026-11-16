@@ -96,6 +96,29 @@ Deno.serve(async (req) => {
       return json({ ok: false, code }, code === "SERVER" ? 500 : 200);
     }
 
+    const mailLanguage = (value: unknown) => {
+      const raw = String(value ?? "").trim().toUpperCase();
+      if (raw.startsWith("EN")) return "EN";
+      if (raw.startsWith("SK")) return "SK";
+      return "";
+    };
+    let language = mailLanguage(body.language);
+    if (!language) {
+      const profile = await admin.from("client_profiles").select("language").eq("user_id", user.id).maybeSingle();
+      language = mailLanguage((profile.data as { language?: unknown } | null)?.language)
+        || mailLanguage(user.user_metadata?.language)
+        || mailLanguage(user.user_metadata?.lang)
+        || "SK";
+    }
+    const orderNumber = String(data?.order_number ?? "");
+    if (orderNumber) {
+      const saved = await admin.from("orders").update({ language, user_id: user.id }).eq("order_number", orderNumber);
+      if (saved.error) {
+        await admin.from("orders").update({ user_id: user.id }).eq("order_number", orderNumber);
+        await admin.from("orders").update({ language }).eq("order_number", orderNumber);
+      }
+    }
+
     return json({
       ok: true,
       balance: Number(data?.balance),

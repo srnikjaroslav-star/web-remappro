@@ -38,11 +38,13 @@ const handler = async (req: Request): Promise<Response> => {
       customerName,
       carBrand,
       carModel,
-    }: CompletionEmailRequest = await req.json();
+      language,
+      clientUserId,
+    }: CompletionEmailRequest & { language?: string; clientUserId?: string } = await req.json();
 
-    console.log(`Sending completion email for order ${orderNumber} to ${customerEmail}`);
+    console.log(`Sending completion email for order ${orderNumber} to ${customerEmail}, language: ${language || "lookup"}`);
 
-    const mail = await loadOrderMailContext(orderId, customerEmail, customerName);
+    const mail = await loadOrderMailContext(orderId, customerEmail, customerName, language, clientUserId);
     if (!mail.recipient) {
       throw new Error("Customer email is required");
     }
