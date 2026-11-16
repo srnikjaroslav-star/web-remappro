@@ -1189,11 +1189,11 @@ const ManagementPortal = () => {
   };
 
   const STATUS_CELL_CLASS: Record<string, string> = {
-    pending: 'text-yellow-400 bg-yellow-500/20 shadow-[inset_0_0_0_1px_rgba(250,204,21,0.55)]',
-    processing: 'text-cyan-300 bg-cyan-500/20 shadow-[inset_0_0_0_1px_rgba(34,211,238,0.6)]',
-    completed: 'text-green-400 bg-green-500/20 shadow-[inset_0_0_0_1px_rgba(74,222,128,0.55)]',
-    paid: 'text-green-400 bg-green-500/20 shadow-[inset_0_0_0_1px_rgba(74,222,128,0.55)]',
-    cancelled: 'text-red-400 bg-red-500/20 shadow-[inset_0_0_0_1px_rgba(248,113,113,0.6)]',
+    pending: 'border-yellow-400/80 bg-yellow-500/10 text-yellow-400 shadow-[0_0_12px_rgba(250,204,21,0.28)]',
+    processing: 'border-cyan-300/80 bg-cyan-500/10 text-cyan-300 shadow-[0_0_12px_rgba(34,211,238,0.28)]',
+    completed: 'border-green-400/80 bg-green-500/10 text-green-400 shadow-[0_0_12px_rgba(74,222,128,0.28)]',
+    paid: 'border-green-400/80 bg-green-500/10 text-green-400 shadow-[0_0_12px_rgba(74,222,128,0.28)]',
+    cancelled: 'border-red-400/70 bg-red-500/10 text-red-400 shadow-[0_0_12px_rgba(248,113,113,0.28)]',
   };
 
   const getStatusClass = (status: string) => {
@@ -1514,8 +1514,10 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                       <td className={`h-px min-w-[9.5rem] whitespace-nowrap border-r border-slate-800/60 p-0 text-center ${picked}`}>
                         <select
                           value={order.status}
+                          onMouseDown={(event) => event.stopPropagation()}
                           onChange={(e) => handleStatusChange(order.id, e.target.value)}
-                          className={`status-cell-select flex h-full min-h-8 w-full cursor-pointer appearance-none items-center justify-center border-0 px-4 text-center font-bold outline-none ${STATUS_CELL_CLASS[order.status] || STATUS_CELL_CLASS.pending}`}
+                          className={`status-cell-select block h-full min-h-8 w-full cursor-pointer appearance-none rounded-none border bg-[length:0.8rem] bg-[position:right_0.4rem_center] bg-no-repeat px-4 text-center font-bold outline-none ${STATUS_CELL_CLASS[order.status] || STATUS_CELL_CLASS.pending}`}
+                          style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='${encodeURIComponent(STATUS_TEXT_COLOR[order.status] || STATUS_TEXT_COLOR.pending)}' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")` }}
                         >
                           {order.status === 'cancelled' && (
                             <option value="cancelled" disabled hidden>Zrušené</option>
