@@ -68,13 +68,43 @@ const normalize = (rows: unknown): CatalogService[] => {
   return [...unique.values()];
 };
 
+const CATALOG_STAMP = 'remappro-service-catalog-stamp';
+
+type LiveClient = SupabaseClient & { supabaseUrl: string; supabaseKey: string };
+
+const freshSelect = async (source: SupabaseClient, table: string, select: string, order?: string[]) => {
+  const live = source as LiveClient;
+  const url = new URL(`${live.supabaseUrl.replace(/\/$/, '')}/rest/v1/${table}`);
+  url.searchParams.set('select', select);
+  for (const column of order ?? []) url.searchParams.append('order', column);
+  const response = await fetch(url, {
+    method: 'GET',
+    cache: 'no-store',
+    headers: {
+      apikey: live.supabaseKey,
+      Authorization: `Bearer ${live.supabaseKey}`,
+      Accept: 'application/json',
+      'Cache-Control': 'no-cache',
+      Pragma: 'no-cache',
+    },
+  });
+  if (!response.ok) throw new Error(await response.text());
+  return response.json();
+};
+
 const loadDescriptions = async () => {
-  const { data, error } = await supabase.from('service_details').select('service_id, description');
   const descriptions = new Map<string, string>();
-  if (error || !Array.isArray(data)) return descriptions;
-  for (const row of data) {
-    const id = typeof row.service_id === 'string' ? row.service_id : '';
-    if (id) descriptions.set(id, typeof row.description === 'string' ? row.description : '');
+  try {
+    const data = await freshSelect(supabase, 'service_details', 'service_id,description');
+    if (!Array.isArray(data)) return descriptions;
+    for (const row of data) {
+      if (!row || typeof row !== 'object') continue;
+      const record = row as { service_id?: unknown; description?: unknown };
+      const id = typeof record.service_id === 'string' ? record.service_id : '';
+      if (id) descriptions.set(id, typeof record.description === 'string' ? record.description : '');
+    }
+  } catch {
+    return descriptions;
   }
   return descriptions;
 };
@@ -99,18 +129,23 @@ export const groupCatalog = (services: CatalogService[]) => {
 };
 
 const readServices = async () => {
-  const query = (source: SupabaseClient) =>
-    source
-      .from('services')
-      .select('id,name,price,category')
-      .order('category', { ascending: true })
-      .order('name', { ascending: true });
+  try {
+    return await freshSelect(supabase, 'services', 'id,name,price,category', ['category.asc', 'name.asc']);
+  } catch (primaryError) {
+    try {
+      return await freshSelect(client(), 'services', 'id,name,price,category', ['category.asc', 'name.asc']);
+    } catch {
+      throw primaryError;
+    }
+  }
+};
 
-  const primary = await query(supabase);
-  if (!primary.error) return primary.data;
-  const backup = await query(client());
-  if (backup.error) throw backup.error;
-  return backup.data;
+export const notifyServiceCatalogChanged = () => {
+  try {
+    localStorage.setItem(CATALOG_STAMP, String(Date.now()));
+  } catch {
+    // Another open tab still receives realtime updates when storage is blocked.
+  }
 };
 
 export const loadServiceCatalog = async (): Promise<CatalogService[]> => {
@@ -125,17 +160,28 @@ export const loadServiceCatalog = async (): Promise<CatalogService[]> => {
 };
 
 export const subscribeServiceCatalog = (onChange: () => void) => {
-  const channel = client()
-    .channel('client-service-catalog')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'services' }, onChange)
-    .subscribe();
-  const details = supabase
-    .channel('service-details-catalog')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'service_details' }, onChange)
-    .subscribe();
+  const id = Math.random().toString(36).slice(2);
+  const listen = (source: SupabaseClient, table: 'services' | 'service_details', name: string) =>
+    source
+      .channel(name)
+      .on('postgres_changes', { event: '*', schema: 'public', table }, onChange)
+      .subscribe();
+
+  const services = listen(supabase, 'services', `services-${id}`);
+  const details = listen(supabase, 'service_details', `service-details-${id}`);
+  const primaryUrl = (supabase as LiveClient).supabaseUrl?.replace(/\/$/, '');
+  const backup = primaryUrl && primaryUrl !== CATALOG_URL.replace(/\/$/, '')
+    ? listen(client(), 'services', `services-backup-${id}`)
+    : null;
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === CATALOG_STAMP) onChange();
+  };
+  window.addEventListener('storage', onStorage);
 
   return () => {
-    client().removeChannel(channel);
+    window.removeEventListener('storage', onStorage);
+    supabase.removeChannel(services);
     supabase.removeChannel(details);
+    if (backup) client().removeChannel(backup);
   };
 };

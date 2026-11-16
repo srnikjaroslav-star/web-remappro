@@ -191,30 +191,60 @@ const OrderPage = () => {
   const profileRequest = useRef(0);
 
   useEffect(() => {
+    if (portalView !== 'new') return;
     let active = true;
+    let timer = 0;
+    let running = false;
+    let again = false;
     const refresh = () => {
-      loadServiceCatalog()
-        .then((next) => {
-          if (!active) return;
-          setCatalog(next);
-          setCatalogStatus('ready');
-          setServices((current) => current.filter((id) => {
-            const service = next.find((item) => item.id === id);
-            return Boolean(service) && !isLegacyStage1(service!);
-          }));
-        })
-        .catch(() => {
-          if (!active) return;
-          setCatalogStatus((current) => (current === 'ready' ? current : 'error'));
-        });
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        if (!active) return;
+        if (running) {
+          again = true;
+          return;
+        }
+        running = true;
+        loadServiceCatalog()
+          .then((next) => {
+            if (!active) return;
+            setCatalog(next);
+            setCatalogStatus('ready');
+            setServices((current) => current.filter((id) => {
+              const service = next.find((item) => item.id === id);
+              return Boolean(service) && !isLegacyStage1(service!);
+            }));
+          })
+          .catch(() => {
+            if (!active) return;
+            setCatalogStatus((current) => (current === 'ready' ? current : 'error'));
+          })
+          .finally(() => {
+            running = false;
+            if (again && active) {
+              again = false;
+              refresh();
+            }
+          });
+      }, 40);
+    };
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refresh();
     };
     refresh();
     const unsubscribe = subscribeServiceCatalog(refresh);
+    window.addEventListener('focus', refresh);
+    window.addEventListener('pageshow', refresh);
+    document.addEventListener('visibilitychange', onVisible);
     return () => {
       active = false;
+      window.clearTimeout(timer);
       unsubscribe();
+      window.removeEventListener('focus', refresh);
+      window.removeEventListener('pageshow', refresh);
+      document.removeEventListener('visibilitychange', onVisible);
     };
-  }, []);
+  }, [portalView]);
 
   useEffect(() => {
     let active = true;

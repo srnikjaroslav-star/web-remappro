@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { catalogCategories, loadServiceCatalog, subscribeServiceCatalog, type CatalogService } from '@/lib/serviceCatalog';
+import { catalogCategories, loadServiceCatalog, notifyServiceCatalogChanged, subscribeServiceCatalog, type CatalogService } from '@/lib/serviceCatalog';
 import { supabase } from '@/lib/supabase';
 
 type Draft = {
@@ -56,7 +56,7 @@ const AdminServices = () => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<Draft>(emptyDraft);
   const [busy, setBusy] = useState(false);
-  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<CatalogService | null>(null);
 
   const reload = async () => {
     try {
@@ -74,6 +74,15 @@ const AdminServices = () => {
       reload();
     });
   }, []);
+
+  useEffect(() => {
+    if (!pendingDelete) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !busy) setPendingDelete(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [pendingDelete, busy]);
 
   const categories = useMemo(() => {
     const extra = services
@@ -95,7 +104,7 @@ const AdminServices = () => {
   }, [categoryFilter, query, services]);
 
   const beginEdit = (service: CatalogService) => {
-    setConfirmId(null);
+    setPendingDelete(null);
     setEditingId(service.id);
     setEditDraft({
       id: service.id,
@@ -149,19 +158,23 @@ const AdminServices = () => {
     toast.success(current.id ? 'Služba bola upravená.' : 'Služba bola pridaná.');
     if (current.id) cancelEdit();
     else closeCreate();
+    notifyServiceCatalogChanged();
     reload();
   };
 
-  const remove = async (service: CatalogService) => {
-    if (confirmId !== service.id) {
-      setConfirmId(service.id);
-      return;
-    }
+  const closeDelete = () => {
+    if (busy) return;
+    setPendingDelete(null);
+  };
+
+  const confirmRemove = async () => {
+    const service = pendingDelete;
+    if (!service) return;
     setBusy(true);
     const details = await supabase.from('service_details').delete().eq('service_id', service.id);
     const removed = await supabase.from('services').delete().eq('id', service.id).select('id').maybeSingle();
     setBusy(false);
-    setConfirmId(null);
+    setPendingDelete(null);
     if ((details.error && !missingTable(details.error)) || removed.error || !removed.data?.id) {
       toast.error('Službu sa nepodarilo zmazať.');
       return;
@@ -169,6 +182,7 @@ const AdminServices = () => {
     if (editingId === service.id) cancelEdit();
     if (selectedId === service.id) setSelectedId(null);
     toast.success('Služba bola zmazaná.');
+    notifyServiceCatalogChanged();
     reload();
   };
 
@@ -184,7 +198,7 @@ const AdminServices = () => {
             role="dialog"
             aria-modal="true"
             aria-labelledby="new-service-title"
-            className="w-full max-w-3xl rounded-xl border border-primary/40 bg-[#070d16] p-4 shadow-[0_0_30px_rgba(0,242,255,0.22)]"
+            className="w-full max-w-md rounded-xl border border-primary/40 bg-[#070d16] p-4 shadow-[0_0_30px_rgba(0,242,255,0.22)]"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="mb-3 flex items-center justify-between gap-3">
@@ -193,7 +207,7 @@ const AdminServices = () => {
                 ×
               </button>
             </div>
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid gap-3">
               <label className="block">
                 <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Názov</span>
                 <input value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} className={fieldClass} maxLength={120} />
@@ -212,10 +226,6 @@ const AdminServices = () => {
                 <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Cena v kreditoch</span>
                 <input value={draft.price} onChange={(event) => setDraft((current) => ({ ...current, price: event.target.value }))} inputMode="decimal" placeholder="0,00" className={`${fieldClass} text-center text-xl font-bold tabular-nums text-primary placeholder:text-primary/50`} />
               </label>
-              <label className="block">
-                <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Popis</span>
-                <input value={draft.description} onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))} maxLength={500} className={fieldClass} />
-              </label>
             </div>
             <div className="mt-3 flex justify-end gap-3">
               <button type="button" onClick={closeCreate} className="inline-flex h-[42px] items-center gap-2 rounded-md border border-red-400/55 bg-[#0a192f] px-4 text-sm font-bold uppercase tracking-wide text-red-400 shadow-[0_0_16px_rgba(248,113,113,0.28)] transition-colors hover:border-red-400 hover:bg-red-500/15 hover:shadow-[0_0_16px_rgba(248,113,113,0.5)]">
@@ -224,6 +234,36 @@ const AdminServices = () => {
               <button type="button" onClick={() => save(draft)} disabled={busy} className="inline-flex h-[42px] items-center gap-2 rounded-md border border-primary/70 bg-primary/15 px-4 text-sm font-bold uppercase tracking-wide text-primary shadow-[0_0_16px_rgba(0,242,255,0.28)] transition-colors hover:bg-primary/25 disabled:opacity-60">
                 <Plus className="h-4 w-4" />
                 Pridať službu
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
+      {pendingDelete && createPortal(
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4"
+          onClick={closeDelete}
+          onKeyDown={(event) => { if (event.key === 'Escape') closeDelete(); }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-service-title"
+            className="w-full max-w-md rounded-xl border border-primary/40 bg-[#070d16] p-4 shadow-[0_0_30px_rgba(0,242,255,0.22)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 id="delete-service-title" className="text-sm font-bold uppercase tracking-[0.14em] text-primary">Zmazať službu</h2>
+            <p className="mt-3 text-sm leading-relaxed text-foreground">
+              Naozaj chcete zmazať službu <span className="font-semibold text-cyan-400">{pendingDelete.name}</span>?
+            </p>
+            <div className="mt-4 flex flex-wrap justify-end gap-3">
+              <button type="button" onClick={closeDelete} disabled={busy} className="inline-flex h-[42px] items-center gap-2 rounded-md border border-red-400/55 bg-[#0a192f] px-4 text-sm font-bold uppercase tracking-wide text-red-400 shadow-[0_0_16px_rgba(248,113,113,0.28)] transition-colors hover:border-red-400 hover:bg-red-500/15 hover:shadow-[0_0_16px_rgba(248,113,113,0.5)] disabled:opacity-60">
+                Zrušiť
+              </button>
+              <button type="button" onClick={confirmRemove} disabled={busy} className="inline-flex h-[42px] items-center gap-2 rounded-md border-2 border-red-500 bg-red-500/15 px-4 text-sm font-bold uppercase tracking-wide text-red-400 transition-colors hover:bg-red-500/25 disabled:opacity-60">
+                <Trash2 className="h-4 w-4" />
+                Potvrdiť (Zmazať)
               </button>
             </div>
           </div>
@@ -366,9 +406,9 @@ const AdminServices = () => {
                             <Pencil className="h-4 w-4 shrink-0" />
                             Upraviť
                           </button>
-                          <button type="button" disabled={busy} onClick={() => remove(service)} className="inline-flex h-full min-w-0 flex-1 items-center justify-center gap-2 border-2 border-red-500 bg-red-500/15 px-3 text-sm font-bold uppercase tracking-wide text-red-400 transition-colors hover:bg-red-500/25 disabled:opacity-60">
+                          <button type="button" disabled={busy} onClick={() => setPendingDelete(service)} className="inline-flex h-full min-w-0 flex-1 items-center justify-center gap-2 border-2 border-red-500 bg-red-500/15 px-3 text-sm font-bold uppercase tracking-wide text-red-400 transition-colors hover:bg-red-500/25 disabled:opacity-60">
                             <Trash2 className="h-4 w-4 shrink-0" />
-                            {confirmId === service.id ? 'Potvrdiť' : 'Zmazať'}
+                            Zmazať
                           </button>
                         </div>
                       )}
