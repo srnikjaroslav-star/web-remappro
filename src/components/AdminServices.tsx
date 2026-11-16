@@ -398,11 +398,11 @@ const AdminServices = () => {
                     </td>
                     <td className="sticky right-0 z-10 border-r border-slate-800/60 bg-[#070d16] px-0 py-0 align-middle">
                       <div className="flex h-8 w-full">
-                        <button type="button" onClick={(event) => { event.stopPropagation(); beginEdit(service); }} className="inline-flex h-full min-w-0 flex-1 items-center justify-center gap-2 border-2 border-cyan-400 bg-cyan-500/15 px-3 text-sm font-bold uppercase tracking-wide text-cyan-300 transition-colors hover:bg-cyan-500/25">
+                        <button type="button" onClick={(event) => { event.stopPropagation(); beginEdit(service); }} className="inline-flex h-full min-w-0 flex-1 items-center justify-center gap-2 rounded-none border border-primary/80 bg-primary/10 px-3 text-sm font-bold uppercase tracking-wide text-primary shadow-[0_0_12px_rgba(0,242,255,0.28)] transition-colors hover:border-primary hover:bg-primary/16 hover:shadow-[0_0_14px_rgba(0,242,255,0.4)]">
                           <Pencil className="h-4 w-4 shrink-0" />
                           Upraviť
                         </button>
-                        <button type="button" disabled={busy} onClick={() => setPendingDelete(service)} className="inline-flex h-full min-w-0 flex-1 items-center justify-center gap-2 border-2 border-red-500 bg-red-500/15 px-3 text-sm font-bold uppercase tracking-wide text-red-400 transition-colors hover:bg-red-500/25 disabled:opacity-60">
+                        <button type="button" disabled={busy} onClick={() => setPendingDelete(service)} className="inline-flex h-full min-w-0 flex-1 items-center justify-center gap-2 rounded-none border border-red-400/70 bg-red-500/10 px-3 text-sm font-bold uppercase tracking-wide text-red-400 shadow-[0_0_12px_rgba(248,113,113,0.28)] transition-colors hover:border-red-400 hover:bg-red-500/16 hover:shadow-[0_0_14px_rgba(248,113,113,0.4)] disabled:opacity-60">
                           <Trash2 className="h-4 w-4 shrink-0" />
                           Zmazať
                         </button>
