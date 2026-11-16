@@ -1357,32 +1357,32 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
       </header>
 
       <div className="w-full flex-grow pt-3">
-        <div className="mb-3 inline-flex flex-wrap items-center rounded-lg border border-transparent bg-transparent p-0.5 text-sm font-semibold">
+        <div className="mb-3 inline-flex flex-wrap items-end rounded-lg border border-transparent bg-transparent p-0.5 text-base font-semibold">
           <button
             type="button"
             onClick={() => setSection('orders')}
-            className={`inline-flex h-8 items-center rounded-md border px-[11px] transition-colors ${section === 'orders' ? 'border-primary/70 bg-primary/20 text-primary shadow-[0_0_16px_rgba(0,242,255,0.45)]' : 'border-primary/35 bg-[#070d16] text-muted-foreground hover:border-primary/70 hover:bg-[#0a192f] hover:text-primary hover:shadow-[0_0_12px_rgba(0,242,255,0.28)]'}`}
+            className={`inline-flex h-9 items-center border border-transparent px-[11px] transition-colors ${section === 'orders' ? 'relative z-10 rounded-t-md rounded-b-none border-b-2 border-b-[#00d4ff] bg-[#00d4ff]/10 text-[#00d4ff] shadow-[0_12px_22px_rgba(0,212,255,0.28)] after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-3 after:bg-gradient-to-b after:from-[rgba(0,212,255,0.35)] after:to-transparent' : 'rounded-md text-[#00d4ff]/75 hover:bg-[#00d4ff]/10 hover:text-[#00d4ff]'}`}
           >
             Objednávky
           </button>
           <button
             type="button"
             onClick={() => setSection('clients')}
-            className={`inline-flex h-8 items-center rounded-md border px-[11px] transition-colors ${section === 'clients' ? 'border-primary/70 bg-primary/20 text-primary shadow-[0_0_16px_rgba(0,242,255,0.45)]' : 'border-primary/35 bg-[#070d16] text-muted-foreground hover:border-primary/70 hover:bg-[#0a192f] hover:text-primary hover:shadow-[0_0_12px_rgba(0,242,255,0.28)]'}`}
+            className={`inline-flex h-9 items-center border border-transparent px-[11px] transition-colors ${section === 'clients' ? 'relative z-10 rounded-t-md rounded-b-none border-b-2 border-b-[#22c55e] bg-[#22c55e]/10 text-[#22c55e] shadow-[0_12px_22px_rgba(34,197,94,0.28)] after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-3 after:bg-gradient-to-b after:from-[rgba(34,197,94,0.35)] after:to-transparent' : 'rounded-md text-[#22c55e]/75 hover:bg-[#22c55e]/10 hover:text-[#22c55e]'}`}
           >
             Klienti
           </button>
           <button
             type="button"
             onClick={() => setSection('services')}
-            className={`inline-flex h-8 items-center rounded-md border px-[11px] transition-colors ${section === 'services' ? 'border-primary/70 bg-primary/20 text-primary shadow-[0_0_16px_rgba(0,242,255,0.45)]' : 'border-primary/35 bg-[#070d16] text-muted-foreground hover:border-primary/70 hover:bg-[#0a192f] hover:text-primary hover:shadow-[0_0_12px_rgba(0,242,255,0.28)]'}`}
+            className={`inline-flex h-9 items-center border border-transparent px-[11px] transition-colors ${section === 'services' ? 'relative z-10 rounded-t-md rounded-b-none border-b-2 border-b-[#f59e0b] bg-[#f59e0b]/10 text-[#f59e0b] shadow-[0_12px_22px_rgba(245,158,11,0.28)] after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-3 after:bg-gradient-to-b after:from-[rgba(245,158,11,0.35)] after:to-transparent' : 'rounded-md text-[#f59e0b]/75 hover:bg-[#f59e0b]/10 hover:text-[#f59e0b]'}`}
           >
             Služby
           </button>
           <button
             type="button"
             onClick={() => setSection('hours')}
-            className={`inline-flex h-8 items-center rounded-md border px-[11px] transition-colors ${section === 'hours' ? 'border-primary/70 bg-primary/20 text-primary shadow-[0_0_16px_rgba(0,242,255,0.45)]' : 'border-primary/35 bg-[#070d16] text-muted-foreground hover:border-primary/70 hover:bg-[#0a192f] hover:text-primary hover:shadow-[0_0_12px_rgba(0,242,255,0.28)]'}`}
+            className={`inline-flex h-9 items-center border border-transparent px-[11px] transition-colors ${section === 'hours' ? 'relative z-10 rounded-t-md rounded-b-none border-b-2 border-b-[#8B5CF6] bg-[#8B5CF6]/10 text-[#8B5CF6] shadow-[0_12px_22px_rgba(139,92,246,0.28)] after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-3 after:bg-gradient-to-b after:from-[rgba(139,92,246,0.35)] after:to-transparent' : 'rounded-md text-[#8B5CF6]/75 hover:bg-[#8B5CF6]/10 hover:text-[#8B5CF6]'}`}
           >
             Otváracie hodiny
           </button>
@@ -1390,13 +1390,13 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
         {section === 'clients' ? <ClientCredits onlineIds={onlineIds} /> : section === 'services' ? <AdminServices /> : section === 'hours' ? <OpeningHours /> : (
         <>
         <div className="mb-3 grid w-full grid-cols-6 gap-2">
-          <div className="min-w-0 rounded-none border-t-4 border-t-cyan-400 bg-[#0f172a] px-2.5 py-2 shadow-[inset_0_0_28px_rgba(34,211,238,0.14)]">
+          <div className="min-w-0 rounded-none border-t-4 border-t-white bg-[#0f172a] px-2.5 py-2 shadow-[inset_0_0_28px_rgba(255,255,255,0.2)]">
             <p className="truncate text-xs font-extrabold uppercase tracking-wide text-white">Celkové tržby</p>
             <p className="mt-1 truncate text-2xl font-black leading-none text-cyan-400">
               {(financialStats?.grossRevenue ?? 0).toFixed(2)} €
             </p>
           </div>
-          <div className="min-w-0 rounded-none border-t-4 border-t-sky-400 bg-[#0f172a] px-2.5 py-2 shadow-[inset_0_0_28px_rgba(56,189,248,0.14)]">
+          <div className="min-w-0 rounded-none border-t-4 border-t-[#8B5CF6] bg-[#0f172a] px-2.5 py-2 shadow-[inset_0_0_28px_rgba(139,92,246,0.2)]">
             <p className="truncate text-xs font-extrabold uppercase tracking-wide text-white">Dnešné tržby</p>
             <p className="mt-1 truncate text-2xl font-black leading-none text-sky-400">
               {(financialStats?.todayRevenue ?? 0).toFixed(2)} €
