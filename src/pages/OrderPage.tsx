@@ -50,7 +50,6 @@ import {
   File,
   Fuel,
   Gauge,
-  Languages,
   List,
   Loader2,
   LogOut,
@@ -879,10 +878,10 @@ const OrderPage = () => {
                   aria-expanded={languageOpen}
                   aria-label={t('language')}
                   onClick={() => setLanguageOpen((open) => !open)}
-                  className={`${languageOpen ? headerControlActive : headerControl} uppercase tracking-wide`}
+                  className={languageOpen ? headerControlActive : headerControl}
                 >
-                  <Languages className="h-4 w-4" />
-                  {language}
+                  <span className="w-6 uppercase tracking-wide">{language}</span>
+                  <span className="whitespace-nowrap">{language === 'en' ? 'English' : 'Slovenčina'}</span>
                   <ChevronDown className={`h-4 w-4 transition-transform ${languageOpen ? 'rotate-180' : ''}`} />
                 </button>
                 {languageOpen && (
@@ -915,7 +914,6 @@ const OrderPage = () => {
                         >
                           <span className="w-6 uppercase tracking-wide">{code}</span>
                           <span className="whitespace-nowrap">{label}</span>
-                          {selected && <Check className="ml-auto h-3.5 w-3.5" strokeWidth={3} />}
                         </button>
                       );
                     })}
