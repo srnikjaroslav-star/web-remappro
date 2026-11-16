@@ -1448,7 +1448,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                       const selected = active && edge !== 'last' ? picked : '';
                       return `px-4 py-1 align-middle border-r border-slate-800/60 ${selected}`;
                     };
-                    const actionCell = 'inline-flex h-full min-h-8 flex-1 basis-0 items-center justify-center shadow-[inset_0_0_0_2px_currentColor] transition-colors duration-200';
+                    const actionCell = 'inline-flex h-full min-h-8 flex-1 basis-0 items-center justify-center rounded-none border border-current shadow-[0_0_12px_color-mix(in_srgb,currentColor_32%,transparent)] transition-colors duration-200 hover:shadow-[0_0_14px_color-mix(in_srgb,currentColor_45%,transparent)]';
                     const vehicle = [order.car_brand, order.car_model].map((part) => String(part ?? '').trim()).filter(Boolean).join(' ');
                     const documents: { number: string; href: string; title: string }[] = [];
                     if (order.invoice_number) {
