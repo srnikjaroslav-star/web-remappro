@@ -1227,14 +1227,14 @@ const OrderPage = () => {
               </section>
             </div>
 
-            <aside className="sticky top-16 z-20 min-w-0 self-start lg:col-span-4">
-              <div className="order-panel flex flex-col border-t-2 border-t-primary">
-                <div className="flex items-center justify-between border-b border-primary/15 px-4 py-3">
+            <aside className="sticky top-16 z-20 flex max-h-[calc(100dvh-8.25rem)] min-h-0 min-w-0 flex-col self-start lg:col-span-4">
+              <div className="order-panel flex min-h-0 w-full flex-1 flex-col border-t-2 border-t-primary">
+                <div className="flex shrink-0 items-center justify-between border-b border-primary/15 px-4 py-3">
                   <h2 className="text-xl font-semibold uppercase tracking-[0.16em] text-primary">{t('servicesCheckout')}</h2>
                   <p className="shrink-0 text-3xl font-bold leading-none tabular-nums neon-text">{totalPrice}€</p>
                 </div>
 
-                <div className="order-counters px-3 pt-3">
+                <div className="order-counters shrink-0 px-3 pt-3">
                   <div className="flex min-w-0 items-center justify-between gap-2 rounded-xl border border-primary/45 bg-black/50 px-3 py-2.5 shadow-[0_0_18px_rgba(0,242,255,0.14),inset_0_1px_0_rgba(0,242,255,0.18)]">
                     <p className="truncate text-[11px] font-semibold uppercase tracking-[0.14em] text-primary/80">{t('selected')}</p>
                     <p className="text-2xl font-bold leading-none tabular-nums neon-text">{selectedItems.length}</p>
@@ -1247,7 +1247,7 @@ const OrderPage = () => {
                   </div>
                 </div>
 
-                <div className="order-services-scroll max-h-[50vh] space-y-4 overflow-y-auto px-3 py-3">
+                <div className="order-services-scroll min-h-0 max-h-[50vh] flex-1 space-y-4 overflow-y-auto px-3 py-3">
                   {catalogStatus === 'loading' && (
                     <p className="px-1 text-sm text-muted-foreground">{t('catalogLoading')}</p>
                   )}
@@ -1376,12 +1376,6 @@ const OrderPage = () => {
                     </p>
                   </div>
 
-                  <div id="order-credit-balance" className="flex items-center justify-between gap-3 rounded-xl border border-primary/35 bg-black/40 px-3 py-2">
-                    <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary/80">{t('creditBalance')}</span>
-                    <span className={`text-lg font-bold leading-none tabular-nums ${creditBalance !== null && creditBalance < totalPrice ? 'text-amber-300' : 'neon-text'}`}>
-                      {creditBalance === null ? '—' : `${formatServicePrice(creditBalance)}€`}
-                    </span>
-                  </div>
                   <button
                     type="button"
                     onClick={shortOnCredits ? openCreditTopUp : payWithCredits}
