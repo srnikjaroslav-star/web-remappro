@@ -1188,6 +1188,8 @@ const ManagementPortal = () => {
     cancelled: '#ef4444',
   };
 
+  const ordersRow = 'grid w-full min-w-[548px] grid-cols-[minmax(0,0.7fr)_minmax(0,1.15fr)_minmax(0,1.7fr)_minmax(0,1.1fr)_minmax(0,1.7fr)_8.5rem_9.5rem_260px]';
+
   const STATUS_CELL_CLASS: Record<string, string> = {
     pending: 'border-yellow-400/80 bg-yellow-500/10 text-yellow-400 shadow-[0_0_12px_rgba(250,204,21,0.28)]',
     processing: 'border-cyan-300/80 bg-cyan-500/10 text-cyan-300 shadow-[0_0_12px_rgba(34,211,238,0.28)]',
@@ -1282,7 +1284,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
         accept=".bin,.ori,.mod,.ecu"
       />
 
-      <div className="max-w-[1600px] mx-auto w-full px-4 flex flex-col min-h-screen">
+      <div className="max-w-[1600px] mx-auto w-full min-w-0 px-4 flex flex-col min-h-screen">
       {/* Header */}
       <header className="sticky top-0 z-50 w-full border-b border-primary/25">
         <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-background/80 backdrop-blur-sm" />
@@ -1412,42 +1414,40 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
         </div>
 
         {/* Orders Table */}
-        <div className="h-fit w-full shrink-0 rounded-xl bg-background/40 backdrop-blur-xl border border-primary/20 shadow-[0_0_30px_rgba(59,130,246,0.15)]">
+        <div className="h-fit w-full min-w-0 shrink-0 rounded-xl bg-background/40 backdrop-blur-xl border border-primary/20 shadow-[0_0_30px_rgba(59,130,246,0.15)]">
           <div className="overflow-x-auto">
-            <table className="w-full text-base border-collapse">
-              <thead className="sticky top-0 z-50">
-                <tr className="bg-[#0a192f] border-b border-primary/30 shadow-md">
-                  <th className="text-left p-2.5 border-r border-slate-500 text-sm font-bold uppercase tracking-wide align-middle text-white whitespace-nowrap">Faktúra</th>
-                  <th className="text-left p-2.5 border-r border-slate-500 text-sm font-bold uppercase tracking-wide align-middle text-white whitespace-nowrap min-w-[12rem]">ID</th>
-                  <th className="text-left p-2.5 border-r border-slate-500 text-sm font-bold uppercase tracking-wide align-middle text-white whitespace-nowrap">Vozidlo</th>
-                  <th className="text-left p-2.5 border-r border-slate-500 text-sm font-bold uppercase tracking-wide align-middle text-white whitespace-nowrap">Dátum</th>
-                  <th className="text-left p-2.5 border-r border-slate-500 text-sm font-bold uppercase tracking-wide align-middle text-white w-full min-w-[320px]">Zákazník</th>
-                  <th className="text-center p-4 border-r border-slate-500 text-sm font-bold uppercase tracking-wide align-middle text-white whitespace-nowrap min-w-[8.5rem]">Cena</th>
-                  <th className="text-center p-2.5 border-r border-slate-500 text-sm font-bold uppercase tracking-wide align-middle text-white whitespace-nowrap min-w-[9.5rem]">Stav</th>
-                  <th className="text-center p-2.5 border-r border-slate-500 text-sm font-bold uppercase tracking-wide align-middle text-white whitespace-nowrap sticky right-0 bg-[#0a192f] z-10 min-w-[260px]">Akcie</th>
-                </tr>
-              </thead>
-              <tbody>
+            <div role="table" className="w-full min-w-0 text-base">
+              <div role="rowgroup" className="sticky top-0 z-50">
+                <div role="row" className={`${ordersRow} border-b border-primary/30 bg-[#0a192f] shadow-md`}>
+                  <div role="columnheader" className="min-w-0 overflow-hidden border-r border-slate-500 p-2.5 text-left text-sm font-bold uppercase tracking-wide text-white">Faktúra</div>
+                  <div role="columnheader" className="min-w-0 overflow-hidden border-r border-slate-500 p-2.5 text-left text-sm font-bold uppercase tracking-wide text-white">ID</div>
+                  <div role="columnheader" className="min-w-0 overflow-hidden border-r border-slate-500 p-2.5 text-left text-sm font-bold uppercase tracking-wide text-white">Vozidlo</div>
+                  <div role="columnheader" className="min-w-0 overflow-hidden border-r border-slate-500 p-2.5 text-left text-sm font-bold uppercase tracking-wide text-white">Dátum</div>
+                  <div role="columnheader" className="min-w-0 overflow-hidden border-r border-slate-500 p-2.5 text-left text-sm font-bold uppercase tracking-wide text-white">Zákazník</div>
+                  <div role="columnheader" className="sticky right-[calc(260px+9.5rem)] z-30 border-r border-slate-500 bg-[#0a192f] p-4 text-center text-sm font-bold uppercase tracking-wide text-white">Cena</div>
+                  <div role="columnheader" className="sticky right-[260px] z-30 border-r border-slate-500 bg-[#0a192f] p-2.5 text-center text-sm font-bold uppercase tracking-wide text-white">Stav</div>
+                  <div role="columnheader" className="sticky right-0 z-30 border-r border-slate-500 bg-[#0a192f] p-2.5 text-center text-sm font-bold uppercase tracking-wide text-white">Akcie</div>
+                </div>
+              </div>
+              <div role="rowgroup">
                 {loading ? (
-                <tr>
-                      <td colSpan={8} className="text-center py-12 text-muted-foreground">
+                <div role="row" className={ordersRow}>
+                      <div role="cell" className="col-span-8 py-12 text-center text-muted-foreground">
                         Načítavam objednávky...
-                      </td>
-                    </tr>
+                      </div>
+                    </div>
                   ) : filteredOrders.length === 0 ? (
-                    <tr>
-                      <td colSpan={8} className="text-center py-12 text-muted-foreground">
+                    <div role="row" className={ordersRow}>
+                      <div role="cell" className="col-span-8 py-12 text-center text-muted-foreground">
                         Žiadne objednávky
-                      </td>
-                    </tr>
+                      </div>
+                    </div>
                 ) : (
                   filteredOrders.map((order) => {
                     const active = activeRowId === order.id;
                     const picked = active ? 'bg-[#0b2430] shadow-[inset_0_0_18px_rgba(0,242,255,0.16)]' : '';
-                    const cell = (edge: 'first' | 'mid' | 'last' | 'fill') => {
-                      const selected = active && edge !== 'last' ? picked : '';
-                      return `px-4 py-1 align-middle border-r border-slate-800/60 ${selected}`;
-                    };
+                    const flexCell = `min-w-0 overflow-hidden border-r border-slate-800/60 px-4 py-1 ${picked}`;
+                    const pinBg = active ? 'bg-[#0b2430] shadow-[inset_0_0_18px_rgba(0,242,255,0.16)]' : 'bg-[#070d16]';
                     const actionCell = 'inline-flex h-full min-h-8 flex-1 basis-0 items-center justify-center rounded-none border border-current shadow-[0_0_12px_color-mix(in_srgb,currentColor_32%,transparent)] transition-colors duration-200 hover:shadow-[0_0_14px_color-mix(in_srgb,currentColor_45%,transparent)]';
                     const vehicle = [order.car_brand, order.car_model].map((part) => String(part ?? '').trim()).filter(Boolean).join(' ');
                     const documents: { number: string; href: string; title: string }[] = [];
@@ -1458,23 +1458,24 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                       documents.push({ number: order.credit_note_number, href: order.credit_note_pdf || '#', title: 'Stiahnuť dobropis' });
                     }
                     return (
-                    <tr
+                    <div
+                      role="row"
                       key={order.id}
                       onClick={() => setActiveRowId(order.id)}
-                      className="align-middle border-b border-slate-800/60 cursor-pointer"
+                      className={`${ordersRow} cursor-pointer border-b border-slate-800/60`}
                     >
-                      <td className={`${cell('first')} whitespace-nowrap`}>
+                      <div role="cell" className={flexCell}>
                         {documents.length === 0 ? (
                           <span className="text-base text-slate-500">—</span>
                         ) : (
-                          <div className="flex flex-col items-start gap-0.5">
+                          <div className="flex min-w-0 flex-col items-start gap-0.5">
                             {documents.map((doc) => (
                               <a
                                 key={doc.number}
                                 href={doc.href}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="font-mono text-base font-bold text-red-500 hover:text-red-400 whitespace-nowrap"
+                                className="block max-w-full truncate font-mono text-base font-bold text-red-500 hover:text-red-400"
                                 title={doc.title}
                               >
                                 {doc.number}
@@ -1482,27 +1483,27 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                             ))}
                           </div>
                         )}
-                      </td>
-                      <td className={`${cell('mid')} whitespace-nowrap min-w-[12rem]`}>
-                        <span className="font-mono text-lg font-bold leading-none text-cyan-300 whitespace-nowrap">
+                      </div>
+                      <div role="cell" className={flexCell}>
+                        <span className="block truncate font-mono text-lg font-bold leading-none text-cyan-300">
                           {order.order_number || order.id.slice(0, 6).toUpperCase()}
                         </span>
-                      </td>
-                      <td className={`${cell('mid')} whitespace-nowrap`}>
-                        <p className="text-base font-bold leading-none text-cyan-400 whitespace-nowrap">{vehicle || '—'}</p>
-                      </td>
-                      <td className={`${cell('mid')} whitespace-nowrap`}>
-                        <p className="text-base font-medium leading-none text-white whitespace-nowrap">
+                      </div>
+                      <div role="cell" className={flexCell}>
+                        <p className="truncate text-base font-bold leading-none text-cyan-400" title={vehicle || '—'}>{vehicle || '—'}</p>
+                      </div>
+                      <div role="cell" className={flexCell}>
+                        <p className="truncate text-base font-medium leading-none text-white">
                           {formatLocalDateTime(order.created_at)}
                         </p>
-                      </td>
-                      <td className={`${cell('mid')} w-full min-w-[320px]`}>
+                      </div>
+                      <div role="cell" className={flexCell}>
                         <div className="flex min-w-0 items-baseline gap-x-2">
                           <p className="min-w-0 truncate whitespace-nowrap text-lg font-bold leading-none text-cyan-400" title={order.customer_name}>{order.customer_name}</p>
-                          <p className="shrink-0 whitespace-nowrap text-xs leading-none text-white" title={order.customer_email}>{order.customer_email}</p>
+                          <p className="min-w-0 truncate whitespace-nowrap text-xs leading-none text-white" title={order.customer_email}>{order.customer_email}</p>
                         </div>
-                      </td>
-                      <td className={`min-w-[8.5rem] whitespace-nowrap border-r border-slate-800/60 px-4 py-1 text-center align-middle ${picked}`}>
+                      </div>
+                      <div role="cell" className={`sticky right-[calc(260px+9.5rem)] z-20 border-r border-slate-800/60 px-4 py-1 text-center ${pinBg}`}>
                         <p className={`flex items-center justify-center text-xl font-bold leading-none ${
                           order.status === 'cancelled' 
                             ? 'text-red-500' 
@@ -1510,8 +1511,8 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                         }`}>
                           {getDisplayAmount(order).toFixed(2)}€
                         </p>
-                      </td>
-                      <td className={`h-px min-w-[9.5rem] whitespace-nowrap border-r border-slate-800/60 p-0 text-center ${picked}`}>
+                      </div>
+                      <div role="cell" className={`sticky right-[260px] z-20 min-h-8 border-r border-slate-800/60 p-0 text-center ${pinBg}`}>
                         <select
                           value={order.status}
                           onMouseDown={(event) => event.stopPropagation()}
@@ -1526,8 +1527,8 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                           <option value="processing" style={{ color: STATUS_TEXT_COLOR.processing, backgroundColor: '#050505' }}>V Procese</option>
                           <option value="completed" style={{ color: STATUS_TEXT_COLOR.completed, backgroundColor: '#050505' }}>Dokončené</option>
                         </select>
-                      </td>
-                      <td className="sticky right-0 z-10 h-px border-r border-slate-800/60 bg-[#070d16] p-0">
+                      </div>
+                      <div role="cell" className="sticky right-0 z-30 h-full min-h-8 border-r border-slate-800/60 bg-[#070d16] p-0">
                         <div className="flex h-full w-full flex-nowrap items-stretch gap-0 p-0">
                           {order.file_url ? (
                             <button
@@ -1585,13 +1586,13 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                             <Trash2 className="h-5 w-5" />
                           </button>
                         </div>
-                      </td>
-                    </tr>
+                      </div>
+                    </div>
                     );
                   })
                 )}
-              </tbody>
-            </table>
+              </div>
+            </div>
           </div>
         </div>
         </>
