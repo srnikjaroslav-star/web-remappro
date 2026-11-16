@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
+import { Check, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { catalogCategories, loadServiceCatalog, notifyServiceCatalogChanged, subscribeServiceCatalog, type CatalogService } from '@/lib/serviceCatalog';
 import { supabase } from '@/lib/supabase';
@@ -43,7 +43,6 @@ const missingTable = (error: { code?: string } | null) =>
   error?.code === 'PGRST205' || error?.code === '42P01';
 
 const fieldClass = 'h-11 w-full rounded-md border border-primary/70 bg-[#0a192f] px-3 text-sm text-foreground shadow-[0_0_16px_rgba(0,242,255,0.28)] focus:border-primary focus:outline-none focus:shadow-[0_0_16px_rgba(0,242,255,0.45)]';
-const inlineClass = 'h-12 w-full min-w-0 rounded-md border border-primary/50 bg-black/50 px-2.5 text-foreground focus:border-primary focus:outline-none focus:shadow-[0_0_12px_rgba(0,242,255,0.35)]';
 
 const AdminServices = () => {
   const [services, setServices] = useState<CatalogService[]>([]);
@@ -76,13 +75,15 @@ const AdminServices = () => {
   }, []);
 
   useEffect(() => {
-    if (!pendingDelete) return;
+    if (!pendingDelete && !editingId) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !busy) setPendingDelete(null);
+      if (event.key !== 'Escape' || busy) return;
+      if (pendingDelete) setPendingDelete(null);
+      else cancelEdit();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [pendingDelete, busy]);
+  }, [pendingDelete, editingId, busy]);
 
   const categories = useMemo(() => {
     const extra = services
@@ -240,6 +241,58 @@ const AdminServices = () => {
         </div>,
         document.body,
       )}
+      {editingId && createPortal(
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4"
+          onClick={cancelEdit}
+          onKeyDown={(event) => { if (event.key === 'Escape') cancelEdit(); }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="edit-service-title"
+            className="w-full max-w-md rounded-xl border border-primary/40 bg-[#070d16] p-4 shadow-[0_0_30px_rgba(0,242,255,0.22)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h2 id="edit-service-title" className="text-2xl font-black uppercase leading-none tracking-[0.16em] text-primary">Upraviť službu</h2>
+              <button type="button" onClick={cancelEdit} aria-label="Zavrieť" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-red-400/45 bg-[#0a192f] text-xl leading-none text-red-400 shadow-[0_0_12px_rgba(248,113,113,0.28)] transition-colors hover:border-red-400 hover:bg-red-500/15 hover:shadow-[0_0_16px_rgba(248,113,113,0.5)]">
+                ×
+              </button>
+            </div>
+            <div className="grid gap-3">
+              <label className="block">
+                <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Názov</span>
+                <input value={editDraft.name} onChange={(event) => setEditDraft((current) => ({ ...current, name: event.target.value }))} className={fieldClass} maxLength={120} />
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Kategória</span>
+                <select value={editDraft.category} onChange={(event) => setEditDraft((current) => ({ ...current, category: event.target.value }))} className={`${fieldClass.replace(' text-foreground', '')} ${categoryTextClass(editDraft.category)}`}>
+                  {categories.map((category) => (
+                    <option key={category} value={category} className="bg-[#050505]" style={{ color: categoryTone[category]?.color ?? '#fafafa' }}>
+                      {category}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Cena v kreditoch</span>
+                <input value={editDraft.price} onChange={(event) => setEditDraft((current) => ({ ...current, price: event.target.value }))} inputMode="decimal" placeholder="0,00" className={`${fieldClass} text-center text-xl font-bold tabular-nums text-primary placeholder:text-primary/50`} />
+              </label>
+            </div>
+            <div className="mt-3 flex justify-end gap-3">
+              <button type="button" onClick={cancelEdit} className="inline-flex h-[42px] items-center gap-2 rounded-md border border-red-400/55 bg-[#0a192f] px-4 text-sm font-bold uppercase tracking-wide text-red-400 shadow-[0_0_16px_rgba(248,113,113,0.28)] transition-colors hover:border-red-400 hover:bg-red-500/15 hover:shadow-[0_0_16px_rgba(248,113,113,0.5)]">
+                Zrušiť
+              </button>
+              <button type="button" onClick={() => save(editDraft)} disabled={busy} className="inline-flex h-[42px] items-center gap-2 rounded-md border border-primary/70 bg-primary/15 px-4 text-sm font-bold uppercase tracking-wide text-primary shadow-[0_0_16px_rgba(0,242,255,0.28)] transition-colors hover:bg-primary/25 disabled:opacity-60">
+                <Check className="h-4 w-4" />
+                Uložiť
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
       {pendingDelete && createPortal(
         <div
           className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4"
@@ -327,91 +380,33 @@ const AdminServices = () => {
               ) : visible.length === 0 ? (
                 <tr><td colSpan={4} className="py-12 text-center text-muted-foreground">Žiadne služby</td></tr>
               ) : visible.map((service) => {
-                const editing = editingId === service.id;
-                const picked = !editing && selectedId === service.id
+                const picked = selectedId === service.id
                   ? ' bg-[#0b2430] shadow-[inset_0_0_18px_rgba(0,242,255,0.16)]'
                   : '';
-                const cell = editing
-                  ? 'border-r border-slate-800/60 px-3 py-0 align-middle bg-slate-800/40'
-                  : `border-r border-slate-800/60 px-4 py-0 align-middle${picked}`;
+                const cell = `border-r border-slate-800/60 px-4 py-0 align-middle${picked}`;
                 return (
                   <tr key={service.id} onClick={() => setSelectedId(service.id)} className="cursor-pointer border-b border-slate-800/60">
                     <td className={cell}>
-                      {editing ? (
-                        <div className="w-0 min-w-full">
-                          <input
-                            value={editDraft.name}
-                            onChange={(event) => setEditDraft((current) => ({ ...current, name: event.target.value }))}
-                            maxLength={120}
-                            aria-label="Názov služby"
-                            className={`${inlineClass} text-lg font-bold leading-none text-cyan-400`}
-                          />
-                        </div>
-                      ) : (
-                        <>
-                          <p className="text-lg font-bold leading-none text-cyan-400">{service.name}</p>
-                          {service.description && <p className="mt-1 text-xs text-white/70">{service.description}</p>}
-                        </>
-                      )}
+                      <p className="text-lg font-bold leading-none text-cyan-400">{service.name}</p>
+                      {service.description && <p className="mt-1 text-xs text-white/70">{service.description}</p>}
                     </td>
-                    <td className={`border-r border-slate-800/60 py-0 align-middle text-sm font-normal text-white ${editing ? 'bg-slate-800/40 px-1' : `px-4${picked}`}`}>
-                      {editing ? (
-                        <div className="w-0 min-w-full">
-                          <select
-                            value={editDraft.category}
-                            onChange={(event) => setEditDraft((current) => ({ ...current, category: event.target.value }))}
-                            aria-label="Kategória"
-                            className={`h-12 w-full min-w-0 rounded-md border border-primary/50 bg-black/50 pl-1.5 pr-1 text-sm font-normal focus:border-primary focus:outline-none focus:shadow-[0_0_12px_rgba(0,242,255,0.35)] ${categoryTextClass(editDraft.category)}`}
-                          >
-                            {categories.map((category) => (
-                              <option key={category} value={category} className="bg-[#050505]" style={{ color: categoryTone[category]?.color ?? '#fafafa' }}>
-                                {category}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      ) : <span className={`whitespace-nowrap ${categoryTextClass(service.category)}`}>{service.category}</span>}
+                    <td className={`border-r border-slate-800/60 px-4 py-0 align-middle text-sm font-normal text-white${picked}`}>
+                      <span className={`whitespace-nowrap ${categoryTextClass(service.category)}`}>{service.category}</span>
                     </td>
                     <td className={`${cell} text-center`}>
-                      {editing ? (
-                        <div className="w-0 min-w-full">
-                          <input
-                            value={editDraft.price}
-                            onChange={(event) => setEditDraft((current) => ({ ...current, price: event.target.value }))}
-                            inputMode="decimal"
-                            placeholder="0,00"
-                            aria-label="Cena v kreditoch"
-                            className={`${inlineClass} text-center text-xl font-bold leading-none tabular-nums text-primary placeholder:text-primary/50`}
-                          />
-                        </div>
-                      ) : (
-                        <p className="text-xl font-bold leading-none text-primary">{credits(service.price)}</p>
-                      )}
+                      <p className="text-xl font-bold leading-none text-primary">{credits(service.price)}</p>
                     </td>
-                    <td className={`sticky right-0 z-10 border-r border-slate-800/60 bg-[#070d16] py-0 align-middle ${editing ? 'px-3' : 'px-0'}`}>
-                      {editing ? (
-                        <div className="flex h-12 w-full overflow-hidden rounded-md border border-primary/35 bg-cyan-950/35 shadow-[0_0_16px_rgba(0,242,255,0.08)]">
-                          <button type="button" disabled={busy} onClick={() => save(editDraft)} className="inline-flex h-full min-w-[7.25rem] flex-1 items-center justify-center gap-2 whitespace-nowrap border-0 bg-transparent px-3 text-sm font-bold uppercase tracking-wide text-cyan-300 transition-colors hover:bg-cyan-500/20 disabled:opacity-60">
-                            <Check className="h-4 w-4 shrink-0" />
-                            Uložiť
-                          </button>
-                          <button type="button" onClick={cancelEdit} className="inline-flex h-full min-w-[7.25rem] flex-1 items-center justify-center gap-2 whitespace-nowrap border-0 bg-transparent px-3 text-sm font-bold uppercase tracking-wide text-white/80 shadow-[inset_1px_0_0_rgba(0,234,255,0.35)] transition-colors hover:bg-white/10 hover:text-white">
-                            <X className="h-4 w-4 shrink-0" />
-                            Zrušiť
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex h-8 w-full">
-                          <button type="button" onClick={() => beginEdit(service)} className="inline-flex h-full min-w-0 flex-1 items-center justify-center gap-2 border-2 border-cyan-400 bg-cyan-500/15 px-3 text-sm font-bold uppercase tracking-wide text-cyan-300 transition-colors hover:bg-cyan-500/25">
-                            <Pencil className="h-4 w-4 shrink-0" />
-                            Upraviť
-                          </button>
-                          <button type="button" disabled={busy} onClick={() => setPendingDelete(service)} className="inline-flex h-full min-w-0 flex-1 items-center justify-center gap-2 border-2 border-red-500 bg-red-500/15 px-3 text-sm font-bold uppercase tracking-wide text-red-400 transition-colors hover:bg-red-500/25 disabled:opacity-60">
-                            <Trash2 className="h-4 w-4 shrink-0" />
-                            Zmazať
-                          </button>
-                        </div>
-                      )}
+                    <td className="sticky right-0 z-10 border-r border-slate-800/60 bg-[#070d16] px-0 py-0 align-middle">
+                      <div className="flex h-8 w-full">
+                        <button type="button" onClick={(event) => { event.stopPropagation(); beginEdit(service); }} className="inline-flex h-full min-w-0 flex-1 items-center justify-center gap-2 border-2 border-cyan-400 bg-cyan-500/15 px-3 text-sm font-bold uppercase tracking-wide text-cyan-300 transition-colors hover:bg-cyan-500/25">
+                          <Pencil className="h-4 w-4 shrink-0" />
+                          Upraviť
+                        </button>
+                        <button type="button" disabled={busy} onClick={() => setPendingDelete(service)} className="inline-flex h-full min-w-0 flex-1 items-center justify-center gap-2 border-2 border-red-500 bg-red-500/15 px-3 text-sm font-bold uppercase tracking-wide text-red-400 transition-colors hover:bg-red-500/25 disabled:opacity-60">
+                          <Trash2 className="h-4 w-4 shrink-0" />
+                          Zmazať
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
