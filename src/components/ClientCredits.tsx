@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Search } from 'lucide-react';
 import { toast } from 'sonner';
 import ConnectionDot from '@/components/ConnectionDot';
@@ -45,11 +46,21 @@ type ClientCreditsProps = {
   onlineIds: ReadonlySet<string>;
 };
 
+type CreditDirection = 'add' | 'subtract';
+
+type PendingCredit = {
+  clientId: string;
+  direction: CreditDirection;
+};
+
+const amountField = 'h-11 w-full rounded-md border border-primary/70 bg-[#0a192f] px-3 text-center text-xl font-bold tabular-nums text-primary shadow-[0_0_16px_rgba(0,242,255,0.28)] placeholder:text-primary/50 focus:border-primary focus:outline-none focus:shadow-[0_0_16px_rgba(0,242,255,0.45)]';
+
 const ClientCredits = ({ onlineIds }: ClientCreditsProps) => {
   const [clients, setClients] = useState<ClientAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [amount, setAmount] = useState('');
+  const [pending, setPending] = useState<PendingCredit | null>(null);
   const [adjustingId, setAdjustingId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activity, setActivity] = useState<Record<string, PortalActivity>>({});
@@ -105,31 +116,110 @@ const ClientCredits = ({ onlineIds }: ClientCreditsProps) => {
   );
   const offlineCount = Math.max(0, clients.length - onlineCount);
 
-  const adjust = async (client: ClientAccount, direction: 'add' | 'subtract') => {
-    const amount = Number(String(drafts[client.id] ?? '').replace(',', '.'));
-    if (!Number.isFinite(amount) || amount <= 0) {
+  const pendingClient = pending ? clients.find((client) => client.id === pending.clientId) ?? null : null;
+
+  const openCredit = (client: ClientAccount, direction: CreditDirection) => {
+    setAmount('');
+    setPending({ clientId: client.id, direction });
+  };
+
+  const closeCredit = () => {
+    if (adjustingId) return;
+    setPending(null);
+    setAmount('');
+  };
+
+  useEffect(() => {
+    if (!pending) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeCredit();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [pending, adjustingId]);
+
+  const confirmAdjust = async () => {
+    if (!pendingClient || !pending) return;
+    const value = Number(amount.trim().replace(',', '.'));
+    if (!Number.isFinite(value) || value <= 0) {
       toast.error('Zadajte sumu väčšiu ako 0.');
       return;
     }
-    const delta = direction === 'subtract' ? -amount : amount;
-    const nextBalance = Math.round((client.balance + delta) * 100) / 100;
+    const delta = pending.direction === 'subtract' ? -value : value;
+    const nextBalance = Math.round((pendingClient.balance + delta) * 100) / 100;
     if (nextBalance < 0) {
       toast.error('Na účte nie je dosť kreditov na odrátanie.');
       return;
     }
-    setAdjustingId(client.id);
-    const saved = await saveCreditBalance(client.id, nextBalance);
-    const balance = saved ? await readCreditBalance(client.id) : nextBalance;
+    setAdjustingId(pendingClient.id);
+    const saved = await saveCreditBalance(pendingClient.id, nextBalance);
+    const balance = saved ? await readCreditBalance(pendingClient.id) : nextBalance;
     setAdjustingId(null);
     setClients((current) => current.map((item) => (
-      item.id === client.id ? { ...item, balance } : item
+      item.id === pendingClient.id ? { ...item, balance } : item
     )));
-    setDrafts((current) => ({ ...current, [client.id]: '' }));
-    if (saved) toast.success(direction === 'add' ? 'Kredity boli pripísané.' : 'Kredity boli odrátané.');
+    setPending(null);
+    setAmount('');
+    if (saved) toast.success(pending.direction === 'add' ? 'Kredity boli pripísané.' : 'Kredity boli odrátané.');
   };
+
+  const confirmLabel = pending?.direction === 'subtract' ? 'Odrátať' : 'Pripísať';
+  const confirmClass = pending?.direction === 'subtract'
+    ? 'inline-flex h-[42px] items-center gap-2 rounded-none border border-red-500/80 bg-red-500/10 px-4 text-sm font-bold uppercase tracking-wide text-red-400 shadow-[0_0_14px_rgba(239,68,68,0.32)] transition-colors hover:border-red-400 hover:bg-red-500/16 hover:shadow-[0_0_16px_rgba(239,68,68,0.42)] disabled:opacity-60'
+    : 'inline-flex h-[42px] items-center gap-2 rounded-none border border-primary/80 bg-primary/10 px-4 text-sm font-bold uppercase tracking-wide text-primary shadow-[0_0_14px_rgba(0,242,255,0.32)] transition-colors hover:border-primary hover:bg-primary/16 hover:shadow-[0_0_16px_rgba(0,242,255,0.42)] disabled:opacity-60';
 
   return (
     <div className="h-fit w-full shrink-0 rounded-xl border border-primary/20 bg-background/40 shadow-[0_0_30px_rgba(59,130,246,0.15)] backdrop-blur-xl">
+      {pendingClient && pending && createPortal(
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4"
+          onClick={closeCredit}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="credit-edit-title"
+            className="w-full max-w-md rounded-xl border border-primary/40 bg-[#070d16] p-4 shadow-[0_0_30px_rgba(0,242,255,0.22)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h2 id="credit-edit-title" className="text-2xl font-black uppercase leading-none tracking-[0.16em] text-primary">{pending.direction === 'subtract' ? 'Odrátať kredity' : 'Pripísať kredity'}</h2>
+              <button type="button" onClick={closeCredit} aria-label="Zavrieť" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-none border border-red-400/70 bg-red-500/10 text-xl leading-none text-red-400 shadow-[0_0_12px_rgba(248,113,113,0.32)] transition-colors hover:border-red-400 hover:bg-red-500/15 hover:shadow-[0_0_16px_rgba(248,113,113,0.45)]">
+                ×
+              </button>
+            </div>
+            <div className="mb-3 rounded-lg border border-primary/20 bg-black/40 px-3 py-2.5">
+              <p className="text-sm font-semibold leading-none text-cyan-400">{clientRecordName(pendingClient) || '—'}</p>
+              <p className="mt-1.5 text-sm font-medium leading-none text-white">{pendingClient.email || '—'}</p>
+              <p className="mt-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Zostatok <span className="ml-2 text-base font-bold normal-case tracking-normal text-primary">{money(pendingClient.balance)}</span>
+              </p>
+            </div>
+            <label className="block">
+              <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Suma kreditov</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={amount}
+                onChange={(event) => setAmount(event.target.value)}
+                placeholder="0,00"
+                disabled={adjustingId === pendingClient.id}
+                autoFocus
+                className={amountField}
+              />
+            </label>
+            <div className="mt-3 flex justify-end gap-3">
+              <button type="button" onClick={closeCredit} disabled={adjustingId === pendingClient.id} className="inline-flex h-[42px] items-center gap-2 rounded-none border border-red-400/70 bg-red-500/10 px-4 text-sm font-bold uppercase tracking-wide text-red-400 shadow-[0_0_14px_rgba(248,113,113,0.32)] transition-colors hover:border-red-400 hover:bg-red-500/16 hover:shadow-[0_0_16px_rgba(248,113,113,0.42)] disabled:opacity-60">
+                Zrušiť
+              </button>
+              <button type="button" onClick={confirmAdjust} disabled={adjustingId === pendingClient.id} className={confirmClass}>
+                {confirmLabel}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
       <div className="flex items-center gap-3 border-b border-primary/30 bg-[#0a192f] px-4 py-2.5">
         <div className="mr-auto inline-flex h-[42px] shrink-0 items-center gap-3" aria-live="polite" aria-label="Stav prihlásenia klientov">
           <div className="inline-flex h-[42px] shrink-0 items-center gap-2 rounded-md border border-primary/70 bg-primary/15 px-4 text-sm font-bold uppercase tracking-wide text-primary shadow-[0_0_16px_rgba(0,242,255,0.28)]">
@@ -181,7 +271,7 @@ const ClientCredits = ({ onlineIds }: ClientCreditsProps) => {
               const label = clientRecordName(client);
               const rowBg = 'cursor-pointer border-b border-slate-800/60';
               const picked = active ? ' bg-[#0b2430] shadow-[inset_0_0_18px_rgba(0,242,255,0.16)]' : '';
-              const actionButton = 'inline-flex h-full min-w-0 flex-1 items-center justify-center border-0 bg-transparent px-2 text-sm font-bold uppercase tracking-wide transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-60';
+              const actionButton = 'inline-flex h-full min-w-0 flex-1 items-center justify-center rounded-none border px-2 text-sm font-bold uppercase tracking-wide transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-60';
               return (
                 <tr key={client.id} className="contents" onClick={() => setSelectedId(client.id)}>
                   <td className={`${nameCell} ${rowBg}${picked}`}>
@@ -206,29 +296,20 @@ const ClientCredits = ({ onlineIds }: ClientCreditsProps) => {
                     <span className="text-sm font-medium leading-none text-white">{formatActivity(activity[client.id]?.lastVisit ?? null)}</span>
                   </td>
                   <td className={`${creditCell} ${rowBg} items-stretch self-stretch p-0`} onClick={(event) => event.stopPropagation()}>
-                    <div className="grid h-full min-h-10 w-full grid-cols-3 items-stretch overflow-hidden rounded-md border border-primary/35 bg-cyan-950/35 shadow-[0_0_16px_rgba(0,242,255,0.08)]">
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={drafts[client.id] ?? ''}
-                        onChange={(event) => setDrafts((current) => ({ ...current, [client.id]: event.target.value }))}
-                        placeholder="0,00"
-                        disabled={busy}
-                        className="min-w-0 border-0 bg-transparent px-2 text-center text-base font-bold leading-none tabular-nums text-primary placeholder:font-bold placeholder:text-primary focus:outline-none disabled:opacity-60"
-                      />
+                    <div className="grid h-full min-h-10 w-full grid-cols-2 items-stretch">
                       <button
                         type="button"
                         disabled={busy}
-                        onClick={() => adjust(client, 'add')}
-                        className={`${actionButton} text-cyan-300 hover:bg-cyan-500/20`}
+                        onClick={() => openCredit(client, 'add')}
+                        className={`${actionButton} border-primary/80 bg-primary/10 text-primary shadow-[0_0_12px_rgba(0,242,255,0.28)] hover:border-primary hover:bg-primary/16 hover:shadow-[0_0_14px_rgba(0,242,255,0.4)]`}
                       >
                         Pripísať
                       </button>
                       <button
                         type="button"
                         disabled={busy}
-                        onClick={() => adjust(client, 'subtract')}
-                        className={`${actionButton} text-red-400 hover:bg-red-500/15`}
+                        onClick={() => openCredit(client, 'subtract')}
+                        className={`${actionButton} border-red-400/70 bg-red-500/10 text-red-400 shadow-[0_0_12px_rgba(248,113,113,0.28)] hover:border-red-400 hover:bg-red-500/16 hover:shadow-[0_0_14px_rgba(248,113,113,0.4)]`}
                       >
                         Odrátať
                       </button>

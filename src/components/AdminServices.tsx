@@ -204,7 +204,7 @@ const AdminServices = () => {
           >
             <div className="mb-3 flex items-center justify-between gap-3">
               <h2 id="new-service-title" className="text-2xl font-black uppercase leading-none tracking-[0.16em] text-primary">Nová služba</h2>
-              <button type="button" onClick={closeCreate} aria-label="Zavrieť" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-red-400/45 bg-[#0a192f] text-xl leading-none text-red-400 shadow-[0_0_12px_rgba(248,113,113,0.28)] transition-colors hover:border-red-400 hover:bg-red-500/15 hover:shadow-[0_0_16px_rgba(248,113,113,0.5)]">
+              <button type="button" onClick={closeCreate} aria-label="Zavrieť" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-none border border-red-400/70 bg-red-500/10 text-xl leading-none text-red-400 shadow-[0_0_12px_rgba(248,113,113,0.32)] transition-colors hover:border-red-400 hover:bg-red-500/15 hover:shadow-[0_0_16px_rgba(248,113,113,0.45)]">
                 ×
               </button>
             </div>
@@ -229,10 +229,10 @@ const AdminServices = () => {
               </label>
             </div>
             <div className="mt-3 flex justify-end gap-3">
-              <button type="button" onClick={closeCreate} className="inline-flex h-[42px] items-center gap-2 rounded-md border border-red-400/55 bg-[#0a192f] px-4 text-sm font-bold uppercase tracking-wide text-red-400 shadow-[0_0_16px_rgba(248,113,113,0.28)] transition-colors hover:border-red-400 hover:bg-red-500/15 hover:shadow-[0_0_16px_rgba(248,113,113,0.5)]">
+              <button type="button" onClick={closeCreate} className="inline-flex h-[42px] items-center gap-2 rounded-none border border-red-400/70 bg-red-500/10 px-4 text-sm font-bold uppercase tracking-wide text-red-400 shadow-[0_0_14px_rgba(248,113,113,0.32)] transition-colors hover:border-red-400 hover:bg-red-500/16 hover:shadow-[0_0_16px_rgba(248,113,113,0.42)]">
                 Zrušiť
               </button>
-              <button type="button" onClick={() => save(draft)} disabled={busy} className="inline-flex h-[42px] items-center gap-2 rounded-md border border-primary/70 bg-primary/15 px-4 text-sm font-bold uppercase tracking-wide text-primary shadow-[0_0_16px_rgba(0,242,255,0.28)] transition-colors hover:bg-primary/25 disabled:opacity-60">
+              <button type="button" onClick={() => save(draft)} disabled={busy} className="inline-flex h-[42px] items-center gap-2 rounded-none border border-primary/80 bg-primary/10 px-4 text-sm font-bold uppercase tracking-wide text-primary shadow-[0_0_14px_rgba(0,242,255,0.32)] transition-colors hover:border-primary hover:bg-primary/16 hover:shadow-[0_0_16px_rgba(0,242,255,0.42)] disabled:opacity-60">
                 <Plus className="h-4 w-4" />
                 Pridať službu
               </button>
@@ -256,7 +256,7 @@ const AdminServices = () => {
           >
             <div className="mb-3 flex items-center justify-between gap-3">
               <h2 id="edit-service-title" className="text-2xl font-black uppercase leading-none tracking-[0.16em] text-primary">Upraviť službu</h2>
-              <button type="button" onClick={cancelEdit} aria-label="Zavrieť" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-red-400/45 bg-[#0a192f] text-xl leading-none text-red-400 shadow-[0_0_12px_rgba(248,113,113,0.28)] transition-colors hover:border-red-400 hover:bg-red-500/15 hover:shadow-[0_0_16px_rgba(248,113,113,0.5)]">
+              <button type="button" onClick={cancelEdit} aria-label="Zavrieť" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-none border border-red-400/70 bg-red-500/10 text-xl leading-none text-red-400 shadow-[0_0_12px_rgba(248,113,113,0.32)] transition-colors hover:border-red-400 hover:bg-red-500/15 hover:shadow-[0_0_16px_rgba(248,113,113,0.45)]">
                 ×
               </button>
             </div>
@@ -281,10 +281,10 @@ const AdminServices = () => {
               </label>
             </div>
             <div className="mt-3 flex justify-end gap-3">
-              <button type="button" onClick={cancelEdit} className="inline-flex h-[42px] items-center gap-2 rounded-md border border-red-400/55 bg-[#0a192f] px-4 text-sm font-bold uppercase tracking-wide text-red-400 shadow-[0_0_16px_rgba(248,113,113,0.28)] transition-colors hover:border-red-400 hover:bg-red-500/15 hover:shadow-[0_0_16px_rgba(248,113,113,0.5)]">
+              <button type="button" onClick={cancelEdit} className="inline-flex h-[42px] items-center gap-2 rounded-none border border-red-400/70 bg-red-500/10 px-4 text-sm font-bold uppercase tracking-wide text-red-400 shadow-[0_0_14px_rgba(248,113,113,0.32)] transition-colors hover:border-red-400 hover:bg-red-500/16 hover:shadow-[0_0_16px_rgba(248,113,113,0.42)]">
                 Zrušiť
               </button>
-              <button type="button" onClick={() => save(editDraft)} disabled={busy} className="inline-flex h-[42px] items-center gap-2 rounded-md border border-primary/70 bg-primary/15 px-4 text-sm font-bold uppercase tracking-wide text-primary shadow-[0_0_16px_rgba(0,242,255,0.28)] transition-colors hover:bg-primary/25 disabled:opacity-60">
+              <button type="button" onClick={() => save(editDraft)} disabled={busy} className="inline-flex h-[42px] items-center gap-2 rounded-none border border-primary/80 bg-primary/10 px-4 text-sm font-bold uppercase tracking-wide text-primary shadow-[0_0_14px_rgba(0,242,255,0.32)] transition-colors hover:border-primary hover:bg-primary/16 hover:shadow-[0_0_16px_rgba(0,242,255,0.42)] disabled:opacity-60">
                 <Check className="h-4 w-4" />
                 Uložiť
               </button>
@@ -311,10 +311,10 @@ const AdminServices = () => {
               Naozaj chcete zmazať službu <span className="font-semibold text-cyan-400">{pendingDelete.name}</span>?
             </p>
             <div className="mt-4 flex flex-wrap justify-end gap-3">
-              <button type="button" onClick={closeDelete} disabled={busy} className="inline-flex h-[42px] items-center gap-2 rounded-md border border-red-400/55 bg-[#0a192f] px-4 text-sm font-bold uppercase tracking-wide text-red-400 shadow-[0_0_16px_rgba(248,113,113,0.28)] transition-colors hover:border-red-400 hover:bg-red-500/15 hover:shadow-[0_0_16px_rgba(248,113,113,0.5)] disabled:opacity-60">
+              <button type="button" onClick={closeDelete} disabled={busy} className="inline-flex h-[42px] items-center gap-2 rounded-none border border-red-400/70 bg-red-500/10 px-4 text-sm font-bold uppercase tracking-wide text-red-400 shadow-[0_0_14px_rgba(248,113,113,0.32)] transition-colors hover:border-red-400 hover:bg-red-500/16 hover:shadow-[0_0_16px_rgba(248,113,113,0.42)] disabled:opacity-60">
                 Zrušiť
               </button>
-              <button type="button" onClick={confirmRemove} disabled={busy} className="inline-flex h-[42px] items-center gap-2 rounded-md border-2 border-red-500 bg-red-500/15 px-4 text-sm font-bold uppercase tracking-wide text-red-400 transition-colors hover:bg-red-500/25 disabled:opacity-60">
+              <button type="button" onClick={confirmRemove} disabled={busy} className="inline-flex h-[42px] items-center gap-2 rounded-none border border-red-500/80 bg-red-500/10 px-4 text-sm font-bold uppercase tracking-wide text-red-400 shadow-[0_0_14px_rgba(239,68,68,0.32)] transition-colors hover:border-red-400 hover:bg-red-500/16 hover:shadow-[0_0_16px_rgba(239,68,68,0.42)] disabled:opacity-60">
                 <Trash2 className="h-4 w-4" />
                 Potvrdiť (Zmazať)
               </button>

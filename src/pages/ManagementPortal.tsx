@@ -1607,7 +1607,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                   </h2>
                   <button
                     onClick={() => setDetailOrder(null)}
-                    className="shrink-0 rounded-lg p-2 text-muted-foreground transition-colors duration-200 hover:bg-red-500/15 hover:text-red-500"
+                    className="shrink-0 rounded-none border border-red-400/70 bg-red-500/10 p-2 text-red-400 shadow-[0_0_12px_rgba(248,113,113,0.32)] transition-colors duration-200 hover:bg-red-500/16 hover:text-red-400 hover:shadow-[0_0_16px_rgba(248,113,113,0.42)]"
                   >
                     <X className="h-5 w-5" />
                   </button>
@@ -1758,14 +1758,14 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                         <button
                           type="button"
                           onClick={() => setDetailOrder(null)}
-                          className="rounded-lg bg-red-500/20 px-4 py-2 text-red-500 transition-colors hover:bg-red-500/30"
+                          className="rounded-none border border-red-400/70 bg-red-500/10 px-4 py-2 text-red-400 shadow-[0_0_14px_rgba(248,113,113,0.32)] transition-colors hover:border-red-400 hover:bg-red-500/16 hover:shadow-[0_0_16px_rgba(248,113,113,0.42)]"
                         >
                           Zrušiť
                         </button>
                         <button
                           onClick={() => handleSaveFields(detailOrder.id)}
                           disabled={savingId === detailOrder.id}
-                          className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/20 px-4 py-2 text-primary transition-colors hover:bg-primary/30 disabled:cursor-not-allowed disabled:opacity-50"
+                          className="flex items-center gap-2 rounded-none border border-primary/80 bg-primary/10 px-4 py-2 text-primary shadow-[0_0_14px_rgba(0,242,255,0.32)] transition-colors hover:border-primary hover:bg-primary/16 hover:shadow-[0_0_16px_rgba(0,242,255,0.42)] disabled:cursor-not-allowed disabled:opacity-50"
                           title="Uložiť CRC"
                         >
                           <Save className={`w-4 h-4 ${savingId === detailOrder.id ? 'animate-pulse' : ''}`} />
@@ -1868,17 +1868,17 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                         <button
                           type="button"
                           onClick={() => setDetailOrder(null)}
-                          className="rounded-lg bg-red-500/20 px-4 py-2 text-red-500 transition-colors hover:bg-red-500/30"
+                          className="rounded-none border border-red-400/70 bg-red-500/10 px-4 py-2 text-red-400 shadow-[0_0_14px_rgba(248,113,113,0.32)] transition-colors hover:border-red-400 hover:bg-red-500/16 hover:shadow-[0_0_16px_rgba(248,113,113,0.42)]"
                         >
                           Zrušiť
                         </button>
                         <button
                         onClick={() => handleSaveImportantNote(detailOrder.id)}
                         disabled={savingImportantNote === detailOrder.id || (savedImportantNote !== null && importantNote === savedImportantNote)}
-                        className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                        className={`inline-flex items-center gap-2 rounded-none border px-4 py-2 shadow-[0_0_14px_rgba(0,242,255,0.32)] transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                           savedImportantNote !== null && importantNote === savedImportantNote
-                            ? 'bg-emerald-500/20 text-emerald-400'
-                            : 'bg-primary/20 hover:bg-primary/30 text-primary'
+                            ? 'border-emerald-400/70 bg-emerald-500/10 text-emerald-400 shadow-[0_0_14px_rgba(52,211,153,0.32)]'
+                            : 'border-primary/80 bg-primary/10 text-primary hover:border-primary hover:bg-primary/16 hover:shadow-[0_0_16px_rgba(0,242,255,0.42)]'
                         }`}
                         title={savedImportantNote !== null && importantNote === savedImportantNote ? 'Uložené!' : 'Uložiť dôležitú správu'}
                       >
@@ -1947,7 +1947,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
           <AlertDialogFooter>
             <AlertDialogCancel
               disabled={cancellingOrder}
-              className="border-slate-500 bg-transparent text-white hover:bg-white/10 hover:text-white"
+              className="rounded-none border-slate-400/70 bg-white/5 text-white shadow-[0_0_12px_rgba(148,163,184,0.28)] hover:bg-white/10 hover:text-white hover:shadow-[0_0_16px_rgba(148,163,184,0.36)]"
             >
               Nie
             </AlertDialogCancel>
@@ -1957,7 +1957,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                 event.preventDefault();
                 void confirmCancelOrder();
               }}
-              className="bg-red-600 text-white hover:bg-red-500"
+              className="rounded-none border border-red-500/80 bg-red-500/10 text-red-400 shadow-[0_0_14px_rgba(239,68,68,0.32)] hover:border-red-400 hover:bg-red-500/16 hover:text-red-400 hover:shadow-[0_0_16px_rgba(239,68,68,0.42)]"
             >
               Áno, zrušiť
             </AlertDialogAction>

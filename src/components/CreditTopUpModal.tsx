@@ -72,10 +72,10 @@ const CreditTopUpModal = ({ onClose }: CreditTopUpModalProps) => {
                 type="button"
                 aria-pressed={selected}
                 onClick={() => setAmountInput(String(preset))}
-                className={`h-[42px] rounded-lg border text-sm font-bold tabular-nums transition-colors ${
+                className={`h-[42px] rounded-none border text-sm font-bold tabular-nums transition-colors ${
                   selected
-                    ? 'border-primary bg-primary/20 text-primary shadow-[0_0_16px_rgba(0,242,255,0.4)]'
-                    : 'border-primary/60 bg-secondary text-muted-foreground shadow-[0_0_14px_rgba(0,242,255,0.28)] hover:border-primary hover:text-foreground'
+                    ? 'border-primary/80 bg-primary/10 text-primary shadow-[0_0_14px_rgba(0,242,255,0.32)]'
+                    : 'border-primary/60 bg-primary/5 text-foreground shadow-[0_0_12px_rgba(0,242,255,0.22)] hover:border-primary hover:bg-primary/10 hover:text-primary'
                 }`}
               >
                 {preset}€
@@ -105,7 +105,7 @@ const CreditTopUpModal = ({ onClose }: CreditTopUpModalProps) => {
           <button
             type="button"
             onClick={payByCard}
-            className="btn-primary flex min-h-[44px] w-full items-center justify-center gap-2"
+            className="btn-primary flex min-h-[44px] w-full items-center justify-center gap-2 rounded-none border border-primary/80 bg-primary/10 text-sm font-bold uppercase tracking-wide text-primary shadow-[0_0_14px_rgba(0,242,255,0.32)] hover:translate-y-0 hover:bg-primary/16 hover:shadow-[0_0_16px_rgba(0,242,255,0.42)]"
           >
             <CreditCard className="h-4 w-4" />
             <span className="text-sm font-bold uppercase tracking-wide">{t('payCard')}</span>

@@ -58,11 +58,11 @@ const InternalNoteModal = ({
         </div>
 
         <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={onClose} disabled={isSaving}>
+          <Button variant="outline" onClick={onClose} disabled={isSaving} className="rounded-none border-red-400/70 bg-red-500/10 text-red-400 shadow-[0_0_14px_rgba(248,113,113,0.32)] hover:bg-red-500/16 hover:text-red-400 hover:shadow-[0_0_16px_rgba(248,113,113,0.42)]">
             <X className="w-4 h-4 mr-2" />
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={isSaving}>
+          <Button onClick={handleSave} disabled={isSaving} className="rounded-none border border-primary/80 bg-primary/10 text-primary shadow-[0_0_14px_rgba(0,242,255,0.32)] hover:bg-primary/16 hover:text-primary hover:shadow-[0_0_16px_rgba(0,242,255,0.42)]">
             <Save className={`w-4 h-4 mr-2 ${isSaving ? 'animate-pulse' : ''}`} />
             {isSaving ? 'Saving...' : 'Save Note'}
           </Button>
