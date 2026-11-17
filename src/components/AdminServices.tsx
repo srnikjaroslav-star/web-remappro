@@ -334,7 +334,7 @@ const AdminServices = () => {
             value={categoryFilter}
             onChange={(event) => setCategoryFilter(event.target.value)}
             aria-label="Filtrovať kategóriu"
-            className={`h-[42px] w-[15.5rem] shrink-0 rounded-md border border-primary/70 bg-[#0a192f] px-3 text-base leading-6 shadow-[0_0_16px_rgba(0,242,255,0.28)] focus:outline-none ${categoryFilter ? categoryTextClass(categoryFilter) : 'text-foreground'}`}
+            className={`h-[42px] w-max shrink-0 rounded-md border border-primary/70 bg-[#0a192f] px-3 text-base leading-6 shadow-[0_0_16px_rgba(0,242,255,0.28)] focus:outline-none ${categoryFilter ? categoryTextClass(categoryFilter) : 'text-foreground'}`}
           >
             <option value="" className="bg-[#050505] text-white">Všetky kategórie</option>
             {catalogCategories.map((category) => (
