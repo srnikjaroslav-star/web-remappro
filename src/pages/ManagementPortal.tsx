@@ -1204,7 +1204,7 @@ const ManagementPortal = () => {
   };
 
   const FILTER_FACE: Record<string, string> = {
-    all: '!border-[#E5E7EB]/70 !bg-[#000000] shadow-[0_0_18px_rgba(229,231,235,0.28)] hover:!border-[#E5E7EB] hover:!bg-[#000000] hover:shadow-[0_0_22px_rgba(229,231,235,0.38)]',
+    all: '!border-primary/70 !bg-[#000000] shadow-[0_0_18px_rgba(0,242,255,0.28)] hover:!border-primary hover:!bg-[#000000] hover:shadow-[0_0_22px_rgba(0,242,255,0.38)]',
     pending: '!border-yellow-400/80 !bg-yellow-500/25 shadow-[0_0_18px_rgba(250,204,21,0.55)] hover:!border-yellow-400 hover:!bg-yellow-500/35 hover:shadow-[0_0_22px_rgba(250,204,21,0.7)]',
     processing: '!border-cyan-300/80 !bg-cyan-500/25 shadow-[0_0_18px_rgba(34,211,238,0.55)] hover:!border-cyan-300 hover:!bg-cyan-500/35 hover:shadow-[0_0_22px_rgba(34,211,238,0.7)]',
     completed: '!border-green-400/80 !bg-green-500/25 shadow-[0_0_18px_rgba(74,222,128,0.55)] hover:!border-green-400 hover:!bg-green-500/35 hover:shadow-[0_0_22px_rgba(74,222,128,0.7)]',
@@ -1432,9 +1432,9 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
               onChange={(e) => setStatusFilter(e.target.value)}
               className={`admin-filter-select orders-status-filter h-[42px] w-40 shrink-0 !rounded-lg !border bg-[length:0.8rem] bg-[position:right_0.4rem_center] bg-no-repeat px-4 py-2 text-left !text-base font-semibold transition-shadow focus:outline-none ${FILTER_FACE[statusFilter] || FILTER_FACE.all}`}
               style={{
-                color: statusFilter === 'all' ? '#E5E7EB' : (STATUS_TEXT_COLOR[statusFilter] || STATUS_TEXT_COLOR.all),
+                color: STATUS_TEXT_COLOR[statusFilter] || STATUS_TEXT_COLOR.all,
                 colorScheme: 'dark',
-                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='${encodeURIComponent(statusFilter === 'all' ? '#E5E7EB' : (STATUS_TEXT_COLOR[statusFilter] || STATUS_TEXT_COLOR.all))}' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
+                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='${encodeURIComponent(STATUS_TEXT_COLOR[statusFilter] || STATUS_TEXT_COLOR.all)}' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
               }}
             >
               <option value="all" style={{ color: '#E5E7EB', backgroundColor: '#000000', fontSize: '16px' }}>Všetky</option>
