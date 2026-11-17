@@ -1317,32 +1317,6 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
             <SystemStatus showModeLabel />
           </div>
           <div className="flex flex-nowrap items-center justify-end gap-3">
-            <div className="relative w-72 shrink-0">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-primary" />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Hľadať objednávky..."
-                className="h-[42px] w-full rounded-lg border border-primary/60 bg-transparent py-2 pl-9 pr-4 text-base leading-6 text-foreground shadow-[0_0_14px_rgba(0,242,255,0.28)] placeholder:text-muted-foreground transition-shadow hover:border-primary hover:shadow-[0_0_16px_rgba(0,242,255,0.42)] focus:border-primary focus:outline-none focus:shadow-[0_0_18px_rgba(0,242,255,0.5)]"
-              />
-            </div>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className={`admin-filter-select orders-status-filter h-[42px] w-40 shrink-0 !rounded-lg !border bg-[length:0.8rem] bg-[position:right_0.4rem_center] bg-no-repeat px-4 py-2 text-left !text-base font-semibold transition-shadow focus:outline-none ${FILTER_FACE[statusFilter] || FILTER_FACE.all}`}
-              style={{
-                color: statusFilter === 'all' ? '#E5E7EB' : (STATUS_TEXT_COLOR[statusFilter] || STATUS_TEXT_COLOR.all),
-                colorScheme: 'dark',
-                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='${encodeURIComponent(statusFilter === 'all' ? '#E5E7EB' : (STATUS_TEXT_COLOR[statusFilter] || STATUS_TEXT_COLOR.all))}' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
-              }}
-            >
-              <option value="all" style={{ color: '#E5E7EB', backgroundColor: '#000000', fontSize: '16px' }}>Všetky</option>
-              <option value="pending" style={{ color: STATUS_TEXT_COLOR.pending, backgroundColor: '#000000', fontSize: '16px' }}>Čakajúce</option>
-              <option value="processing" style={{ color: STATUS_TEXT_COLOR.processing, backgroundColor: '#000000', fontSize: '16px' }}>V Procese</option>
-              <option value="completed" style={{ color: STATUS_TEXT_COLOR.completed, backgroundColor: '#000000', fontSize: '16px' }}>Dokončené</option>
-              <option value="cancelled" style={{ color: STATUS_TEXT_COLOR.cancelled, backgroundColor: '#000000', fontSize: '16px' }}>Zrušené</option>
-            </select>
             <button
               onClick={cycleStatusMode}
               disabled={statusLoading}
@@ -1442,6 +1416,34 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
 
         {/* Orders Table */}
         <div className="h-fit w-full min-w-0 shrink-0 rounded-xl bg-background/40 backdrop-blur-xl border border-primary/20 shadow-[0_0_30px_rgba(59,130,246,0.15)]">
+          <div className="flex items-center justify-end gap-3 border-b border-primary/30 bg-[#0a192f] py-2.5 pl-4 pr-4">
+            <div className="relative w-72 shrink-0">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-primary" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Hľadať objednávky..."
+                className="h-[42px] w-full rounded-lg border border-primary/60 bg-transparent py-2 pl-9 pr-4 text-base leading-6 text-foreground shadow-[0_0_14px_rgba(0,242,255,0.28)] placeholder:text-muted-foreground transition-shadow hover:border-primary hover:shadow-[0_0_16px_rgba(0,242,255,0.42)] focus:border-primary focus:outline-none focus:shadow-[0_0_18px_rgba(0,242,255,0.5)]"
+              />
+            </div>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className={`admin-filter-select orders-status-filter h-[42px] w-40 shrink-0 !rounded-lg !border bg-[length:0.8rem] bg-[position:right_0.4rem_center] bg-no-repeat px-4 py-2 text-left !text-base font-semibold transition-shadow focus:outline-none ${FILTER_FACE[statusFilter] || FILTER_FACE.all}`}
+              style={{
+                color: statusFilter === 'all' ? '#E5E7EB' : (STATUS_TEXT_COLOR[statusFilter] || STATUS_TEXT_COLOR.all),
+                colorScheme: 'dark',
+                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='${encodeURIComponent(statusFilter === 'all' ? '#E5E7EB' : (STATUS_TEXT_COLOR[statusFilter] || STATUS_TEXT_COLOR.all))}' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
+              }}
+            >
+              <option value="all" style={{ color: '#E5E7EB', backgroundColor: '#000000', fontSize: '16px' }}>Všetky</option>
+              <option value="pending" style={{ color: STATUS_TEXT_COLOR.pending, backgroundColor: '#000000', fontSize: '16px' }}>Čakajúce</option>
+              <option value="processing" style={{ color: STATUS_TEXT_COLOR.processing, backgroundColor: '#000000', fontSize: '16px' }}>V Procese</option>
+              <option value="completed" style={{ color: STATUS_TEXT_COLOR.completed, backgroundColor: '#000000', fontSize: '16px' }}>Dokončené</option>
+              <option value="cancelled" style={{ color: STATUS_TEXT_COLOR.cancelled, backgroundColor: '#000000', fontSize: '16px' }}>Zrušené</option>
+            </select>
+          </div>
           <div className="overflow-x-auto">
             <div role="table" className="w-full min-w-0 text-base">
               <div role="rowgroup" className="sticky top-0 z-50">
