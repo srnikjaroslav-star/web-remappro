@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   Download, Upload, Eye, CheckCircle, CalendarDays, ChevronLeft, ChevronRight,
-  Search, Power, Save, Trash2, LogOut, FileText, FilePlus, X
+  Search, Power, Save, Trash2, LogOut, FileText, X
 } from 'lucide-react';
 import { DayPicker } from 'react-day-picker';
 import { sk } from 'date-fns/locale';
@@ -29,7 +29,8 @@ import { Order, ActivityLog, SUPABASE_ANON_KEY, SUPABASE_URL } from '@/integrati
 import { toast } from 'sonner';
 import { SERVICES } from '@/data/services';
 import { mailLanguageForClient } from '@/lib/clientLanguage';
-import { loadClientBilling, orderDisplayName, readCreditBalance, restoreClientCredits, saveCreditBalance, settleClientCredits } from '@/lib/clientProfile';
+import { loadBillingByUserId, loadClientBilling, orderDisplayName, readCreditBalance, restoreClientCredits, saveCreditBalance, settleClientCredits } from '@/lib/clientProfile';
+import { generateInvoicePdf } from '@/utils/invoiceGenerator';
 import { loadServiceCatalog, lookupServiceName } from '@/lib/serviceCatalog';
 import ClientCredits from '@/components/ClientCredits';
 import AdminServices from '@/components/AdminServices';
@@ -298,6 +299,45 @@ const readAdminSection = (): AdminSection => {
     || 'orders';
 };
 
+const issueCompletionInvoice = async (order: Order) => {
+  const billing = await loadBillingByUserId(clientIdOf(order), order.customer_email || '');
+  const person = [billing.firstName, billing.lastName].map((part) => part.trim()).filter(Boolean).join(' ');
+  const services = serviceList(order.service_type)
+    .map((id) => lookupServiceName(id) || SERVICES.find((item) => item.id === id)?.name || id)
+    .filter(Boolean)
+    .join(', ');
+  const invoiceNumber = order.invoice_number?.trim()
+    || `INV-${String(order.order_number || order.id.slice(0, 8)).replace(/^INV-/i, '').toUpperCase()}`;
+  const file = await generateInvoicePdf({
+    invoiceNumber,
+    issuedAt: new Date(),
+    buyer: {
+      name: billing.company.trim() || person || order.customer_name || 'Zákazník',
+      contact: billing.company.trim() && person ? person : '',
+      street: billing.street,
+      postalCode: billing.postalCode,
+      city: billing.city,
+      email: billing.email || order.customer_email || '',
+      phone: billing.phone,
+      vatId: billing.vatId,
+      taxId: billing.taxId,
+    },
+    brand: order.car_brand || '',
+    model: order.car_model || '',
+    service: services || 'ECU tuning',
+    price: Math.abs(Number(order.total_price) || 0),
+  });
+  return saveOrderInvoice({
+    id: order.id,
+    order_number: order.order_number,
+    user_id: clientIdOf(order),
+    customer_name: order.customer_name,
+    customer_email: order.customer_email,
+    total_price: order.total_price,
+    invoice_number: invoiceNumber,
+  }, file);
+};
+
 const ManagementPortal = () => {
   const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
@@ -305,7 +345,6 @@ const ManagementPortal = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [uploadingId, setUploadingId] = useState<string | null>(null);
-  const [invoiceUploadingId, setInvoiceUploadingId] = useState<string | null>(null);
   const [accountingOpen, setAccountingOpen] = useState(false);
   const [exportFrom, setExportFrom] = useState('');
   const [exportTo, setExportTo] = useState('');
@@ -313,8 +352,6 @@ const ManagementPortal = () => {
   const [exportCalendar, setExportCalendar] = useState<'from' | 'to' | null>(null);
   const [exportBusy, setExportBusy] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const invoiceInputRef = useRef<HTMLInputElement>(null);
-  const invoiceOrderId = useRef<string | null>(null);
   const pendingUploadId = useRef<string | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [activeRowId, setActiveRowId] = useState<string | null>(null);
@@ -1118,40 +1155,15 @@ const ManagementPortal = () => {
       );
       if (currentOrder && nextStatus === 'completed') notifyStatusChange(currentOrder, 'completed');
 
-      const invoiceOrder = currentOrder;
-      if (invoiceOrder && nextStatus === 'completed' && !invoiceOrder.invoice_number) {
-        void (async () => {
-          try {
-            const { data: invoiceData, error: invoiceError } = await supabase.functions.invoke('generate-invoice', {
-              body: {
-                orderId: invoiceOrder.id,
-                orderNumber: invoiceOrder.order_number || '',
-                customerName: invoiceOrder.customer_name || 'Customer',
-                customerEmail: invoiceOrder.customer_email,
-                items: [{
-                  name: 'ECU Tuning Service',
-                  price: parseFloat(invoiceOrder.total_price?.toString() || '0'),
-                }],
-                totalAmount: parseFloat(invoiceOrder.total_price?.toString() || '0'),
-                brand: invoiceOrder.car_brand || undefined,
-                model: invoiceOrder.car_model || undefined,
-                fuelType: invoiceOrder.fuel_type || undefined,
-                year: invoiceOrder.year ? parseInt(invoiceOrder.year.toString()) : undefined,
-                ecuType: invoiceOrder.ecu_type || undefined,
-                vin: invoiceOrder.vin || undefined,
-              },
-            });
-            if (!invoiceError && invoiceData?.invoiceNumber) {
-              setOrders(prev => prev.map(o =>
-                o.id === invoiceOrder.id
-                  ? { ...o, invoice_number: invoiceData.invoiceNumber, invoice_url: invoiceData.invoiceUrl || null }
-                  : o
-              ));
-            }
-          } catch (invoiceError) {
-            console.error('[handleResultUpload] Invoice generation error (non-fatal):', invoiceError);
-          }
-        })();
+      if (currentOrder && nextStatus === 'completed' && !currentOrder.invoice_url) {
+        try {
+          const saved = await issueCompletionInvoice(currentOrder);
+          setOrders((prev) => prev.map((item) => (item.id === currentOrder.id ? { ...item, ...saved } : item)));
+          setDetailOrder((current) => (current?.id === currentOrder.id ? { ...current, ...saved } : current));
+        } catch (invoiceError) {
+          console.error('[handleResultUpload] Invoice generation error (non-fatal):', invoiceError);
+          toast.warning('Objednávka je dokončená. Faktúru sa nepodarilo vygenerovať.');
+        }
       }
 
       setUploadingId(null);
@@ -1206,39 +1218,6 @@ const ManagementPortal = () => {
     pendingUploadId.current = orderId;
     setSelectedOrderId(orderId);
     fileInputRef.current?.click();
-  };
-
-  const triggerInvoiceUpload = (orderId: string) => {
-    invoiceOrderId.current = orderId;
-    invoiceInputRef.current?.click();
-  };
-
-  const handleInvoiceFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    const orderId = invoiceOrderId.current;
-    const order = orders.find((item) => item.id === orderId);
-    if (!file || !order) return;
-    setInvoiceUploadingId(order.id);
-    try {
-      const saved = await saveOrderInvoice({
-        id: order.id,
-        order_number: order.order_number,
-        user_id: clientIdOf(order),
-        customer_name: order.customer_name,
-        customer_email: order.customer_email,
-        total_price: order.total_price,
-        invoice_number: order.invoice_number,
-      }, file);
-      setOrders((prev) => prev.map((item) => (item.id === order.id ? { ...item, ...saved } : item)));
-      setDetailOrder((current) => (current?.id === order.id ? { ...current, ...saved } : current));
-      toast.success(`Faktúra ${saved.invoice_number} je nahratá`);
-    } catch (error) {
-      console.error('Invoice upload error:', error);
-      toast.error(error instanceof Error ? error.message : 'Faktúru sa nepodarilo nahrať');
-    } finally {
-      setInvoiceUploadingId(null);
-    }
   };
 
   const openInvoice = async (order: Order) => {
@@ -1439,13 +1418,6 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
         className="hidden"
         onChange={handleResultUpload}
         accept=".bin,.ori,.mod,.ecu"
-      />
-      <input
-        ref={invoiceInputRef}
-        type="file"
-        className="hidden"
-        accept="application/pdf,.pdf"
-        onChange={(event) => void handleInvoiceFile(event)}
       />
 
       <div className="max-w-[1600px] mx-auto w-full min-w-0 px-4 flex flex-col min-h-screen">
@@ -1761,18 +1733,6 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                               <Upload className={`h-5 w-5 ${uploadingId === order.id ? 'animate-pulse' : ''}`} />
                             </button>
                           )}
-                          <button
-                            type="button"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              triggerInvoiceUpload(order.id);
-                            }}
-                            disabled={invoiceUploadingId === order.id}
-                            className={`${actionCell} bg-primary/10 text-primary hover:bg-primary/20 disabled:cursor-wait`}
-                            title={order.invoice_url ? 'Nahradiť PDF faktúry' : 'Nahrať PDF faktúry'}
-                          >
-                            <FilePlus className={`h-5 w-5 ${invoiceUploadingId === order.id ? 'animate-pulse' : ''}`} />
-                          </button>
                           <button
                             onClick={() => setDetailOrder(order)}
                             className={`${actionCell} bg-cyan-400/10 text-cyan-400 hover:bg-cyan-400/20`}

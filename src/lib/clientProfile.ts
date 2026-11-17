@@ -475,6 +475,13 @@ export const loadPortalActivityByClient = async (clients: Array<{ id: string; em
   return result;
 };
 
+export const loadBillingByUserId = async (userId: string, fallbackEmail = '') => {
+  const stored = userId ? await readStoredBilling(userId, fallbackEmail) : null;
+  const billing = stored ?? emptyBilling();
+  if (!billing.email) billing.email = fallbackEmail;
+  return billing;
+};
+
 export const loadClientBilling = async (user: User): Promise<ClientBilling | null> => {
   const stored = await readStoredBilling(user.id, user.email || '');
   const billing = stored ?? emptyBilling();
