@@ -2,6 +2,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import regularFont from '../assets/fonts/Roboto-Regular.ttf';
 import boldFont from '../assets/fonts/Roboto-Bold.ttf';
+import { LOGO_BASE64 } from '@/lib/invoiceLogo';
 
 export type InvoiceBuyer = {
   name: string;
@@ -86,6 +87,25 @@ const itemLabel = (input: InvoicePdfInput) => {
   return [vehicle, service].filter(Boolean).join('\n') || 'ECU tuning';
 };
 
+const BRAND: [number, number, number] = [0, 191, 255];
+
+const drawParty = (doc: jsPDF, title: string, lines: string[], x: number, y: number, width: number) => {
+  doc.setFont('Roboto', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(...BRAND);
+  doc.text(title, x, y);
+  doc.setFont('Roboto', 'normal');
+  doc.setFontSize(10);
+  doc.setTextColor(20);
+  let cursor = y + 6;
+  lines.forEach((line) => {
+    const wrapped = doc.splitTextToSize(line, width) as string[];
+    doc.text(wrapped, x, cursor);
+    cursor += wrapped.length * 5;
+  });
+  return cursor;
+};
+
 export const generateInvoicePdf = async (input: InvoicePdfInput) => {
   const doc = new jsPDF({ unit: 'mm', format: 'a4', compress: true });
   await registerFonts(doc);
@@ -98,73 +118,66 @@ export const generateInvoicePdf = async (input: InvoicePdfInput) => {
     creator: 'REMAPPRO B2B',
   });
 
-  doc.setTextColor(0);
-  doc.setFont('Roboto', 'bold');
-  doc.setFontSize(18);
-  doc.text('REMAPPRO', margin, 22);
-  doc.setFontSize(13);
-  doc.text('FAKTÚRA / INVOICE', right, 20, { align: 'right' });
+  const logoWidth = 35;
+  const logoHeight = logoWidth * (327 / 1024);
+  const headerTop = 14;
+  doc.addImage(LOGO_BASE64, 'PNG', margin, headerTop, logoWidth, logoHeight);
 
+  doc.setFont('Roboto', 'bold');
+  doc.setFontSize(14);
+  doc.setTextColor(0);
+  doc.text('FAKTÚRA / INVOICE', right, headerTop + 5, { align: 'right' });
   doc.setFont('Roboto', 'normal');
   doc.setFontSize(11);
   doc.setTextColor(20);
-  doc.text(`č. ${input.invoiceNumber}`, right, 27, { align: 'right' });
+  doc.text(`č. ${input.invoiceNumber}`, right, headerTop + 12, { align: 'right' });
   doc.setFontSize(10);
   doc.setTextColor(70);
-  doc.text(`Dátum / Date: ${formatDate(issued)}`, right, 34, { align: 'right' });
+  doc.text(`Dátum / Date: ${formatDate(issued)}`, right, headerTop + 18, { align: 'right' });
 
-  doc.setTextColor(30);
-  doc.setFontSize(10);
-  const supplier = [
+  const ruleY = Math.max(headerTop + logoHeight, headerTop + 20) + 4;
+  doc.setDrawColor(...BRAND);
+  doc.setLineWidth(1.2);
+  doc.line(margin, ruleY, right, ruleY);
+
+  const columnGap = 8;
+  const columnWidth = (right - margin - columnGap) / 2;
+  const partiesY = ruleY + 8;
+  const supplierEnd = drawParty(doc, 'DODÁVATEĽ / SUPPLIER', [
+    'REMAPPRO',
     'Janka Kráľa 29, 990 01 Veľký Krtíš, Slovakia',
     'IČO: 41281471, DIČ: 1041196607',
-  ];
-  supplier.forEach((line, index) => doc.text(line, margin, 32 + index * 5));
-
-  doc.setDrawColor(210);
-  doc.setLineWidth(0.3);
-  doc.line(margin, 46, right, 46);
-
-  doc.setFont('Roboto', 'bold');
-  doc.setFontSize(8);
-  doc.setTextColor(110);
-  doc.text('ODBERATEĽ / CUSTOMER', margin, 54);
-
-  doc.setFont('Roboto', 'normal');
-  doc.setFontSize(10);
-  doc.setTextColor(20);
-  let cursor = 61;
-  buyerLines(input.buyer).forEach((line) => {
-    const wrapped = doc.splitTextToSize(line, 110) as string[];
-    doc.text(wrapped, margin, cursor);
-    cursor += wrapped.length * 5;
-  });
+  ], margin, partiesY, columnWidth);
+  const buyerEnd = drawParty(
+    doc,
+    'ODBERATEĽ / CUSTOMER',
+    buyerLines(input.buyer),
+    margin + columnWidth + columnGap,
+    partiesY,
+    columnWidth,
+  );
 
   autoTable(doc, {
-    startY: cursor + 6,
+    startY: Math.max(supplierEnd, buyerEnd) + 8,
     margin: { left: margin, right: margin },
     theme: 'grid',
     head: [['Položka / Item', 'Cena / Price']],
     body: [[itemLabel(input), money(input.price)]],
-    foot: [['Spolu / Total', money(input.price)]],
     styles: {
       font: 'Roboto',
       fontStyle: 'normal',
       fontSize: 10,
       textColor: [20, 20, 20],
-      lineColor: [210, 210, 210],
-      lineWidth: 0.2,
+      fillColor: [255, 255, 255],
+      lineColor: BRAND,
+      lineWidth: 0.15,
       cellPadding: 3,
     },
     headStyles: {
       fontStyle: 'bold',
-      fillColor: [245, 245, 245],
-      textColor: [20, 20, 20],
-    },
-    footStyles: {
-      fontStyle: 'bold',
-      fillColor: [245, 245, 245],
-      textColor: [20, 20, 20],
+      fillColor: BRAND,
+      textColor: [255, 255, 255],
+      lineColor: BRAND,
     },
     columnStyles: {
       0: { cellWidth: 132 },
@@ -172,10 +185,17 @@ export const generateInvoicePdf = async (input: InvoicePdfInput) => {
     },
   });
 
-  const tableEnd = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? cursor + 30;
-  const footerY = Math.min(Math.max(tableEnd + 18, 255), 282);
-  doc.setDrawColor(210);
-  doc.setLineWidth(0.2);
+  const tableEnd = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? partiesY + 40;
+  const totalY = tableEnd + 10;
+  doc.setFont('Roboto', 'bold');
+  doc.setFontSize(13);
+  doc.setTextColor(...BRAND);
+  doc.text('Spolu / Total', margin, totalY);
+  doc.text(money(input.price), right, totalY, { align: 'right' });
+
+  const footerY = Math.min(Math.max(totalY + 16, 255), 282);
+  doc.setDrawColor(...BRAND);
+  doc.setLineWidth(0.3);
   doc.line(margin, footerY - 6, right, footerY - 6);
   doc.setFont('Roboto', 'normal');
   doc.setFontSize(9);
