@@ -139,7 +139,15 @@ const money = (value: number | string | null) => {
   return `${amount.toLocaleString('sk-SK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 };
 
-const MyOrders = ({ email }: { email: string }) => {
+const matchesFocus = (order: ClientOrder, focus: string) => {
+  const key = focus.trim().toLowerCase();
+  if (!key) return false;
+  const label = orderLabel(order).toLowerCase();
+  const id = order.id.toLowerCase();
+  return label === key || id === key || id.startsWith(key);
+};
+
+const MyOrders = ({ email, focusOrder = '' }: { email: string; focusOrder?: string }) => {
   const { t } = useLanguage();
   const [orders, setOrders] = useState<ClientOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -148,6 +156,8 @@ const MyOrders = ({ email }: { email: string }) => {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const busy = useRef(false);
+  const focusedKey = useRef('');
+  const rowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
   const downloadResult = async (order: ClientOrder) => {
     let stored = order.result_file_url || '';
     if (!stored || stored === 'stored') {
@@ -253,6 +263,22 @@ const MyOrders = ({ email }: { email: string }) => {
     };
   }, [email]);
 
+  useEffect(() => {
+    const key = focusOrder.trim();
+    if (!key || loading || focusedKey.current === key) return;
+    const match = orders.find((order) => matchesFocus(order, key));
+    if (!match) return;
+    focusedKey.current = key;
+    setStatusFilter('all');
+    setQuery(orderLabel(match));
+    setSelectedId(match.id);
+    window.requestAnimationFrame(() => {
+      rowRefs.current[match.id]?.scrollIntoView({ block: 'center' });
+    });
+  }, [focusOrder, orders, loading]);
+
+  const focusedOrder = orders.find((order) => order.id === selectedId && matchesFocus(order, focusOrder)) || null;
+
   return (
     <div className="overflow-hidden rounded-xl border border-primary/25 bg-black/45 shadow-[0_0_30px_hsl(185_100%_50%/0.08)] backdrop-blur-xl">
       <div className="flex flex-col gap-3 border-b border-primary/30 bg-[#0a192f] px-4 py-3 sm:flex-row sm:items-center sm:justify-end">
@@ -281,6 +307,19 @@ const MyOrders = ({ email }: { email: string }) => {
           ))}
         </select>
       </div>
+      {focusedOrder?.status === 'completed' && focusedOrder.result_file_url ? (
+        <div className="flex flex-col gap-3 border-b border-primary/30 bg-[#071820] px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="font-mono text-lg font-bold text-cyan-300">{orderLabel(focusedOrder)}</p>
+          <button
+            type="button"
+            onClick={() => void downloadResult(focusedOrder)}
+            className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-primary bg-primary/20 px-4 text-sm font-bold uppercase tracking-wide text-primary shadow-[0_0_16px_rgba(0,242,255,0.35)] hover:bg-primary/30"
+          >
+            <Download className="h-4 w-4" />
+            {t('downloadFile')}
+          </button>
+        </div>
+      ) : null}
       <div className="overflow-x-auto">
         <table className="w-full border-collapse text-base">
           <thead>
@@ -322,6 +361,9 @@ const MyOrders = ({ email }: { email: string }) => {
               return (
                 <tr
                   key={order.id}
+                  ref={(node) => {
+                    rowRefs.current[order.id] = node;
+                  }}
                   onClick={() => setSelectedId(order.id)}
                   aria-selected={selected}
                   className={`cursor-pointer border-b border-slate-800/60 align-middle ${selected ? 'border-primary/50' : ''}`}

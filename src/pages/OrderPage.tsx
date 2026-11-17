@@ -129,6 +129,13 @@ const portalPath = (view: PortalView) =>
 const portalFromPath = (pathname: string): PortalView =>
   pathname === '/objednavky' ? 'orders' : pathname === '/profil' ? 'profile' : 'new';
 
+const orderRefFromSearch = (search: string) => {
+  const query = search.includes('?') ? search.slice(search.indexOf('?')) : '';
+  if (!query) return '';
+  const params = new URLSearchParams(query);
+  return (params.get('orderId') || params.get('order') || '').trim();
+};
+
 const formatSize = (bytes: number) => {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -154,11 +161,35 @@ const OrderPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const portalView: PortalView = portalFromPath(location.pathname);
+  const linkedOrder = orderRefFromSearch(location.search) || orderRefFromSearch(window.location.search);
+  const showOrders = portalView === 'orders' || Boolean(linkedOrder);
   const [authReady, setAuthReady] = useState(false);
+  const orderLinkPrompted = useRef(false);
   const setPortalView = (view: PortalView) => {
     const next = portalPath(view);
-    if (location.pathname !== next) navigate(next);
+    if (location.pathname !== next || (view !== 'orders' && location.search)) navigate(next);
   };
+
+  useEffect(() => {
+    const fromRoute = orderRefFromSearch(location.search);
+    const fromPage = orderRefFromSearch(window.location.search);
+    const id = fromRoute || fromPage;
+    if (!id) return;
+    if (location.pathname === '/objednavky' && fromRoute === id) return;
+    if (fromPage && window.location.search) {
+      const hash = `#/objednavky?order=${encodeURIComponent(id)}`;
+      window.history.replaceState(null, '', `${window.location.pathname}${hash}`);
+    }
+    navigate({ pathname: '/objednavky', search: `?order=${encodeURIComponent(id)}` }, { replace: true });
+  }, [location.pathname, location.search, navigate]);
+
+  useEffect(() => {
+    if (!linkedOrder || !authReady || authUser || orderLinkPrompted.current) return;
+    orderLinkPrompted.current = true;
+    setAuthMode('sign-in');
+    setLoginError('');
+    setLoginOpen(true);
+  }, [linkedOrder, authReady, authUser]);
   const [topUpOpen, setTopUpOpen] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'sign-in' | 'sign-up' | 'reset'>('sign-in');
@@ -997,20 +1028,39 @@ const OrderPage = () => {
         </header>
 
         <div className="mx-auto w-full max-w-[1600px] flex-grow px-4 pb-6 pt-2 lg:px-8">
-          {portalView === 'orders' && (authUser || !authReady) ? (
+          {showOrders ? (
             <div className="space-y-3">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <h1 className="text-2xl font-bold tracking-tight md:text-3xl">{t('myOrders')}</h1>
-                <button
-                  type="button"
-                  onClick={() => setPortalView('new')}
-                  className="inline-flex h-10 w-auto shrink-0 items-center justify-center gap-1.5 self-end rounded-lg border border-primary/70 bg-primary/15 px-3 text-sm font-bold text-primary shadow-[0_0_16px_rgba(0,242,255,0.4)] transition-colors hover:bg-primary/25 sm:self-start"
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                  {t('backToNewOrder')}
-                </button>
+                {authUser ? (
+                  <button
+                    type="button"
+                    onClick={() => setPortalView('new')}
+                    className="inline-flex h-10 w-auto shrink-0 items-center justify-center gap-1.5 self-end rounded-lg border border-primary/70 bg-primary/15 px-3 text-sm font-bold text-primary shadow-[0_0_16px_rgba(0,242,255,0.4)] transition-colors hover:bg-primary/25 sm:self-start"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    {t('backToNewOrder')}
+                  </button>
+                ) : null}
               </div>
-              {authUser ? <MyOrders email={authUser.email || billing.email} /> : null}
+              {authUser ? (
+                <MyOrders email={authUser.email || billing.email} focusOrder={linkedOrder} />
+              ) : authReady ? (
+                <div className="rounded-xl border border-primary/40 bg-black/50 px-6 py-10 text-center shadow-[0_0_24px_rgba(0,242,255,0.16)]">
+                  <p className="text-base text-foreground">{t('orderLinkSignIn')}</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLoginError('');
+                      setAuthMode('sign-in');
+                      setLoginOpen(true);
+                    }}
+                    className="mt-5 inline-flex h-11 items-center rounded-lg border border-primary/70 bg-primary/15 px-5 text-sm font-bold text-primary shadow-[0_0_16px_rgba(0,242,255,0.4)] hover:bg-primary/25"
+                  >
+                    {t('signIn')}
+                  </button>
+                </div>
+              ) : null}
             </div>
           ) : portalView === 'profile' && (authUser || !authReady) ? (
             authUser ? (

@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { loadOrderMailContext, renderStatusEmail } from "../_shared/statusEmail.ts";
+import { loadOrderMailContext, portalOrderUrl, renderStatusEmail } from "../_shared/statusEmail.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
 const SENDER = "REMAPPRO <info@remappro.eu>";
@@ -61,7 +61,7 @@ const handler = async (req: Request): Promise<Response> => {
       orderNumber: displayOrderId,
       customerName: mail.customerName,
       vehicle: vehicleInfo,
-      downloadUrl: "https://remappro.eu/#/sprava-29-vk",
+      downloadUrl: portalOrderUrl(displayOrderId),
     });
 
     const res = await fetch("https://api.resend.com/emails", {

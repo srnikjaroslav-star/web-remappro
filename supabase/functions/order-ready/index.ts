@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { portalOrderUrl } from "../_shared/statusEmail.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
 const SENDER = "REMAPPRO <info@remappro.eu>";
@@ -42,7 +43,6 @@ const handler = async (req: Request): Promise<Response> => {
       customerName,
       carBrand,
       carModel,
-      resultFileUrl,
       importantNote,
       important_note, // Pridané pre kompatibilitu
     }: any = await req.json();
@@ -93,7 +93,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     const displayOrderId = orderNumber || orderId.slice(0, 8).toUpperCase();
     const vehicleInfo = `${carBrand || ''} ${carModel || ''}`.trim() || 'your vehicle';
-    const downloadUrl = resultFileUrl || `https://remappro.eu/check-order?order=${displayOrderId}`;
+    const downloadUrl = portalOrderUrl(displayOrderId);
     
     // Sanitize important note for email display
     const sanitizedImportantNote = finalImportantNote 
