@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { 
-  Download, Upload, Eye, CheckCircle,
+  Download, Upload, Eye, CheckCircle, CalendarDays, ChevronLeft, ChevronRight,
   Search, Power, Save, Trash2, LogOut, FileText, FilePlus, X
 } from 'lucide-react';
+import { DayPicker } from 'react-day-picker';
+import { sk } from 'date-fns/locale';
 import SystemStatus, { fetchSystemStatusFromDB, setSystemStatusInDB, isSystemOnline, SystemStatusMode } from '@/components/SystemStatus';
 import NavLogo from '@/components/NavLogo';
 import SmartTooltip from '@/components/SmartTooltip';
@@ -308,6 +310,7 @@ const ManagementPortal = () => {
   const [exportFrom, setExportFrom] = useState('');
   const [exportTo, setExportTo] = useState('');
   const [exportPreset, setExportPreset] = useState<'month' | 'last' | 'year' | null>('month');
+  const [exportCalendar, setExportCalendar] = useState<'from' | 'to' | null>(null);
   const [exportBusy, setExportBusy] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const invoiceInputRef = useRef<HTMLInputElement>(null);
@@ -1274,8 +1277,25 @@ const ManagementPortal = () => {
 
   const openAccounting = () => {
     applyExportPreset('month');
+    setExportCalendar(null);
     setAccountingOpen(true);
   };
+
+  const closeAccounting = () => {
+    setExportCalendar(null);
+    setAccountingOpen(false);
+  };
+
+  useEffect(() => {
+    if (!exportCalendar) return;
+    const onPointer = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest('[data-accounting-date]')) return;
+      setExportCalendar(null);
+    };
+    window.addEventListener('pointerdown', onPointer);
+    return () => window.removeEventListener('pointerdown', onPointer);
+  }, [exportCalendar]);
 
   const downloadAccountingZip = async () => {
     if (!exportFrom || !exportTo || exportFrom > exportTo) {
@@ -1794,39 +1814,73 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                 </h2>
                 <button
                   type="button"
-                  onClick={() => setAccountingOpen(false)}
+                  onClick={closeAccounting}
                   className="shrink-0 rounded-none border border-red-400/70 bg-red-500/10 p-2 text-red-400 shadow-[0_0_12px_rgba(248,113,113,0.32)] transition-colors duration-200 hover:bg-red-500/16 hover:shadow-[0_0_16px_rgba(248,113,113,0.42)]"
                 >
                   <X className="h-5 w-5" />
                 </button>
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <label className="block">
-                  <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Dátum od</span>
-                  <input
-                    type="date"
-                    value={exportFrom}
-                    onChange={(event) => {
-                      setExportFrom(event.target.value);
-                      setExportPreset(null);
-                    }}
-                    className="h-[42px] w-full rounded-lg border border-primary/60 bg-transparent px-3 text-base text-foreground shadow-[0_0_14px_rgba(0,242,255,0.28)] focus:border-primary focus:outline-none"
-                    style={{ colorScheme: 'dark' }}
-                  />
-                </label>
-                <label className="block">
-                  <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Dátum do</span>
-                  <input
-                    type="date"
-                    value={exportTo}
-                    onChange={(event) => {
-                      setExportTo(event.target.value);
-                      setExportPreset(null);
-                    }}
-                    className="h-[42px] w-full rounded-lg border border-primary/60 bg-transparent px-3 text-base text-foreground shadow-[0_0_14px_rgba(0,242,255,0.28)] focus:border-primary focus:outline-none"
-                    style={{ colorScheme: 'dark' }}
-                  />
-                </label>
+                {([
+                  ['from', 'Dátum od', exportFrom, 'left-0'],
+                  ['to', 'Dátum do', exportTo, 'right-0'],
+                ] as const).map(([key, label, value, align]) => (
+                  <div key={key} className="relative" data-accounting-date>
+                    <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
+                    <button
+                      type="button"
+                      onClick={() => setExportCalendar((current) => (current === key ? null : key))}
+                      className="flex h-[42px] w-full items-center justify-between rounded-lg border border-primary/60 bg-transparent px-3 text-base text-foreground shadow-[0_0_14px_rgba(0,242,255,0.28)] focus:border-primary focus:outline-none"
+                    >
+                      <span>{value ? `${value.slice(8, 10)}. ${value.slice(5, 7)}. ${value.slice(0, 4)}` : 'Vyberte dátum'}</span>
+                      <CalendarDays className="h-4 w-4 text-[#00eaff]" />
+                    </button>
+                    {exportCalendar === key && (
+                      <div className={`absolute top-[calc(100%+6px)] z-30 ${align}`}>
+                        <DayPicker
+                          mode="single"
+                          locale={sk}
+                          weekStartsOn={1}
+                          selected={value ? new Date(Number(value.slice(0, 4)), Number(value.slice(5, 7)) - 1, Number(value.slice(8, 10))) : undefined}
+                          onSelect={(day) => {
+                            if (!day) return;
+                            const next = isoDate(day);
+                            if (key === 'from') setExportFrom(next);
+                            else setExportTo(next);
+                            setExportPreset(null);
+                            setExportCalendar(null);
+                          }}
+                          className="accounting-calendar rounded-lg border border-primary/40 bg-[#070b10] text-white shadow-[0_0_24px_rgba(0,242,255,0.18)]"
+                          classNames={{
+                            months: 'flex flex-col',
+                            month: 'space-y-3',
+                            caption: 'relative flex items-center justify-center pt-1',
+                            caption_label: 'accounting-caption text-sm font-semibold',
+                            nav: 'flex items-center',
+                            nav_button: 'accounting-nav inline-flex h-8 w-8 items-center justify-center rounded-md border bg-transparent',
+                            nav_button_previous: 'absolute left-1',
+                            nav_button_next: 'absolute right-1',
+                            table: 'w-full border-collapse',
+                            head_row: 'flex',
+                            head_cell: 'accounting-head w-9 text-[0.8rem] font-medium',
+                            row: 'mt-1 flex w-full',
+                            cell: 'relative h-9 w-9 p-0 text-center text-sm',
+                            day: 'accounting-day inline-flex h-9 w-9 items-center justify-center rounded-md text-sm',
+                            day_selected: 'accounting-day-selected',
+                            day_today: 'accounting-day-today',
+                            day_outside: 'accounting-day-outside',
+                            day_disabled: 'accounting-day-disabled',
+                            day_hidden: 'invisible',
+                          }}
+                          components={{
+                            IconLeft: () => <ChevronLeft className="h-4 w-4" />,
+                            IconRight: () => <ChevronRight className="h-4 w-4" />,
+                          }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
                 {([
@@ -1848,15 +1902,24 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                   </button>
                 ))}
               </div>
-              <button
-                type="button"
-                onClick={() => void downloadAccountingZip()}
-                disabled={exportBusy}
-                className="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg border border-primary bg-primary/20 text-base font-bold uppercase tracking-wide text-primary shadow-[0_0_18px_rgba(0,242,255,0.45)] transition-colors hover:bg-primary/30 disabled:cursor-wait disabled:opacity-60"
-              >
-                <Download className="h-5 w-5" />
-                {exportBusy ? 'Pripravujem zálohu...' : 'Stiahnuť zálohu (ZIP)'}
-              </button>
+              <div className="mt-5 flex items-center gap-4">
+                <button
+                  type="button"
+                  onClick={closeAccounting}
+                  className="inline-flex h-12 shrink-0 items-center justify-center rounded-lg border border-white/20 bg-transparent px-5 text-sm font-semibold text-slate-400 transition-colors hover:border-red-400/80 hover:text-red-300"
+                >
+                  Zrušiť
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void downloadAccountingZip()}
+                  disabled={exportBusy}
+                  className="inline-flex h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-lg border border-primary bg-primary/20 text-base font-bold uppercase tracking-wide text-primary shadow-[0_0_18px_rgba(0,242,255,0.45)] transition-colors hover:bg-primary/30 disabled:cursor-wait disabled:opacity-60"
+                >
+                  <Download className="h-5 w-5" />
+                  {exportBusy ? 'Pripravujem zálohu...' : 'Stiahnuť zálohu (ZIP)'}
+                </button>
+              </div>
             </div>
           </div>
         )}
