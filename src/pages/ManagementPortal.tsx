@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   Download, Upload, Eye, CheckCircle,
-  Search, Power, Save, Trash2, LogOut, FileText, X
+  Search, Power, Save, Trash2, LogOut, FileText, FilePlus, X
 } from 'lucide-react';
 import SystemStatus, { fetchSystemStatusFromDB, setSystemStatusInDB, isSystemOnline, SystemStatusMode } from '@/components/SystemStatus';
 import NavLogo from '@/components/NavLogo';
@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useOnlineClients } from '@/lib/clientPresence';
 import { orderFileLocation, packOrderFile, RESULT_FILE_MARK, unpackOrderFile, uploadOrderFile } from '@/lib/ecuFile';
+import { downloadStoredInvoice, exportInvoiceArchive, invoiceLinksFor, mergeInvoice, readInvoiceMark, saveOrderInvoice } from '@/lib/orderInvoice';
 import { supabase } from '@/lib/supabase';
 import { statusAfterResultDelivery } from '@/lib/orderStatus';
 import { Order, ActivityLog, SUPABASE_ANON_KEY, SUPABASE_URL } from '@/integrations/supabase/client';
@@ -121,13 +122,22 @@ const CRC_MARK = '[[rp-crc]]';
 const IMPORTANT_MARK = '[[rp-important]]';
 
 const splitAdminNote = (raw: string) => {
-  const crc = raw.match(/\[\[rp-crc\]\]([^\n]*)/)?.[1]?.trim() ?? '';
-  const important = raw.match(/\[\[rp-important\]\]([\s\S]*)$/)?.[1]?.trim() ?? '';
-  const visible = raw
+  const marked = readInvoiceMark(raw);
+  const source = marked.note;
+  const crc = source.match(/\[\[rp-crc\]\]([^\n]*)/)?.[1]?.trim() ?? '';
+  const important = source.match(/\[\[rp-important\]\]([\s\S]*)$/)?.[1]?.trim() ?? '';
+  const visible = source
     .replace(/\n?\[\[rp-crc\]\][^\n]*/g, '')
     .replace(/\n?\[\[rp-important\]\][\s\S]*$/g, '')
     .trim();
-  return { visible, crc, important };
+  return {
+    visible,
+    crc,
+    important,
+    invoiceNumber: marked.invoice_number || '',
+    invoiceUrl: marked.invoice_url || '',
+    invoiceDate: marked.invoice_date || '',
+  };
 };
 
 const packAdminNote = (
@@ -138,7 +148,10 @@ const packAdminNote = (
   const current = splitAdminNote(raw);
   const crc = field === 'checksum_crc' ? (value ?? '') : current.crc;
   const important = field === 'important_note' ? (value ?? '') : current.important;
-  return [current.visible, crc ? `${CRC_MARK}${crc}` : '', important ? `${IMPORTANT_MARK}${important}` : '']
+  const invoice = current.invoiceNumber
+    ? `[[rp-invoice]]${current.invoiceNumber}||${current.invoiceDate || ''}||${current.invoiceUrl || ''}`
+    : '';
+  return [current.visible, crc ? `${CRC_MARK}${crc}` : '', important ? `${IMPORTANT_MARK}${important}` : '', invoice]
     .filter(Boolean)
     .join('\n');
 };
@@ -174,6 +187,8 @@ const normalizeOrder = (row: StoredOrderRow, owner?: { name: string; email: stri
     customer_note: row.customer_note || (taggedNumber ? lines.slice(1).join('\n').trim() : note.trim()) || null,
     checksum_crc: row.checksum_crc || packed.crc || null,
     important_note: row.important_note || packed.important || null,
+    invoice_number: row.invoice_number || packed.invoiceNumber || null,
+    invoice_url: row.invoice_url || packed.invoiceUrl || null,
     created_at: row.created_at || new Date().toISOString(),
     legal_consent: row.legal_consent ?? true,
   };
@@ -288,7 +303,15 @@ const ManagementPortal = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const [invoiceUploadingId, setInvoiceUploadingId] = useState<string | null>(null);
+  const [accountingOpen, setAccountingOpen] = useState(false);
+  const [exportFrom, setExportFrom] = useState('');
+  const [exportTo, setExportTo] = useState('');
+  const [exportPreset, setExportPreset] = useState<'month' | 'last' | 'year' | null>('month');
+  const [exportBusy, setExportBusy] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const invoiceInputRef = useRef<HTMLInputElement>(null);
+  const invoiceOrderId = useRef<string | null>(null);
   const pendingUploadId = useRef<string | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [activeRowId, setActiveRowId] = useState<string | null>(null);
@@ -464,12 +487,13 @@ const ManagementPortal = () => {
       if (owner.id) resultRequest = resultRequest.eq('user_id', owner.id);
       const results = await resultRequest;
       const withResult = new Set((results.data || []).map((row) => row.id));
+      const links = await invoiceLinksFor(((data || []) as StoredOrderRow[]).map((row) => row.id));
       ordersSeen.current = true;
-      setOrders(((data || []) as StoredOrderRow[]).map((row) => normalizeOrder({
+      setOrders(((data || []) as StoredOrderRow[]).map((row) => normalizeOrder(mergeInvoice({
         ...row,
         file_url: row.file_url || (withFile.has(row.id) ? 'stored' : null),
         result_file_url: row.result_file_url || (withResult.has(row.id) ? 'stored' : null),
-      }, owner)));
+      }, links.get(row.id)), owner)));
     } catch (error) {
       console.error('Fetch error:', error);
       if (!silent) toast.error('Failed to fetch orders');
@@ -1181,6 +1205,96 @@ const ManagementPortal = () => {
     fileInputRef.current?.click();
   };
 
+  const triggerInvoiceUpload = (orderId: string) => {
+    invoiceOrderId.current = orderId;
+    invoiceInputRef.current?.click();
+  };
+
+  const handleInvoiceFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    const orderId = invoiceOrderId.current;
+    const order = orders.find((item) => item.id === orderId);
+    if (!file || !order) return;
+    setInvoiceUploadingId(order.id);
+    try {
+      const saved = await saveOrderInvoice({
+        id: order.id,
+        order_number: order.order_number,
+        user_id: clientIdOf(order),
+        customer_name: order.customer_name,
+        customer_email: order.customer_email,
+        total_price: order.total_price,
+        invoice_number: order.invoice_number,
+      }, file);
+      setOrders((prev) => prev.map((item) => (item.id === order.id ? { ...item, ...saved } : item)));
+      setDetailOrder((current) => (current?.id === order.id ? { ...current, ...saved } : current));
+      toast.success(`Faktúra ${saved.invoice_number} je nahratá`);
+    } catch (error) {
+      console.error('Invoice upload error:', error);
+      toast.error(error instanceof Error ? error.message : 'Faktúru sa nepodarilo nahrať');
+    } finally {
+      setInvoiceUploadingId(null);
+    }
+  };
+
+  const openInvoice = async (order: Order) => {
+    if (!order.invoice_url) {
+      toast.warning('K tejto faktúre ešte nie je nahraté PDF.');
+      return;
+    }
+    try {
+      await downloadStoredInvoice(order.invoice_url, `${order.invoice_number || 'faktura'}.pdf`);
+    } catch (error) {
+      console.error('Invoice download error:', error);
+      toast.error('Faktúru sa nepodarilo stiahnuť');
+    }
+  };
+
+  const isoDate = (date: Date) => {
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${date.getFullYear()}-${month}-${day}`;
+  };
+
+  const applyExportPreset = (preset: 'month' | 'last' | 'year') => {
+    const now = new Date();
+    if (preset === 'month') {
+      setExportFrom(isoDate(new Date(now.getFullYear(), now.getMonth(), 1)));
+      setExportTo(isoDate(new Date(now.getFullYear(), now.getMonth() + 1, 0)));
+    } else if (preset === 'last') {
+      setExportFrom(isoDate(new Date(now.getFullYear(), now.getMonth() - 1, 1)));
+      setExportTo(isoDate(new Date(now.getFullYear(), now.getMonth(), 0)));
+    } else {
+      setExportFrom(isoDate(new Date(now.getFullYear(), 0, 1)));
+      setExportTo(isoDate(new Date(now.getFullYear(), 11, 31)));
+    }
+    setExportPreset(preset);
+  };
+
+  const openAccounting = () => {
+    applyExportPreset('month');
+    setAccountingOpen(true);
+  };
+
+  const downloadAccountingZip = async () => {
+    if (!exportFrom || !exportTo || exportFrom > exportTo) {
+      toast.error('Vyberte platný dátum od a do.');
+      return;
+    }
+    setExportBusy(true);
+    try {
+      const count = await exportInvoiceArchive(exportFrom, exportTo);
+      if (!count) toast.warning('V tomto období nie je žiadna PDF faktúra.');
+      else toast.success(`Záloha obsahuje ${count} ${count === 1 ? 'faktúru' : 'faktúr'}.`);
+    } catch (error) {
+      console.error('Invoice archive error:', error);
+      toast.error(error instanceof Error ? error.message : 'Zálohu sa nepodarilo vytvoriť');
+    } finally {
+      setExportBusy(false);
+    }
+  };
+
   const filteredOrders = orders.filter((order) => {
     const searchLower = searchTerm.toLowerCase();
     const matchesSearch = 
@@ -1211,7 +1325,7 @@ const ManagementPortal = () => {
     cancelled: '!border-red-400/70 !bg-red-500/25 shadow-[0_0_18px_rgba(248,113,113,0.55)] hover:!border-red-400 hover:!bg-red-500/35 hover:shadow-[0_0_22px_rgba(248,113,113,0.7)]',
   };
 
-  const ordersRow = 'grid w-full min-w-[548px] grid-cols-[minmax(0,0.7fr)_minmax(0,1.15fr)_minmax(0,1.7fr)_minmax(0,1.1fr)_minmax(0,1.7fr)_8.5rem_9.5rem_260px]';
+  const ordersRow = 'grid w-full min-w-[640px] grid-cols-[minmax(0,0.7fr)_minmax(0,1.15fr)_minmax(0,1.7fr)_minmax(0,1.1fr)_minmax(0,1.7fr)_8.5rem_9.5rem_312px]';
 
   const STATUS_CELL_CLASS: Record<string, string> = {
     pending: 'border-yellow-400/80 bg-yellow-500/10 text-yellow-400 shadow-[0_0_12px_rgba(250,204,21,0.28)]',
@@ -1305,6 +1419,13 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
         className="hidden"
         onChange={handleResultUpload}
         accept=".bin,.ori,.mod,.ecu"
+      />
+      <input
+        ref={invoiceInputRef}
+        type="file"
+        className="hidden"
+        accept="application/pdf,.pdf"
+        onChange={(event) => void handleInvoiceFile(event)}
       />
 
       <div className="max-w-[1600px] mx-auto w-full min-w-0 px-4 flex flex-col min-h-screen">
@@ -1443,6 +1564,14 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
               <option value="completed" style={{ color: STATUS_TEXT_COLOR.completed, backgroundColor: '#000000', fontSize: '16px' }}>Dokončené</option>
               <option value="cancelled" style={{ color: STATUS_TEXT_COLOR.cancelled, backgroundColor: '#000000', fontSize: '16px' }}>Zrušené</option>
             </select>
+            <button
+              type="button"
+              onClick={openAccounting}
+              className="inline-flex h-[42px] shrink-0 items-center gap-2 rounded-lg border border-primary/70 bg-[#000000] px-3 text-sm font-semibold text-[#00eaff] shadow-[0_0_18px_rgba(0,242,255,0.28)] transition-shadow hover:border-primary hover:shadow-[0_0_22px_rgba(0,242,255,0.38)]"
+            >
+              <FileText className="h-4 w-4" />
+              Účtovníctvo / Export
+            </button>
           </div>
           <div className="overflow-x-auto">
             <div role="table" className="w-full min-w-0 text-base">
@@ -1453,8 +1582,8 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                   <div role="columnheader" className="min-w-0 overflow-hidden border-r border-slate-500 p-2.5 text-left text-sm font-bold uppercase tracking-wide text-white">Vozidlo</div>
                   <div role="columnheader" className="min-w-0 overflow-hidden border-r border-slate-500 p-2.5 text-left text-sm font-bold uppercase tracking-wide text-white">Dátum</div>
                   <div role="columnheader" className="min-w-0 overflow-hidden border-r border-slate-500 p-2.5 text-left text-sm font-bold uppercase tracking-wide text-white">Zákazník</div>
-                  <div role="columnheader" className="sticky right-[calc(260px+9.5rem)] z-30 border-r border-slate-500 bg-[#0a192f] p-4 text-center text-sm font-bold uppercase tracking-wide text-white">Cena</div>
-                  <div role="columnheader" className="sticky right-[260px] z-30 border-r border-slate-500 bg-[#0a192f] p-2.5 text-center text-sm font-bold uppercase tracking-wide text-white">Stav</div>
+                  <div role="columnheader" className="sticky right-[calc(312px+9.5rem)] z-30 border-r border-slate-500 bg-[#0a192f] p-4 text-center text-sm font-bold uppercase tracking-wide text-white">Cena</div>
+                  <div role="columnheader" className="sticky right-[312px] z-30 border-r border-slate-500 bg-[#0a192f] p-2.5 text-center text-sm font-bold uppercase tracking-wide text-white">Stav</div>
                   <div role="columnheader" className="sticky right-0 z-30 border-r border-slate-500 bg-[#0a192f] p-2.5 text-center text-sm font-bold uppercase tracking-wide text-white">Akcie</div>
                 </div>
               </div>
@@ -1481,7 +1610,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                     const vehicle = [order.car_brand, order.car_model].map((part) => String(part ?? '').trim()).filter(Boolean).join(' ');
                     const documents: { number: string; href: string; title: string }[] = [];
                     if (order.invoice_number) {
-                      documents.push({ number: order.invoice_number, href: order.invoice_url || '#', title: 'Zobraziť faktúru' });
+                      documents.push({ number: order.invoice_number, href: order.invoice_url || '', title: order.invoice_url ? 'Stiahnuť faktúru' : 'PDF ešte nie je nahraté' });
                     }
                     if (order.credit_note_number) {
                       documents.push({ number: order.credit_note_number, href: order.credit_note_pdf || '#', title: 'Stiahnuť dobropis' });
@@ -1499,16 +1628,32 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                         ) : (
                           <div className="flex min-w-0 flex-col items-start gap-0.5">
                             {documents.map((doc) => (
-                              <a
-                                key={doc.number}
-                                href={doc.href}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="block max-w-full truncate font-mono text-base font-bold text-red-500 hover:text-red-400"
-                                title={doc.title}
-                              >
-                                {doc.number}
-                              </a>
+                              doc.title === 'Stiahnuť dobropis' ? (
+                                <a
+                                  key={doc.number}
+                                  href={doc.href || '#'}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(event) => event.stopPropagation()}
+                                  className="block max-w-full truncate font-mono text-base font-bold text-red-500 hover:text-red-400"
+                                  title={doc.title}
+                                >
+                                  {doc.number}
+                                </a>
+                              ) : (
+                                <button
+                                  key={doc.number}
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    void openInvoice(order);
+                                  }}
+                                  className="block max-w-full truncate text-left font-mono text-base font-bold text-red-500 hover:text-red-400"
+                                  title={doc.title}
+                                >
+                                  {doc.number}
+                                </button>
+                              )
                             ))}
                           </div>
                         )}
@@ -1532,7 +1677,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                           <p className="min-w-0 truncate whitespace-nowrap text-xs leading-none text-white" title={order.customer_email}>{order.customer_email}</p>
                         </div>
                       </div>
-                      <div role="cell" className={`sticky right-[calc(260px+9.5rem)] z-20 border-r border-slate-800/60 px-4 py-1 text-center ${pinBg}`}>
+                      <div role="cell" className={`sticky right-[calc(312px+9.5rem)] z-20 border-r border-slate-800/60 px-4 py-1 text-center ${pinBg}`}>
                         <p className={`flex items-center justify-center text-xl font-bold leading-none ${
                           order.status === 'cancelled' 
                             ? 'text-red-500' 
@@ -1541,7 +1686,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                           {getDisplayAmount(order).toFixed(2)}€
                         </p>
                       </div>
-                      <div role="cell" className={`sticky right-[260px] z-20 min-h-8 border-r border-slate-800/60 p-0 text-center ${pinBg}`}>
+                      <div role="cell" className={`sticky right-[312px] z-20 min-h-8 border-r border-slate-800/60 p-0 text-center ${pinBg}`}>
                         <select
                           value={order.status}
                           onMouseDown={(event) => event.stopPropagation()}
@@ -1597,6 +1742,18 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                             </button>
                           )}
                           <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              triggerInvoiceUpload(order.id);
+                            }}
+                            disabled={invoiceUploadingId === order.id}
+                            className={`${actionCell} bg-primary/10 text-primary hover:bg-primary/20 disabled:cursor-wait`}
+                            title={order.invoice_url ? 'Nahradiť PDF faktúry' : 'Nahrať PDF faktúry'}
+                          >
+                            <FilePlus className={`h-5 w-5 ${invoiceUploadingId === order.id ? 'animate-pulse' : ''}`} />
+                          </button>
+                          <button
                             onClick={() => setDetailOrder(order)}
                             className={`${actionCell} bg-cyan-400/10 text-cyan-400 hover:bg-cyan-400/20`}
                             title="Zobraziť detail objednávky"
@@ -1625,6 +1782,83 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
           </div>
         </div>
         </>
+        )}
+
+        {accountingOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+            <div className="w-full max-w-lg rounded-xl border border-[rgba(0,242,255,0.4)] bg-[#070b10] p-5 shadow-[0_0_28px_rgba(0,242,255,0.16)]">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <h2 className="flex items-center gap-2 text-xl font-bold text-foreground">
+                  <FileText className="h-6 w-6 text-primary" />
+                  Účtovníctvo / Export
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setAccountingOpen(false)}
+                  className="shrink-0 rounded-none border border-red-400/70 bg-red-500/10 p-2 text-red-400 shadow-[0_0_12px_rgba(248,113,113,0.32)] transition-colors duration-200 hover:bg-red-500/16 hover:shadow-[0_0_16px_rgba(248,113,113,0.42)]"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Dátum od</span>
+                  <input
+                    type="date"
+                    value={exportFrom}
+                    onChange={(event) => {
+                      setExportFrom(event.target.value);
+                      setExportPreset(null);
+                    }}
+                    className="h-[42px] w-full rounded-lg border border-primary/60 bg-transparent px-3 text-base text-foreground shadow-[0_0_14px_rgba(0,242,255,0.28)] focus:border-primary focus:outline-none"
+                    style={{ colorScheme: 'dark' }}
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Dátum do</span>
+                  <input
+                    type="date"
+                    value={exportTo}
+                    onChange={(event) => {
+                      setExportTo(event.target.value);
+                      setExportPreset(null);
+                    }}
+                    className="h-[42px] w-full rounded-lg border border-primary/60 bg-transparent px-3 text-base text-foreground shadow-[0_0_14px_rgba(0,242,255,0.28)] focus:border-primary focus:outline-none"
+                    style={{ colorScheme: 'dark' }}
+                  />
+                </label>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {([
+                  ['month', 'Tento mesiac'],
+                  ['last', 'Minulý mesiac'],
+                  ['year', 'Celý rok'],
+                ] as const).map(([preset, label]) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => applyExportPreset(preset)}
+                    className={`inline-flex h-10 items-center rounded-lg border px-3 text-sm font-semibold transition-colors ${
+                      exportPreset === preset
+                        ? 'border-primary bg-primary/20 text-primary shadow-[0_0_16px_rgba(0,242,255,0.35)]'
+                        : 'border-primary/40 bg-black text-foreground hover:border-primary hover:text-primary'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => void downloadAccountingZip()}
+                disabled={exportBusy}
+                className="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg border border-primary bg-primary/20 text-base font-bold uppercase tracking-wide text-primary shadow-[0_0_18px_rgba(0,242,255,0.45)] transition-colors hover:bg-primary/30 disabled:cursor-wait disabled:opacity-60"
+              >
+                <Download className="h-5 w-5" />
+                {exportBusy ? 'Pripravujem zálohu...' : 'Stiahnuť zálohu (ZIP)'}
+              </button>
+            </div>
+          </div>
         )}
 
         {/* Order Detail Modal */}
@@ -1683,15 +1917,14 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                           ) : (
                             <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                               {detailOrder.invoice_number && (
-                                <a
-                                  href={detailOrder.invoice_url || '#'}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-2 text-green-400 hover:text-green-300 underline"
+                                <button
+                                  type="button"
+                                  onClick={() => void openInvoice(detailOrder)}
+                                  className="inline-flex items-center gap-2 text-green-400 underline hover:text-green-300"
                                 >
                                   <FileText className="w-4 h-4" />
                                   <span className="break-all font-mono">{detailOrder.invoice_number}</span>
-                                </a>
+                                </button>
                               )}
                               {detailOrder.credit_note_number && (
                                 <a

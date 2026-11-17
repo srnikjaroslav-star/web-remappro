@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { Download, Search, Send } from 'lucide-react';
+import { Download, FileText, Search, Send } from 'lucide-react';
+import { toast } from 'sonner';
 import { useLanguage } from '@/i18n/LanguageContext';
 import type { TranslationKey } from '@/i18n/translations';
 import { SERVICES } from '@/data/services';
 import { loadServiceCatalog, lookupServiceName } from '@/lib/serviceCatalog';
 import { orderFileLocation, RESULT_FILE_MARK, unpackOrderFile } from '@/lib/ecuFile';
+import { downloadStoredInvoice, invoiceLinksFor, mergeInvoice, readInvoiceMark } from '@/lib/orderInvoice';
 import { supabase } from '@/lib/supabase';
 
 type ClientOrder = {
@@ -20,6 +22,8 @@ type ClientOrder = {
   total_price: number | string | null;
   status: string;
   result_file_url: string | null;
+  invoice_number: string | null;
+  invoice_url: string | null;
   customer_note: string | null;
   customer_email: string | null;
 };
@@ -93,7 +97,8 @@ type StoredClientOrder = ClientOrder & {
 };
 
 const toClientOrder = (row: StoredClientOrder): ClientOrder => {
-  const note = String(row.note ?? '');
+  const marked = readInvoiceMark(String(row.note ?? ''));
+  const note = marked.note;
   const lines = note.split('\n');
   const tagged = lines[0]?.startsWith('RP-') ? lines[0].trim() : '';
   const engine = String(row.engine ?? '').trim();
@@ -112,6 +117,8 @@ const toClientOrder = (row: StoredClientOrder): ClientOrder => {
     total_price: row.total_price ?? null,
     status: row.status || 'pending',
     result_file_url: row.result_file_url ?? null,
+    invoice_number: row.invoice_number || marked.invoice_number || null,
+    invoice_url: row.invoice_url || marked.invoice_url || null,
     customer_note: row.customer_note || (tagged ? lines.slice(1).join('\n').trim() : note.trim()) || null,
     customer_email: row.customer_email ?? null,
   };
@@ -240,8 +247,9 @@ const MyOrders = ({ email, focusOrder = '' }: { email: string; focusOrder?: stri
             ...row,
             result_file_url: row.result_file_url || (withResult.has(row.id) ? 'stored' : null),
           }));
+        const links = await invoiceLinksFor(own.map((order) => order.id));
         setFailed(false);
-        setOrders(own);
+        setOrders(own.map((order) => mergeInvoice(order, links.get(order.id))));
         setLoading(false);
       } finally {
         busy.current = false;
@@ -324,8 +332,8 @@ const MyOrders = ({ email, focusOrder = '' }: { email: string; focusOrder?: stri
         <table className="w-full border-collapse text-base">
           <thead>
             <tr className="border-b border-primary/30 bg-[#0a192f]">
-              {[t('myOrdersDate'), t('myOrdersId'), t('myOrdersSpec'), t('myOrdersPrice'), t('myOrdersStatus'), t('myOrdersFile')].map((label) => (
-                <th key={label} className="whitespace-nowrap border-r border-slate-500 p-2.5 text-left align-middle text-sm font-bold uppercase tracking-wide text-white last:text-center">
+              {[t('myOrdersDate'), t('myOrdersId'), t('myOrdersSpec'), t('myOrdersPrice'), t('myOrdersStatus'), t('myOrdersFile'), t('myOrdersInvoice')].map((label) => (
+                <th key={label} className={`whitespace-nowrap border-r border-slate-500 p-2.5 align-middle text-sm font-bold uppercase tracking-wide text-white ${label === t('myOrdersFile') || label === t('myOrdersInvoice') ? 'text-center' : 'text-left'}`}>
                   {label}
                 </th>
               ))}
@@ -334,19 +342,19 @@ const MyOrders = ({ email, focusOrder = '' }: { email: string; focusOrder?: stri
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={6} className="py-12 text-center text-muted-foreground">{t('myOrdersLoading')}</td>
+                <td colSpan={7} className="py-12 text-center text-muted-foreground">{t('myOrdersLoading')}</td>
               </tr>
             ) : failed ? (
               <tr>
-                <td colSpan={6} className="py-12 text-center text-red-400">{t('myOrdersError')}</td>
+                <td colSpan={7} className="py-12 text-center text-red-400">{t('myOrdersError')}</td>
               </tr>
             ) : orders.length === 0 ? (
               <tr>
-                <td colSpan={6} className="py-12 text-center text-muted-foreground">{t('myOrdersEmpty')}</td>
+                <td colSpan={7} className="py-12 text-center text-muted-foreground">{t('myOrdersEmpty')}</td>
               </tr>
             ) : visibleOrders.length === 0 ? (
               <tr>
-                <td colSpan={6} className="py-12 text-center text-muted-foreground">{t('myOrdersNoMatch')}</td>
+                <td colSpan={7} className="py-12 text-center text-muted-foreground">{t('myOrdersNoMatch')}</td>
               </tr>
             ) : visibleOrders.map((order) => {
               const vehicle = [order.car_brand, order.car_model].filter(Boolean).join(' ');
@@ -418,6 +426,25 @@ const MyOrders = ({ email, focusOrder = '' }: { email: string; focusOrder?: stri
                       <span className="text-xs text-slate-500">
                         {order.status === 'completed' ? t('filePending') : '—'}
                       </span>
+                    )}
+                  </td>
+                  <td className={`${glow} text-center`}>
+                    {order.status === 'completed' && order.invoice_url ? (
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void downloadStoredInvoice(order.invoice_url || '', `${order.invoice_number || 'faktura'}.pdf`).catch(() => {
+                            toast.error(t('invoiceDownloadFailed'));
+                          });
+                        }}
+                        className={`${action} border border-primary/40 bg-primary/10 text-primary hover:bg-primary/20`}
+                      >
+                        <FileText className="h-4 w-4" />
+                        {t('downloadFile')}
+                      </button>
+                    ) : (
+                      <span className="text-xs text-slate-500">—</span>
                     )}
                   </td>
                 </tr>
