@@ -35,6 +35,7 @@ import { loadServiceCatalog, lookupServiceName } from '@/lib/serviceCatalog';
 import ClientCredits from '@/components/ClientCredits';
 import AdminServices from '@/components/AdminServices';
 import OpeningHours from '@/components/OpeningHours';
+import InvoiceSettingsPanel from '@/components/InvoiceSettings';
 
 type RevenueOrder = { status?: string; total_price?: number | string | null; created_at?: string | null };
 
@@ -287,10 +288,10 @@ const downloadOrderPart = async (orderId: string, part: 'client' | 'result', hin
 
 const STATUS_NOTIFY_EMAIL = 'srnik.jaroslav@gmail.com';
 const ADMIN_SECTION_KEY = 'remappro-admin-section';
-type AdminSection = 'orders' | 'clients' | 'services' | 'hours';
+type AdminSection = 'orders' | 'clients' | 'services' | 'hours' | 'invoices';
 
 const parseAdminSection = (value: string | null): AdminSection | null =>
-  value === 'orders' || value === 'clients' || value === 'services' || value === 'hours' ? value : null;
+  value === 'orders' || value === 'clients' || value === 'services' || value === 'hours' || value === 'invoices' ? value : null;
 
 const readAdminSection = (): AdminSection => {
   const query = window.location.hash.split('?')[1] || '';
@@ -1480,8 +1481,15 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
           >
             Otváracie hodiny
           </button>
+          <button
+            type="button"
+            onClick={() => setSection('invoices')}
+            className={`inline-flex h-9 items-center border border-transparent px-[11px] transition-colors ${section === 'invoices' ? 'relative z-10 rounded-t-md rounded-b-none border-b-2 border-b-[#f472b6] bg-[#f472b6]/10 text-[#f472b6] shadow-[0_12px_22px_rgba(244,114,182,0.28)] after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-3 after:bg-gradient-to-b after:from-[rgba(244,114,182,0.35)] after:to-transparent' : 'rounded-md text-[#f472b6]/75 hover:bg-[#f472b6]/10 hover:text-[#f472b6]'}`}
+          >
+            Faktúry
+          </button>
         </div>
-        {section === 'clients' ? <ClientCredits onlineIds={onlineIds} reloadKey={clientsReload} /> : section === 'services' ? <AdminServices /> : section === 'hours' ? <OpeningHours /> : (
+        {section === 'clients' ? <ClientCredits onlineIds={onlineIds} reloadKey={clientsReload} /> : section === 'services' ? <AdminServices /> : section === 'hours' ? <OpeningHours /> : section === 'invoices' ? <InvoiceSettingsPanel /> : (
         <>
         <div className="mb-3 grid w-full grid-cols-6 gap-2">
           <div className="min-w-0 rounded-none border-t-4 border-t-white bg-[#0f172a] px-2.5 py-2 shadow-[inset_0_0_28px_rgba(255,255,255,0.2)]">

@@ -3,6 +3,7 @@ import autoTable from 'jspdf-autotable';
 import regularFont from '../assets/fonts/Roboto-Regular.ttf';
 import boldFont from '../assets/fonts/Roboto-Bold.ttf';
 import { LOGO_BASE64 } from '@/lib/invoiceLogo';
+import { loadInvoiceSettings } from '@/lib/invoiceSettings';
 
 export type InvoiceBuyer = {
   name: string;
@@ -22,8 +23,6 @@ export type InvoicePdfInput = {
   buyer: InvoiceBuyer;
   price: number;
 };
-
-const INVOICE_ITEM_NAME = 'Elektronická diagnostika a nastavenie systémov vozidla';
 
 const fontCache = new Map<string, Promise<string>>();
 
@@ -161,6 +160,7 @@ export const generateInvoicePdf = async (input: InvoicePdfInput) => {
   const margin = 18;
   const right = 192;
   const issued = input.issuedAt ?? new Date();
+  const invoiceSettings = await loadInvoiceSettings();
 
   doc.setProperties({
     title: `${input.invoiceNumber}`,
@@ -209,11 +209,11 @@ export const generateInvoicePdf = async (input: InvoicePdfInput) => {
   doc.setDrawColor(...LINE);
   doc.setLineWidth(0.2);
   doc.line(margin, factsY - 3, right, factsY - 3);
-  const due = addDays(issued, 14);
+  const due = addDays(issued, invoiceSettings.dueDays);
   const factsEnd = Math.max(
     drawFacts(doc, [
-      ['IBAN', 'SK46 7500 0000 0040 2556 6439'],
-      ['SWIFT / BIC', 'CEKOSKBX'],
+      ['IBAN', invoiceSettings.iban],
+      ['SWIFT / BIC', invoiceSettings.swift],
       ['Variabilný symbol', input.invoiceNumber],
     ], margin, factsY + 2, columnWidth),
     drawFacts(doc, [
@@ -229,7 +229,7 @@ export const generateInvoicePdf = async (input: InvoicePdfInput) => {
     margin: { left: margin, right: margin },
     theme: 'grid',
     head: [['Položka', 'Cena']],
-    body: [[INVOICE_ITEM_NAME, money(input.price)]],
+    body: [[invoiceSettings.itemName, money(input.price)]],
     styles: {
       font: 'Roboto',
       fontStyle: 'normal',
