@@ -191,10 +191,10 @@ export const generateInvoicePdf = async (input: InvoicePdfInput) => {
   const columnWidth = (right - margin - columnGap) / 2;
   const partiesY = ruleY + 8;
   const supplierEnd = drawParty(doc, 'DODÁVATEĽ', [
-    'REMAPPRO',
-    'J.Kráľa 2683/29, 990 01 Veľký Krtíš',
-    'IČO: 41281471, DIČ: 1041196607',
-    'Živnostenský register Okresného úradu Veľký Krtíš, č. ŽR: 660-5049',
+    invoiceSettings.supplierName,
+    invoiceSettings.supplierAddress,
+    `IČO: ${invoiceSettings.supplierIco}, DIČ: ${invoiceSettings.supplierDic}`,
+    invoiceSettings.supplierRegister,
   ], margin, partiesY, columnWidth);
   const buyerEnd = drawParty(
     doc,
@@ -264,7 +264,7 @@ export const generateInvoicePdf = async (input: InvoicePdfInput) => {
   doc.text('Celková suma na úhradu', margin, totalY);
   doc.text(money(input.price), right, totalY, { align: 'right' });
   doc.setFontSize(11);
-  doc.text('Dodávateľ nie je platiteľom DPH.', margin, totalY + 8);
+  doc.text(invoiceSettings.vatNote, margin, totalY + 8);
 
   const blob = doc.output('blob');
   const filename = `${input.invoiceNumber.replace(/[^\w.\-]+/g, '_')}.pdf`;
