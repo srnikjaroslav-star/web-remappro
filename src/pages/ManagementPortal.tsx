@@ -21,7 +21,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { useOnlineClients } from '@/lib/clientPresence';
-import { lightFileRef, loadOrderFile, orderFileLocation, packOrderFile, unpackOrderFile, uploadOrderFile } from '@/lib/ecuFile';
+import { fetchBlobWithProgress, lightFileRef, loadOrderFile, orderFileLocation, packOrderFile, unpackOrderFile, uploadOrderFile } from '@/lib/ecuFile';
 import { downloadStoredInvoice, exportInvoiceArchive, readInvoiceMark, saveOrderInvoice } from '@/lib/orderInvoice';
 import { supabase } from '@/lib/supabase';
 import { statusAfterResultDelivery } from '@/lib/orderStatus';
@@ -266,24 +266,31 @@ const inlineDownload = (stored: string, fallbackName: string) => {
   return href.startsWith('data:') ? { href, filename: filename || fallbackName } : null;
 };
 
-const downloadOrderPart = async (orderId: string, part: 'client' | 'result', hint: string, fallbackName: string) => {
+const downloadOrderPart = async (
+  orderId: string,
+  part: 'client' | 'result',
+  hint: string,
+  fallbackName: string,
+  onProgress?: (percent: number) => void,
+) => {
   const stored = await loadOrderFile(orderId, part, hint);
   if (!stored) {
     toast.error(part === 'result' ? 'Hotový súbor nie je k dispozícii' : 'Nepodarilo sa vytvoriť URL pre sťahovanie');
     return;
   }
+  const finishLocal = (blob: Blob | null, filename: string) => {
+    if (!blob) throw new Error('Súbor sa nepodarilo prečítať');
+    onProgress?.(100);
+    saveBlob(blob, filename);
+  };
   const inline = inlineDownload(stored, fallbackName);
   if (inline) {
-    const blob = blobFromDataUrl(inline.href);
-    if (!blob) throw new Error('Súbor sa nepodarilo prečítať');
-    saveBlob(blob, inline.filename);
+    finishLocal(blobFromDataUrl(inline.href), inline.filename);
     return;
   }
   const located = orderFileLocation(stored);
   if (located && 'href' in located) {
-    const blob = blobFromDataUrl(located.href);
-    if (!blob) throw new Error('Súbor sa nepodarilo prečítať');
-    saveBlob(blob, located.filename || fallbackName);
+    finishLocal(blobFromDataUrl(located.href), located.filename || fallbackName);
     return;
   }
   if (!located?.bucket || !located.path) {
@@ -302,9 +309,8 @@ const downloadOrderPart = async (orderId: string, part: 'client' | 'result', hin
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), 600000);
     try {
-      const response = await fetch(href, { signal: controller.signal });
-      if (!response.ok) throw new Error('Súbor sa nepodarilo stiahnuť');
-      saveBlob(await response.blob(), filename);
+      const blob = await fetchBlobWithProgress(href, onProgress, controller.signal);
+      saveBlob(blob, filename);
       return;
     } catch (error) {
       lastError = error;
@@ -369,6 +375,9 @@ const ManagementPortal = () => {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [clientDownloadProgress, setClientDownloadProgress] = useState<Record<string, number>>({});
+  const clientDownloadGen = useRef<Record<string, number>>({});
+  const clientDownloadLock = useRef(new Set<string>());
   const [accountingOpen, setAccountingOpen] = useState(false);
   const [exportFrom, setExportFrom] = useState('');
   const [exportTo, setExportTo] = useState('');
@@ -1176,6 +1185,15 @@ const ManagementPortal = () => {
   };
 
   const handleClientFileDownload = async (order: Order) => {
+    if (clientDownloadLock.current.has(order.id)) return;
+    clientDownloadLock.current.add(order.id);
+    const generation = (clientDownloadGen.current[order.id] ?? 0) + 1;
+    clientDownloadGen.current[order.id] = generation;
+    const report = (percent: number) => {
+      if (clientDownloadGen.current[order.id] !== generation) return;
+      setClientDownloadProgress((current) => ({ ...current, [order.id]: percent }));
+    };
+    setClientDownloadProgress((current) => ({ ...current, [order.id]: 0 }));
     if (order.status === 'pending') {
       void executeStatusChange(order.id, 'processing');
     }
@@ -1185,10 +1203,20 @@ const ManagementPortal = () => {
         'client',
         order.file_url || '',
         `client-${order.order_number || order.id.slice(0, 8)}`,
+        report,
       );
     } catch (error) {
       console.error('Client download error:', error);
       toast.error('Chyba pri sťahovaní súboru');
+    } finally {
+      clientDownloadLock.current.delete(order.id);
+      if (clientDownloadGen.current[order.id] === generation) {
+        setClientDownloadProgress((current) => {
+          const next = { ...current };
+          delete next[order.id];
+          return next;
+        });
+      }
     }
   };
 
@@ -1696,10 +1724,32 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                           {order.file_url ? (
                             <button
                               onClick={() => void handleClientFileDownload(order)}
-                              className={`${actionCell} bg-yellow-400/10 text-yellow-400 hover:bg-yellow-400/20`}
-                              title={order.client_file_name ? `Stiahnuť ${order.client_file_name}` : 'Stiahnuť súbor zákazníka'}
+                              disabled={clientDownloadProgress[order.id] !== undefined}
+                              aria-valuemin={0}
+                              aria-valuemax={100}
+                              aria-valuenow={clientDownloadProgress[order.id]}
+                              className={`${actionCell} relative overflow-hidden ${
+                                clientDownloadProgress[order.id] !== undefined
+                                  ? 'cursor-wait bg-slate-800/40 text-yellow-300'
+                                  : 'bg-yellow-400/10 text-yellow-400 hover:bg-yellow-400/20'
+                              }`}
+                              title={
+                                clientDownloadProgress[order.id] !== undefined
+                                  ? `Sťahujem ${clientDownloadProgress[order.id]} %`
+                                  : order.client_file_name ? `Stiahnuť ${order.client_file_name}` : 'Stiahnuť súbor zákazníka'
+                              }
                             >
-                              <Download className="h-5 w-5" />
+                              {clientDownloadProgress[order.id] !== undefined && (
+                                <span
+                                  className="absolute inset-y-0 left-0 bg-yellow-400/30 transition-[width] duration-150"
+                                  style={{ width: `${clientDownloadProgress[order.id]}%` }}
+                                />
+                              )}
+                              <span className="relative text-xs font-bold tabular-nums">
+                                {clientDownloadProgress[order.id] !== undefined
+                                  ? `${clientDownloadProgress[order.id]}%`
+                                  : <Download className="h-5 w-5" />}
+                              </span>
                             </button>
                           ) : (
                             <span className={`${actionCell} cursor-not-allowed bg-slate-800/40 text-slate-500`} title="Súbor nie je k dispozícii">

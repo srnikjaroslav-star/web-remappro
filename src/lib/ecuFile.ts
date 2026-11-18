@@ -30,6 +30,34 @@ export const lightFileRef = (path?: string | null, name?: string | null) => {
   return null;
 };
 
+export const fetchBlobWithProgress = async (
+  href: string,
+  onProgress?: (percent: number) => void,
+  signal?: AbortSignal,
+) => {
+  const response = await fetch(href, { signal });
+  if (!response.ok) throw new Error('Súbor sa nepodarilo stiahnuť');
+  const total = Number(response.headers.get('Content-Length')) || 0;
+  if (!response.body) {
+    const blob = await response.blob();
+    onProgress?.(100);
+    return blob;
+  }
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value?.byteLength) continue;
+    chunks.push(value);
+    received += value.byteLength;
+    if (total > 0) onProgress?.(Math.min(99, Math.round((received / total) * 100)));
+  }
+  onProgress?.(100);
+  return new Blob(chunks as BlobPart[], { type: response.headers.get('Content-Type') || 'application/octet-stream' });
+};
+
 export const loadOrderFile = async (
   orderId: string,
   part: 'client' | 'result',

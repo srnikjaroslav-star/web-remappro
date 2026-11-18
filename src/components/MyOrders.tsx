@@ -5,7 +5,7 @@ import { useLanguage } from '@/i18n/LanguageContext';
 import type { TranslationKey } from '@/i18n/translations';
 import { SERVICES } from '@/data/services';
 import { loadServiceCatalog, lookupServiceName } from '@/lib/serviceCatalog';
-import { lightFileRef, loadOrderFile, orderFileLocation } from '@/lib/ecuFile';
+import { fetchBlobWithProgress, lightFileRef, loadOrderFile, orderFileLocation } from '@/lib/ecuFile';
 import { downloadStoredInvoice, readInvoiceMark } from '@/lib/orderInvoice';
 import { supabase } from '@/lib/supabase';
 
@@ -172,10 +172,24 @@ const MyOrders = ({ email, focusOrder = '' }: { email: string; focusOrder?: stri
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<Record<string, number>>({});
   const busy = useRef(false);
   const focusedKey = useRef('');
   const rowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
+  const downloadGen = useRef<Record<string, number>>({});
+  const downloadLock = useRef(new Set<string>());
   const downloadResult = async (order: ClientOrder) => {
+    if (downloadLock.current.has(order.id)) return;
+    downloadLock.current.add(order.id);
+    const generation = (downloadGen.current[order.id] ?? 0) + 1;
+    downloadGen.current[order.id] = generation;
+    const report = (percent: number) => {
+      if (downloadGen.current[order.id] !== generation) return;
+      setDownloadProgress((current) => ({ ...current, [order.id]: percent }));
+    };
+    setDownloadProgress((current) => ({ ...current, [order.id]: 0 }));
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 600000);
     try {
       const stored = await loadOrderFile(order.id, 'result', order.result_file_url);
       const located = stored ? orderFileLocation(stored) : null;
@@ -189,9 +203,7 @@ const MyOrders = ({ email, focusOrder = '' }: { email: string; focusOrder?: stri
           || supabase.storage.from(located.bucket).getPublicUrl(located.path).data.publicUrl;
       }
       if (!href) throw new Error('missing file');
-      const response = await fetch(href);
-      if (!response.ok) throw new Error('download failed');
-      const blob = await response.blob();
+      const blob = await fetchBlobWithProgress(href, report, controller.signal);
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -203,6 +215,16 @@ const MyOrders = ({ email, focusOrder = '' }: { email: string; focusOrder?: stri
     } catch (error) {
       console.error('Result download error:', error);
       toast.error(t('fileDownloadFailed'));
+    } finally {
+      window.clearTimeout(timer);
+      downloadLock.current.delete(order.id);
+      if (downloadGen.current[order.id] === generation) {
+        setDownloadProgress((current) => {
+          const next = { ...current };
+          delete next[order.id];
+          return next;
+        });
+      }
     }
   };
 
@@ -321,11 +343,27 @@ const MyOrders = ({ email, focusOrder = '' }: { email: string; focusOrder?: stri
           <p className="font-mono text-lg font-bold text-cyan-300">{orderLabel(focusedOrder)}</p>
           <button
             type="button"
+            disabled={downloadProgress[focusedOrder.id] !== undefined}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={downloadProgress[focusedOrder.id]}
             onClick={() => void downloadResult(focusedOrder)}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-primary bg-primary/20 px-4 text-sm font-bold uppercase tracking-wide text-primary shadow-[0_0_16px_rgba(0,242,255,0.35)] hover:bg-primary/30"
+            className={`relative inline-flex h-11 items-center justify-center gap-2 overflow-hidden rounded-md border border-primary bg-primary/20 px-4 text-sm font-bold uppercase tracking-wide text-primary shadow-[0_0_16px_rgba(0,242,255,0.35)] hover:bg-primary/30 ${downloadProgress[focusedOrder.id] !== undefined ? 'cursor-wait' : ''}`}
           >
-            <Download className="h-4 w-4" />
-            {t('downloadFile')}
+            {downloadProgress[focusedOrder.id] !== undefined && (
+              <span
+                className="absolute inset-y-0 left-0 bg-primary/30 transition-[width] duration-150"
+                style={{ width: `${downloadProgress[focusedOrder.id]}%` }}
+              />
+            )}
+            <span className="relative inline-flex items-center gap-2 tabular-nums">
+              {downloadProgress[focusedOrder.id] !== undefined ? `${downloadProgress[focusedOrder.id]}%` : (
+                <>
+                  <Download className="h-4 w-4" />
+                  {t('downloadFile')}
+                </>
+              )}
+            </span>
           </button>
         </div>
       ) : null}
@@ -412,15 +450,31 @@ const MyOrders = ({ email, focusOrder = '' }: { email: string; focusOrder?: stri
                     {order.status === 'completed' && order.result_file_url ? (
                       <button
                         type="button"
-                        title={order.result_file_name || t('downloadFile')}
+                        disabled={downloadProgress[order.id] !== undefined}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-valuenow={downloadProgress[order.id]}
+                        title={downloadProgress[order.id] !== undefined ? `${downloadProgress[order.id]} %` : order.result_file_name || t('downloadFile')}
                         onClick={(event) => {
                           event.stopPropagation();
                           void downloadResult(order);
                         }}
-                        className={`${action} border border-primary/40 bg-primary/10 text-primary hover:bg-primary/20`}
+                        className={`${action} relative overflow-hidden border border-primary/40 bg-primary/10 text-primary hover:bg-primary/20 ${downloadProgress[order.id] !== undefined ? 'cursor-wait' : ''}`}
                       >
-                        <Download className="h-4 w-4" />
-                        {t('downloadFile')}
+                        {downloadProgress[order.id] !== undefined && (
+                          <span
+                            className="absolute inset-y-0 left-0 bg-primary/30 transition-[width] duration-150"
+                            style={{ width: `${downloadProgress[order.id]}%` }}
+                          />
+                        )}
+                        <span className="relative inline-flex items-center gap-2 tabular-nums">
+                          {downloadProgress[order.id] !== undefined ? `${downloadProgress[order.id]}%` : (
+                            <>
+                              <Download className="h-4 w-4" />
+                              {t('downloadFile')}
+                            </>
+                          )}
+                        </span>
                       </button>
                     ) : (
                       <span className="text-xs text-slate-500">
