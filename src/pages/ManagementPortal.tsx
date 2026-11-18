@@ -302,10 +302,6 @@ const readAdminSection = (): AdminSection => {
 const issueCompletionInvoice = async (order: Order) => {
   const billing = await loadBillingByUserId(clientIdOf(order), order.customer_email || '');
   const person = [billing.firstName, billing.lastName].map((part) => part.trim()).filter(Boolean).join(' ');
-  const services = serviceList(order.service_type)
-    .map((id) => lookupServiceName(id) || SERVICES.find((item) => item.id === id)?.name || id)
-    .filter(Boolean)
-    .join(', ');
   const invoiceNumber = order.invoice_number?.trim()
     || `INV-${String(order.order_number || order.id.slice(0, 8)).replace(/^INV-/i, '').toUpperCase()}`;
   const file = await generateInvoicePdf({
@@ -322,9 +318,6 @@ const issueCompletionInvoice = async (order: Order) => {
       vatId: billing.vatId,
       taxId: billing.taxId,
     },
-    brand: order.car_brand || '',
-    model: order.car_model || '',
-    service: services || 'ECU tuning',
     price: Math.abs(Number(order.total_price) || 0),
   });
   return saveOrderInvoice({
@@ -368,8 +361,10 @@ const ManagementPortal = () => {
   const [financialStats, setFinancialStats] = useState<{ grossRevenue: number; todayRevenue: number } | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const [section, setSectionState] = useState<AdminSection>(readAdminSection);
+  const [clientsReload, setClientsReload] = useState(0);
   const setSection = (next: AdminSection) => {
     setSectionState(next);
+    if (next === 'clients') setClientsReload((value) => value + 1);
     window.localStorage.setItem(ADMIN_SECTION_KEY, next);
     const params = new URLSearchParams(searchParams);
     if (next === 'orders') params.delete('tab');
@@ -1486,7 +1481,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
             Otváracie hodiny
           </button>
         </div>
-        {section === 'clients' ? <ClientCredits onlineIds={onlineIds} /> : section === 'services' ? <AdminServices /> : section === 'hours' ? <OpeningHours /> : (
+        {section === 'clients' ? <ClientCredits onlineIds={onlineIds} reloadKey={clientsReload} /> : section === 'services' ? <AdminServices /> : section === 'hours' ? <OpeningHours /> : (
         <>
         <div className="mb-3 grid w-full grid-cols-6 gap-2">
           <div className="min-w-0 rounded-none border-t-4 border-t-white bg-[#0f172a] px-2.5 py-2 shadow-[inset_0_0_28px_rgba(255,255,255,0.2)]">

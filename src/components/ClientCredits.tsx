@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Search } from 'lucide-react';
 import { toast } from 'sonner';
@@ -44,6 +44,7 @@ const headChrome = 'sticky top-0 z-50 border-b border-primary/30 bg-[#0a192f] te
 
 type ClientCreditsProps = {
   onlineIds: ReadonlySet<string>;
+  reloadKey?: number;
 };
 
 type CreditDirection = 'add' | 'subtract';
@@ -55,7 +56,7 @@ type PendingCredit = {
 
 const amountField = 'h-11 w-full rounded-md border border-primary/70 bg-[#0a192f] px-3 text-center text-xl font-bold tabular-nums text-primary shadow-[0_0_16px_rgba(0,242,255,0.28)] placeholder:text-primary/50 focus:border-primary focus:outline-none focus:shadow-[0_0_16px_rgba(0,242,255,0.45)]';
 
-const ClientCredits = ({ onlineIds }: ClientCreditsProps) => {
+const ClientCredits = ({ onlineIds, reloadKey = 0 }: ClientCreditsProps) => {
   const [clients, setClients] = useState<ClientAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
@@ -64,9 +65,10 @@ const ClientCredits = ({ onlineIds }: ClientCreditsProps) => {
   const [adjustingId, setAdjustingId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activity, setActivity] = useState<Record<string, PortalActivity>>({});
+  const shown = useRef(false);
 
-  const loadClients = async () => {
-    setLoading(true);
+  const loadClients = async (silent = false) => {
+    if (!silent) setLoading(true);
     const { data: authData, error: authError } = await supabase.auth.getUser();
     const user = authData.user;
     if (authError || !user) {
@@ -98,7 +100,18 @@ const ClientCredits = ({ onlineIds }: ClientCreditsProps) => {
   };
 
   useEffect(() => {
-    loadClients();
+    const silent = shown.current;
+    shown.current = true;
+    void loadClients(silent);
+  }, [reloadKey]);
+
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState !== 'visible' || !shown.current) return;
+      void loadClients(true);
+    };
+    document.addEventListener('visibilitychange', refresh);
+    return () => document.removeEventListener('visibilitychange', refresh);
   }, []);
 
   const visible = useMemo(() => {
@@ -160,7 +173,10 @@ const ClientCredits = ({ onlineIds }: ClientCreditsProps) => {
     )));
     setPending(null);
     setAmount('');
-    if (saved) toast.success(pending.direction === 'add' ? 'Kredity boli pripísané.' : 'Kredity boli odrátané.');
+    if (saved) {
+      toast.success(pending.direction === 'add' ? 'Kredity boli pripísané.' : 'Kredity boli odrátané.');
+      await loadClients(true);
+    }
   };
 
   const confirmLabel = pending?.direction === 'subtract' ? 'Odrátať' : 'Pripísať';
