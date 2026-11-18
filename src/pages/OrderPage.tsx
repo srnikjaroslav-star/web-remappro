@@ -16,6 +16,7 @@ import {
   formatServicePrice,
   groupCatalog,
   loadServiceCatalog,
+  peekServiceCatalog,
   subscribeServiceCatalog,
   type CatalogService,
 } from '@/lib/serviceCatalog';
@@ -212,8 +213,9 @@ const OrderPage = () => {
     ecuType: '',
   });
   const [services, setServices] = useState<string[]>([]);
-  const [catalog, setCatalog] = useState<CatalogService[]>([]);
-  const [catalogStatus, setCatalogStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const knownCatalog = peekServiceCatalog();
+  const [catalog, setCatalog] = useState<CatalogService[]>(knownCatalog ?? []);
+  const [catalogStatus, setCatalogStatus] = useState<'loading' | 'ready' | 'error'>(knownCatalog ? 'ready' : 'loading');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [customerNote, setCustomerNote] = useState('');
 
@@ -855,8 +857,10 @@ const OrderPage = () => {
             ecu: vehicle.ecuType.trim(),
             fuel: vehicle.fuelType,
           }).select('id').maybeSingle();
-          if (inserted.data?.id) {
-            await supabase.from('orders').update({ language: language === 'en' ? 'EN' : 'SK' }).eq('id', inserted.data.id);
+          if (!inserted.data?.id) {
+            toast.error(t('creditPayFailed'));
+            setIsSubmitting(false);
+            return;
           }
           const nextBalance = Math.round((available - totalPrice) * 100) / 100;
           const charged = inserted.data?.id ? await saveCreditBalance(authUser.id, nextBalance) : false;

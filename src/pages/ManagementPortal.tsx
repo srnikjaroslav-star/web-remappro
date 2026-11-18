@@ -21,8 +21,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { useOnlineClients } from '@/lib/clientPresence';
-import { orderFileLocation, packOrderFile, RESULT_FILE_MARK, unpackOrderFile, uploadOrderFile } from '@/lib/ecuFile';
-import { downloadStoredInvoice, exportInvoiceArchive, invoiceLinksFor, mergeInvoice, readInvoiceMark, saveOrderInvoice } from '@/lib/orderInvoice';
+import { lightFileRef, loadOrderFile, orderFileLocation, packOrderFile, unpackOrderFile, uploadOrderFile } from '@/lib/ecuFile';
+import { downloadStoredInvoice, exportInvoiceArchive, readInvoiceMark, saveOrderInvoice } from '@/lib/orderInvoice';
 import { supabase } from '@/lib/supabase';
 import { statusAfterResultDelivery } from '@/lib/orderStatus';
 import { Order, ActivityLog, SUPABASE_ANON_KEY, SUPABASE_URL } from '@/integrations/supabase/client';
@@ -38,6 +38,15 @@ import OpeningHours from '@/components/OpeningHours';
 import InvoiceSettingsPanel from '@/components/InvoiceSettings';
 
 type RevenueOrder = { status?: string; total_price?: number | string | null; created_at?: string | null };
+type AdminSnapshot = { orders: Order[]; stats: { grossRevenue: number; todayRevenue: number } | null };
+let adminSnapshot: AdminSnapshot | null = null;
+
+const rememberAdmin = (patch: Partial<AdminSnapshot>) => {
+  adminSnapshot = {
+    orders: patch.orders ?? adminSnapshot?.orders ?? [],
+    stats: patch.stats === undefined ? adminSnapshot?.stats ?? null : patch.stats,
+  };
+};
 
 const pricedAmount = (order: RevenueOrder) => {
   if (order.status === 'cancelled') return 0;
@@ -160,11 +169,6 @@ const packAdminNote = (
     .join('\n');
 };
 
-const columnMissing = (error: { code?: string; message?: string } | null) =>
-  error?.code === '42703'
-  || error?.code === 'PGRST204'
-  || /column .* does not exist|schema cache/i.test(error?.message ?? '');
-
 const normalizeOrder = (row: StoredOrderRow, owner?: { name: string; email: string }): Order => {
   const packed = splitAdminNote(String(row.note ?? ''));
   const note = packed.visible;
@@ -187,7 +191,14 @@ const normalizeOrder = (row: StoredOrderRow, owner?: { name: string; email: stri
     service_type: services,
     total_price: Number(row.total_price || 0),
     status: row.status || 'pending',
-    file_url: row.file_url ?? null,
+    file_url: lightFileRef(row.client_file_path, row.client_file_name)
+      ?? lightFileRef(row.file_url, row.file_url ? 'file' : null),
+    result_file_url: lightFileRef(row.result_file_path, row.result_file_name)
+      ?? lightFileRef(row.result_file_url, row.result_file_url ? 'file' : null),
+    client_file_name: row.client_file_name ?? null,
+    client_file_path: row.client_file_path ?? null,
+    result_file_name: row.result_file_name ?? null,
+    result_file_path: row.result_file_path ?? null,
     customer_note: row.customer_note || (taggedNumber ? lines.slice(1).join('\n').trim() : note.trim()) || null,
     checksum_crc: row.checksum_crc || packed.crc || null,
     important_note: row.important_note || packed.important || null,
@@ -206,6 +217,32 @@ const blobFromDataUrl = (dataUrl: string) => {
   const bytes = new Uint8Array(binary.length);
   for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
   return new Blob([bytes], { type: mime });
+};
+
+const DIRECT_ORDER_PAYLOAD = 1_500_000;
+
+const saveOrderResult = async (orderId: string, storedResult: string, nextStatus: string) => {
+  const { error } = await supabase.rpc('attach_order_result', {
+    p_order_id: orderId,
+    p_result: storedResult,
+    p_status: nextStatus,
+  });
+  if (!error) return;
+  const missing = error.code === 'PGRST202'
+    || error.code === '42883'
+    || /attach_order_result|could not find the function/i.test(error.message || '');
+  if (!missing) throw new Error(error.message || 'Hotový súbor sa nepodarilo zapísať k objednávke');
+  const current = await supabase.from('orders').select('file_url').eq('id', orderId).maybeSingle();
+  if (current.error) throw current.error;
+  const packed = packOrderFile(unpackOrderFile(current.data?.file_url || '').clientFile, storedResult);
+  if (packed.length > DIRECT_ORDER_PAYLOAD) {
+    throw new Error('Hotový súbor je uložený v úložisku, ale objednávku sa nepodarilo prepojiť.');
+  }
+  const updated = await supabase.from('orders').update({
+    file_url: packed,
+    status: nextStatus,
+  }).eq('id', orderId);
+  if (updated.error) throw updated.error;
 };
 
 const saveBlob = (blob: Blob, filename: string) => {
@@ -230,15 +267,7 @@ const inlineDownload = (stored: string, fallbackName: string) => {
 };
 
 const downloadOrderPart = async (orderId: string, part: 'client' | 'result', hint: string, fallbackName: string) => {
-  let packed = hint && hint !== 'stored' ? hint : '';
-  const hintIsFile = packed.startsWith('inline:') || packed.startsWith('data:') || packed.startsWith('http') || packed.includes(RESULT_FILE_MARK);
-  if (!hintIsFile) {
-    const { data, error } = await supabase.from('orders').select('file_url').eq('id', orderId).maybeSingle();
-    if (error) throw error;
-    packed = data?.file_url || '';
-  }
-  const unpacked = unpackOrderFile(packed);
-  const stored = part === 'result' ? unpacked.resultFile : unpacked.clientFile;
+  const stored = await loadOrderFile(orderId, part, hint);
   if (!stored) {
     toast.error(part === 'result' ? 'Hotový súbor nie je k dispozícii' : 'Nepodarilo sa vytvoriť URL pre sťahovanie');
     return;
@@ -271,7 +300,7 @@ const downloadOrderPart = async (orderId: string, part: 'client' | 'result', hin
   let lastError = null;
   for (const href of candidates) {
     const controller = new AbortController();
-    const timer = window.setTimeout(() => controller.abort(), 20000);
+    const timer = window.setTimeout(() => controller.abort(), 600000);
     try {
       const response = await fetch(href, { signal: controller.signal });
       if (!response.ok) throw new Error('Súbor sa nepodarilo stiahnuť');
@@ -334,11 +363,12 @@ const issueCompletionInvoice = async (order: Order) => {
 
 const ManagementPortal = () => {
   const navigate = useNavigate();
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [orders, setOrders] = useState<Order[]>(() => adminSnapshot?.orders ?? []);
+  const [loading, setLoading] = useState(() => !adminSnapshot);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [accountingOpen, setAccountingOpen] = useState(false);
   const [exportFrom, setExportFrom] = useState('');
   const [exportTo, setExportTo] = useState('');
@@ -347,6 +377,8 @@ const ManagementPortal = () => {
   const [exportBusy, setExportBusy] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pendingUploadId = useRef<string | null>(null);
+  const uploadLock = useRef<string | null>(null);
+  const uploadGeneration = useRef(0);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [activeRowId, setActiveRowId] = useState<string | null>(null);
   const [editingFields, setEditingFields] = useState<Record<string, { checksum_crc: string; internal_note: string; important_note: string }>>({});
@@ -359,9 +391,10 @@ const ManagementPortal = () => {
   const [detailOrder, setDetailOrder] = useState<Order | null>(null);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
-  const [financialStats, setFinancialStats] = useState<{ grossRevenue: number; todayRevenue: number } | null>(null);
+  const [financialStats, setFinancialStats] = useState<{ grossRevenue: number; todayRevenue: number } | null>(() => adminSnapshot?.stats ?? null);
   const [searchParams, setSearchParams] = useSearchParams();
   const [section, setSectionState] = useState<AdminSection>(readAdminSection);
+  const [visited, setVisited] = useState<AdminSection[]>(() => [readAdminSection()]);
   const [clientsReload, setClientsReload] = useState(0);
   const setSection = (next: AdminSection) => {
     setSectionState(next);
@@ -377,12 +410,15 @@ const ManagementPortal = () => {
     const fromUrl = parseAdminSection(searchParams.get('tab'));
     if (fromUrl) setSectionState(fromUrl);
   }, [searchParams]);
+  useEffect(() => {
+    setVisited((current) => (current.includes(section) ? current : [...current, section]));
+  }, [section]);
   const onlineIds = useOnlineClients(!isCheckingAuth);
   const [cancelConfirmOrder, setCancelConfirmOrder] = useState<Order | null>(null);
   const [cancellingOrder, setCancellingOrder] = useState(false);
   const orderOwnerRef = useRef<{ id: string; name: string; email: string }>({ id: '', name: '', email: '' });
   const ordersBusy = useRef(false);
-  const ordersSeen = useRef(false);
+  const ordersSeen = useRef(adminSnapshot !== null);
 
   // Check authentication on mount - only allow specific email
   useEffect(() => {
@@ -495,41 +531,28 @@ const ManagementPortal = () => {
       const { data: { session } } = await supabase.auth.getSession();
       const user = session?.user ?? null;
       if (!user) return;
-      const billing = await loadClientBilling(user);
+      const listBase = 'id, user_id, created_at, vehicle_brand, vehicle_model, vehicle_year, engine, ecu, fuel, services, total_price, status, note';
+      let listQuery = supabase.from('orders').select(listBase).order('created_at', { ascending: false });
+      if (user.id) listQuery = listQuery.eq('user_id', user.id);
+      const [billing, listed] = await Promise.all([
+        loadClientBilling(user),
+        listQuery,
+      ]);
+      if (listed.error) throw listed.error;
       const owner = {
-        id: user?.id || '',
+        id: user.id || '',
         name: billing ? orderDisplayName(billing) : '',
-        email: billing?.email?.trim() || user?.email || '',
+        email: billing?.email?.trim() || user.email || '',
       };
       orderOwnerRef.current = owner;
-
-      const columns = 'id, user_id, created_at, vehicle_brand, vehicle_model, vehicle_year, engine, ecu, fuel, services, total_price, status, note, checksum_crc, important_note';
-      let request = supabase.from('orders').select(columns).order('created_at', { ascending: false });
-      if (owner.id) request = request.eq('user_id', owner.id);
-      let result = await request;
-      if (result.error) {
-        let fallback = supabase.from('orders').select('id, user_id, created_at, vehicle_brand, vehicle_model, vehicle_year, engine, ecu, fuel, services, total_price, status, note').order('created_at', { ascending: false });
-        if (owner.id) fallback = fallback.eq('user_id', owner.id);
-        result = await fallback;
-      }
-      const { data, error } = result;
-
-      if (error) throw error;
-      let fileRequest = supabase.from('orders').select('id').not('file_url', 'is', null);
-      if (owner.id) fileRequest = fileRequest.eq('user_id', owner.id);
-      const files = await fileRequest;
-      const withFile = new Set((files.data || []).map((row) => row.id));
-      let resultRequest = supabase.from('orders').select('id').like('file_url', `%${RESULT_FILE_MARK}%`);
-      if (owner.id) resultRequest = resultRequest.eq('user_id', owner.id);
-      const results = await resultRequest;
-      const withResult = new Set((results.data || []).map((row) => row.id));
-      const links = await invoiceLinksFor(((data || []) as StoredOrderRow[]).map((row) => row.id));
-      ordersSeen.current = true;
-      setOrders(((data || []) as StoredOrderRow[]).map((row) => normalizeOrder(mergeInvoice({
+      const next = ((listed.data || []) as StoredOrderRow[]).map((row) => normalizeOrder({
         ...row,
-        file_url: row.file_url || (withFile.has(row.id) ? 'stored' : null),
-        result_file_url: row.result_file_url || (withResult.has(row.id) ? 'stored' : null),
-      }, links.get(row.id)), owner)));
+        file_url: 'stored',
+        result_file_url: row.status === 'completed' ? 'stored' : null,
+      }, owner));
+      ordersSeen.current = true;
+      setOrders(next);
+      rememberAdmin({ orders: next });
     } catch (error) {
       console.error('Fetch error:', error);
       if (!silent) toast.error('Failed to fetch orders');
@@ -542,8 +565,7 @@ const ManagementPortal = () => {
   useEffect(() => {
     if (isCheckingAuth) return;
 
-    fetchOrders();
-    calculateFinancialStats();
+    void Promise.all([fetchOrders(), calculateFinancialStats()]);
 
     const refresh = () => {
       fetchOrders(true);
@@ -717,42 +739,10 @@ const ManagementPortal = () => {
   };
 
   // Log activity function
-  const logActivity = async (orderId: string, action: string, details: Record<string, any>, adminId?: string) => {
-    try {
-      const { error } = await supabase
-        .from('activity_logs')
-        .insert({
-          order_id: orderId,
-          action,
-          details,
-          admin_id: adminId || 'system',
-        });
-      
-      if (error) {
-        console.error('[logActivity] Failed to log activity:', error);
-      } else {
-        console.log('[logActivity] Activity logged:', { orderId, action, details });
-      }
-    } catch (err) {
-      console.error('[logActivity] Error logging activity:', err);
-    }
-  };
+  const logActivity = async (_orderId: string, _action: string, _details: Record<string, any>, _adminId?: string) => {};
 
-  // Fetch activity logs for an order
-  const fetchActivityLogs = async (orderId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('activity_logs')
-        .select('*')
-        .eq('order_id', orderId)
-        .order('created_at', { ascending: false });
-      
-      if (error) throw error;
-      setActivityLogs((data || []) as ActivityLog[]);
-    } catch (error) {
-      console.error('[fetchActivityLogs] Error fetching activity logs:', error);
-      setActivityLogs([]);
-    }
+  const fetchActivityLogs = async (_orderId: string) => {
+    setActivityLogs([]);
   };
 
   // Calculate financial statistics
@@ -769,10 +759,12 @@ const ManagementPortal = () => {
 
       if (error) throw error;
 
-      setFinancialStats({
+      const next = {
         grossRevenue: orderRevenue(ordersData),
         todayRevenue: todayOrderRevenue(ordersData),
-      });
+      };
+      setFinancialStats(next);
+      rememberAdmin({ stats: next });
     } catch (error) {
       console.error('[calculateFinancialStats] Error calculating stats:', error);
     }
@@ -982,10 +974,6 @@ const ManagementPortal = () => {
     field: 'checksum_crc' | 'important_note',
     value: string | null,
   ) => {
-    const columnUpdate = await supabase.from('orders').update({ [field]: value }).eq('id', orderId).select('id');
-    if (!columnUpdate.error) return;
-    if (!columnMissing(columnUpdate.error)) throw columnUpdate.error;
-
     const existing = await supabase.from('orders').select('note').eq('id', orderId).maybeSingle();
     if (existing.error) throw existing.error;
     const note = packAdminNote(String(existing.data?.note ?? ''), field, value);
@@ -1085,63 +1073,49 @@ const ManagementPortal = () => {
       return;
     }
     
-    // Prevent multiple uploads - set uploading state immediately
-    if (uploadingId === orderId) {
-      console.warn('[handleResultUpload] Upload already in progress for order:', orderId);
-      return;
-    }
-    
+    if (uploadLock.current) return;
+
+    const generation = ++uploadGeneration.current;
+    uploadLock.current = orderId;
     setUploadingId(orderId);
+    setUploadProgress(0);
     let chargedUpload: { userId: string; price: number } | null = null;
-    
-    // Reset file input to allow same file selection again
-    if (e.target) {
-      e.target.value = '';
-    }
-    
+    let savedOrder: Order | null = null;
+
+    if (e.target) e.target.value = '';
+
     try {
       const currentOrder = orders.find(o => o.id === orderId);
       if (currentOrder?.status === 'cancelled') {
-        console.warn('[handleResultUpload] Order is CANCELLED - aborting invoice generation');
         toast.error('Cannot upload result file for cancelled order');
-        setUploadingId(null);
         return;
       }
 
       const { data: { session } } = await supabase.auth.getSession();
-      const storedResult = await uploadOrderFile(file, session?.user?.id || 'admin');
-      const existing = await supabase.from('orders').select('file_url, user_id, total_price').eq('id', orderId).maybeSingle();
+      const storedResult = await uploadOrderFile(file, session?.user?.id || 'admin', {
+        onProgress: (ratio) => {
+          if (uploadGeneration.current !== generation) return;
+          setUploadProgress(Math.min(99, Math.round(ratio * 100)));
+        },
+      });
+      const existing = await supabase.from('orders').select('user_id, total_price').eq('id', orderId).maybeSingle();
       if (existing.error) throw existing.error;
-      const storedFileUrl = existing.data?.file_url || '';
       const billable: BillableOrder = {
         user_id: existing.data?.user_id || clientIdOf(currentOrder),
         total_price: existing.data?.total_price ?? currentOrder?.total_price,
         invoice_number: currentOrder?.invoice_number,
         result_file_url: currentOrder?.result_file_url,
-        file_url: storedFileUrl,
+        file_url: currentOrder?.file_url,
       };
-      const rebill = repeatWorkCompletion(billable, storedFileUrl);
+      const rebill = repeatWorkCompletion(billable);
       const charge = rebill ? await chargeRepeatCompletion(billable) : { ok: true, charged: false, price: 0 };
       if (charge.charged) chargedUpload = { userId: clientIdOf(billable), price: charge.price };
-      if (!charge.ok) {
-        setUploadingId(null);
-        pendingUploadId.current = null;
-        setSelectedOrderId(null);
-        return;
-      }
-      const packedFile = packOrderFile(unpackOrderFile(storedFileUrl).clientFile, storedResult);
+      if (!charge.ok || uploadGeneration.current !== generation) return;
       const nextStatus = statusAfterResultDelivery(currentOrder?.status ?? 'pending');
+      await saveOrderResult(orderId, storedResult, nextStatus);
+      if (uploadGeneration.current !== generation) return;
 
-      const { error: updateError } = await supabase
-        .from('orders')
-        .update({
-          file_url: packedFile,
-          status: nextStatus,
-        })
-        .eq('id', orderId);
-
-      if (updateError) throw updateError;
-
+      setUploadProgress(100);
       setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: nextStatus, result_file_url: 'stored' } : o));
       setDetailOrder(current => current?.id === orderId ? { ...current, status: nextStatus, result_file_url: 'stored' } : current);
       toast.success(
@@ -1150,33 +1124,41 @@ const ManagementPortal = () => {
           : 'Stav zmenený na: Dokončené',
       );
       if (currentOrder && nextStatus === 'completed') notifyStatusChange(currentOrder, 'completed');
-
-      if (currentOrder && nextStatus === 'completed' && !currentOrder.invoice_url) {
-        try {
-          const saved = await issueCompletionInvoice(currentOrder);
-          setOrders((prev) => prev.map((item) => (item.id === currentOrder.id ? { ...item, ...saved } : item)));
-          setDetailOrder((current) => (current?.id === currentOrder.id ? { ...current, ...saved } : current));
-        } catch (invoiceError) {
-          console.error('[handleResultUpload] Invoice generation error (non-fatal):', invoiceError);
-          toast.warning('Objednávka je dokončená. Faktúru sa nepodarilo vygenerovať.');
-        }
-      }
-
-      setUploadingId(null);
-      pendingUploadId.current = null;
-      setSelectedOrderId(null);
-      void fetchOrders(true);
+      savedOrder = currentOrder && nextStatus === 'completed' ? currentOrder : null;
     } catch (error) {
       console.error('[handleResultUpload] Upload error:', error);
+      if (uploadGeneration.current !== generation) return;
+      uploadLock.current = null;
+      setUploadingId((current) => (current === orderId ? null : current));
+      setUploadProgress(null);
+      const detail = error instanceof Error ? error.message.replace(/\s+/g, ' ').trim().slice(0, 180) : '';
+      toast.error(detail ? `Hotový súbor sa nepodarilo uložiť. ${detail}` : 'Hotový súbor sa nepodarilo uložiť');
       if (chargedUpload?.userId) {
         const restored = await restoreClientCredits(chargedUpload.userId, chargedUpload.price);
         if (!restored) toast.error('Súbor sa nepodarilo uložiť a strhnuté kredity sa nepodarilo vrátiť.');
       }
-      toast.error('Hotový súbor sa nepodarilo uložiť');
-      setUploadingId(null);
+    } finally {
+      if (uploadGeneration.current !== generation) return;
+      uploadLock.current = null;
+      setUploadingId((current) => (current === orderId ? null : current));
+      setUploadProgress(null);
       pendingUploadId.current = null;
       setSelectedOrderId(null);
     }
+
+    if (!savedOrder || savedOrder.invoice_url) {
+      if (savedOrder) void fetchOrders(true);
+      return;
+    }
+    try {
+      const saved = await issueCompletionInvoice(savedOrder);
+      setOrders((prev) => prev.map((item) => (item.id === savedOrder.id ? { ...item, ...saved } : item)));
+      setDetailOrder((current) => (current?.id === savedOrder.id ? { ...current, ...saved } : current));
+    } catch (invoiceError) {
+      console.error('[handleResultUpload] Invoice generation error (non-fatal):', invoiceError);
+      toast.warning('Objednávka je dokončená. Faktúru sa nepodarilo vygenerovať.');
+    }
+    void fetchOrders(true);
   };
 
   const handleResultDownload = async (order: Order) => {
@@ -1489,7 +1471,19 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
             Faktúry
           </button>
         </div>
-        {section === 'clients' ? <ClientCredits onlineIds={onlineIds} reloadKey={clientsReload} /> : section === 'services' ? <AdminServices /> : section === 'hours' ? <OpeningHours /> : section === 'invoices' ? <InvoiceSettingsPanel /> : (
+        <div hidden={section !== 'clients'}>
+          {visited.includes('clients') || section === 'clients' ? <ClientCredits onlineIds={onlineIds} reloadKey={clientsReload} /> : null}
+        </div>
+        <div hidden={section !== 'services'}>
+          {visited.includes('services') || section === 'services' ? <AdminServices /> : null}
+        </div>
+        <div hidden={section !== 'hours'}>
+          {visited.includes('hours') || section === 'hours' ? <OpeningHours /> : null}
+        </div>
+        <div hidden={section !== 'invoices'}>
+          {visited.includes('invoices') || section === 'invoices' ? <InvoiceSettingsPanel /> : null}
+        </div>
+        <div hidden={section !== 'orders'}>
         <>
         <div className="mb-3 grid w-full grid-cols-6 gap-2">
           <div className="min-w-0 rounded-none border-t-4 border-t-white bg-[#0f172a] px-2.5 py-2 shadow-[inset_0_0_28px_rgba(255,255,255,0.2)]">
@@ -1703,7 +1697,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                             <button
                               onClick={() => void handleClientFileDownload(order)}
                               className={`${actionCell} bg-yellow-400/10 text-yellow-400 hover:bg-yellow-400/20`}
-                              title="Stiahnuť súbor zákazníka"
+                              title={order.client_file_name ? `Stiahnuť ${order.client_file_name}` : 'Stiahnuť súbor zákazníka'}
                             >
                               <Download className="h-5 w-5" />
                             </button>
@@ -1720,20 +1714,33 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                             <button
                               onClick={() => triggerUpload(order.id)}
                               disabled={uploadingId === order.id || (order.status !== 'pending' && order.status !== 'processing')}
-                              className={`${actionCell} ${
-                                uploadingId === order.id || (order.status !== 'pending' && order.status !== 'processing')
-                                  ? 'cursor-not-allowed bg-slate-800/40 text-slate-500'
-                                  : 'bg-emerald-400/10 text-emerald-400 hover:bg-emerald-400/20'
+                              aria-valuemin={0}
+                              aria-valuemax={100}
+                              aria-valuenow={uploadingId === order.id ? uploadProgress ?? 0 : undefined}
+                              className={`${actionCell} relative overflow-hidden ${
+                                uploadingId === order.id
+                                  ? 'cursor-wait bg-slate-800/40 text-emerald-300'
+                                  : order.status !== 'pending' && order.status !== 'processing'
+                                    ? 'cursor-not-allowed bg-slate-800/40 text-slate-500'
+                                    : 'bg-emerald-400/10 text-emerald-400 hover:bg-emerald-400/20'
                               }`}
                               title={
                                 uploadingId === order.id
-                                  ? 'Odosielam...'
+                                  ? `Odosielam ${uploadProgress ?? 0} %`
                                   : order.status === 'pending' || order.status === 'processing'
                                     ? 'Nahrať hotový súbor'
                                     : 'Súbor sa dá odoslať vo stave Čakajúce alebo V procese'
                               }
                             >
-                              <Upload className={`h-5 w-5 ${uploadingId === order.id ? 'animate-pulse' : ''}`} />
+                              {uploadingId === order.id && (
+                                <span
+                                  className="absolute inset-y-0 left-0 bg-emerald-400/30 transition-[width] duration-150"
+                                  style={{ width: `${uploadProgress ?? 0}%` }}
+                                />
+                              )}
+                              <span className="relative text-xs font-bold tabular-nums">
+                                {uploadingId === order.id ? `${uploadProgress ?? 0}%` : <Upload className="h-5 w-5" />}
+                              </span>
                             </button>
                           )}
                           <button
@@ -1765,7 +1772,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
           </div>
         </div>
         </>
-        )}
+        </div>
 
         {accountingOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">

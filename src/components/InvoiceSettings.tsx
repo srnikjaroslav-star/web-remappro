@@ -1,8 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import {
-  defaultInvoiceSettings,
-  loadInvoiceSettings,
+  peekInvoiceSettings,
   saveInvoiceSettings,
   type InvoiceSettings,
 } from '@/lib/invoiceSettings';
@@ -18,21 +17,8 @@ const draftFrom = (settings: InvoiceSettings) => ({
 });
 
 const InvoiceSettingsPanel = () => {
-  const [draft, setDraft] = useState(() => draftFrom(defaultInvoiceSettings()));
-  const [loading, setLoading] = useState(true);
+  const [draft, setDraft] = useState(() => draftFrom(peekInvoiceSettings()));
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    loadInvoiceSettings().then((settings) => {
-      if (!active) return;
-      setDraft(draftFrom(settings));
-      setLoading(false);
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
 
   const update = (field: keyof ReturnType<typeof draftFrom>, value: string) => {
     setDraft((current) => ({ ...current, [field]: value }));
@@ -79,7 +65,7 @@ const InvoiceSettingsPanel = () => {
           <input
             value={draft.itemName}
             onChange={(event) => update('itemName', event.target.value)}
-            disabled={loading || saving}
+            disabled={saving}
             maxLength={180}
             className={fieldClass}
           />
@@ -90,7 +76,7 @@ const InvoiceSettingsPanel = () => {
             <input
               value={draft.iban}
               onChange={(event) => update('iban', event.target.value)}
-              disabled={loading || saving}
+              disabled={saving}
               maxLength={42}
               className={fieldClass}
             />
@@ -100,7 +86,7 @@ const InvoiceSettingsPanel = () => {
             <input
               value={draft.swift}
               onChange={(event) => update('swift', event.target.value)}
-              disabled={loading || saving}
+              disabled={saving}
               maxLength={11}
               className={fieldClass}
             />
@@ -111,7 +97,7 @@ const InvoiceSettingsPanel = () => {
           <input
             value={draft.dueDays}
             onChange={(event) => update('dueDays', event.target.value)}
-            disabled={loading || saving}
+            disabled={saving}
             inputMode="numeric"
             className={fieldClass}
           />
@@ -121,7 +107,7 @@ const InvoiceSettingsPanel = () => {
         <button
           type="button"
           onClick={save}
-          disabled={loading || saving}
+          disabled={saving}
           className="inline-flex h-[42px] items-center rounded-none border border-primary/80 bg-primary/10 px-4 text-sm font-bold uppercase tracking-wide text-primary shadow-[0_0_14px_rgba(0,242,255,0.32)] transition-colors hover:border-primary hover:bg-primary/16 hover:shadow-[0_0_16px_rgba(0,242,255,0.42)] disabled:opacity-60"
         >
           Uložiť

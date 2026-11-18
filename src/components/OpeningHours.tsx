@@ -223,10 +223,12 @@ const weekday = (open: boolean, from = '08:00', to = '20:00'): OpeningSchedule =
   return schedule;
 };
 
+let hoursCache: SystemSettings | null = null;
+
 const OpeningHours = () => {
-  const [live, setLive] = useState<SystemSettings>({ mode: 'auto', schedule: defaultSchedule() });
-  const [draft, setDraft] = useState<OpeningSchedule>(defaultSchedule());
-  const [loading, setLoading] = useState(true);
+  const [live, setLive] = useState<SystemSettings>(hoursCache ?? { mode: 'auto', schedule: defaultSchedule() });
+  const [draft, setDraft] = useState<OpeningSchedule>(hoursCache?.schedule ?? defaultSchedule());
+  const [loading, setLoading] = useState(!hoursCache);
   const [saving, setSaving] = useState(false);
   const [modeBusy, setModeBusy] = useState(false);
 
@@ -235,6 +237,7 @@ const OpeningHours = () => {
     fetchSystemSettings().then((settings) => {
       if (!active) return;
       if (settings) {
+        hoursCache = settings;
         setLive(settings);
         setDraft(settings.schedule);
       }

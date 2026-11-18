@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { catalogCategories, loadServiceCatalog, notifyServiceCatalogChanged, subscribeServiceCatalog, type CatalogService } from '@/lib/serviceCatalog';
+import { catalogCategories, loadServiceCatalog, notifyServiceCatalogChanged, peekServiceCatalog, subscribeServiceCatalog, type CatalogService } from '@/lib/serviceCatalog';
 import { supabase } from '@/lib/supabase';
 
 type Draft = {
@@ -39,14 +39,12 @@ const readPrice = (value: string) => {
   return price;
 };
 
-const missingTable = (error: { code?: string } | null) =>
-  error?.code === 'PGRST205' || error?.code === '42P01';
-
 const fieldClass = 'h-11 w-full rounded-md border border-primary/70 bg-[#0a192f] px-3 text-sm text-foreground shadow-[0_0_16px_rgba(0,242,255,0.28)] focus:border-primary focus:outline-none focus:shadow-[0_0_16px_rgba(0,242,255,0.45)]';
 
 const AdminServices = () => {
-  const [services, setServices] = useState<CatalogService[]>([]);
-  const [loading, setLoading] = useState(true);
+  const knownCatalog = peekServiceCatalog();
+  const [services, setServices] = useState<CatalogService[]>(knownCatalog ?? []);
+  const [loading, setLoading] = useState(!knownCatalog);
   const [query, setQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [draft, setDraft] = useState<Draft>(emptyDraft);
@@ -59,7 +57,7 @@ const AdminServices = () => {
 
   const reload = async () => {
     try {
-      setServices(await loadServiceCatalog());
+      setServices(await loadServiceCatalog(true));
     } catch {
       toast.error('Služby sa nepodarilo načítať.');
     } finally {
@@ -136,15 +134,7 @@ const AdminServices = () => {
       toast.error(saved.error?.code === '42501' ? 'Na úpravu služieb nemáte oprávnenie.' : 'Službu sa nepodarilo uložiť.');
       return;
     }
-    const details = await supabase.from('service_details').upsert(
-      { service_id: serviceId, description: current.description.trim(), updated_at: new Date().toISOString() },
-      { onConflict: 'service_id' },
-    );
     setBusy(false);
-    if (details.error && !missingTable(details.error)) {
-      toast.error('Službu sa nepodarilo uložiť.');
-      return;
-    }
     toast.success(current.id ? 'Služba bola upravená.' : 'Služba bola pridaná.');
     if (current.id) cancelEdit();
     else closeCreate();
@@ -161,11 +151,10 @@ const AdminServices = () => {
     const service = pendingDelete;
     if (!service) return;
     setBusy(true);
-    const details = await supabase.from('service_details').delete().eq('service_id', service.id);
     const removed = await supabase.from('services').delete().eq('id', service.id).select('id').maybeSingle();
     setBusy(false);
     setPendingDelete(null);
-    if ((details.error && !missingTable(details.error)) || removed.error || !removed.data?.id) {
+    if (removed.error || !removed.data?.id) {
       toast.error('Službu sa nepodarilo zmazať.');
       return;
     }

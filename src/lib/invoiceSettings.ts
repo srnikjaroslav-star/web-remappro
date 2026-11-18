@@ -1,5 +1,3 @@
-import { supabase } from '@/lib/supabase';
-
 export type InvoiceSettings = {
   itemName: string;
   iban: string;
@@ -7,7 +5,6 @@ export type InvoiceSettings = {
   dueDays: number;
 };
 
-const SETTINGS_KEY = 'invoice';
 const CACHE_KEY = 'remappro-invoice-settings';
 
 export const defaultInvoiceSettings = (): InvoiceSettings => ({
@@ -32,26 +29,9 @@ export const normalizeInvoiceSettings = (value: unknown): InvoiceSettings => {
   };
 };
 
-const withTimeout = async <T>(promise: PromiseLike<T>, ms = 8000): Promise<T> => {
-  let timer: number | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = window.setTimeout(() => reject(new Error('timeout')), ms);
-  });
-  try {
-    return await Promise.race([promise, timeout]);
-  } finally {
-    window.clearTimeout(timer);
-  }
-};
-
 type StoredInvoiceSettings = {
   settings: InvoiceSettings;
   savedAt: string;
-};
-
-const savedAtMs = (value: string) => {
-  const ms = Date.parse(value);
-  return Number.isFinite(ms) ? ms : 0;
 };
 
 const readCache = (): StoredInvoiceSettings | null => {
@@ -81,45 +61,12 @@ const writeCache = (settings: InvoiceSettings, savedAt: string): boolean => {
   }
 };
 
-export const loadInvoiceSettings = async (): Promise<InvoiceSettings> => {
-  const cached = readCache();
-  try {
-    const { data, error } = await withTimeout(supabase
-      .from('system_settings')
-      .select('value, updated_at')
-      .eq('key', SETTINGS_KEY)
-      .maybeSingle());
-    if (!error && data?.value) {
-      const remoteUpdated = typeof data.updated_at === 'string' ? data.updated_at : '';
-      if (cached && savedAtMs(cached.savedAt) > savedAtMs(remoteUpdated)) {
-        return cached.settings;
-      }
-      const settings = normalizeInvoiceSettings(data.value);
-      writeCache(settings, remoteUpdated || new Date().toISOString());
-      return settings;
-    }
-  } catch {
-    // Use the last saved copy when the settings table cannot be read.
-  }
-  return cached?.settings ?? defaultInvoiceSettings();
-};
+export const peekInvoiceSettings = (): InvoiceSettings =>
+  readCache()?.settings ?? defaultInvoiceSettings();
+
+export const loadInvoiceSettings = async (): Promise<InvoiceSettings> => peekInvoiceSettings();
 
 export const saveInvoiceSettings = async (settings: InvoiceSettings): Promise<boolean> => {
   const next = normalizeInvoiceSettings(settings);
-  const savedAt = new Date().toISOString();
-  let remoteOk = false;
-  try {
-    const { error } = await withTimeout(supabase
-      .from('system_settings')
-      .upsert({
-        key: SETTINGS_KEY,
-        value: next,
-        updated_at: savedAt,
-      }, { onConflict: 'key' }));
-    remoteOk = !error;
-  } catch {
-    remoteOk = false;
-  }
-  const localOk = writeCache(next, savedAt);
-  return remoteOk || localOk;
+  return writeCache(next, new Date().toISOString());
 };

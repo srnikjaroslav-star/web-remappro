@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://huswisewblkfcozdgvrq.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_ZgmjzJk8vZ84-X7T7sC86gX_1m42L6I9';
+export const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://huswisewblkfcozdgvrq.supabase.co';
+export const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_ZgmjzJk8vZ84-X7T7sC86gX_1m42L6I9';
 
 if (!supabaseUrl) {
   throw new Error('Missing VITE_SUPABASE_URL environment variable');

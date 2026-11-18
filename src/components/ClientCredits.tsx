@@ -56,31 +56,37 @@ type PendingCredit = {
 
 const amountField = 'h-11 w-full rounded-md border border-primary/70 bg-[#0a192f] px-3 text-center text-xl font-bold tabular-nums text-primary shadow-[0_0_16px_rgba(0,242,255,0.28)] placeholder:text-primary/50 focus:border-primary focus:outline-none focus:shadow-[0_0_16px_rgba(0,242,255,0.45)]';
 
+type ClientsCache = { clients: ClientAccount[]; activity: Record<string, PortalActivity> };
+let clientsCache: ClientsCache | null = null;
+
 const ClientCredits = ({ onlineIds, reloadKey = 0 }: ClientCreditsProps) => {
-  const [clients, setClients] = useState<ClientAccount[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [clients, setClients] = useState<ClientAccount[]>(clientsCache?.clients ?? []);
+  const [loading, setLoading] = useState(!clientsCache);
   const [query, setQuery] = useState('');
   const [amount, setAmount] = useState('');
   const [pending, setPending] = useState<PendingCredit | null>(null);
   const [adjustingId, setAdjustingId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [activity, setActivity] = useState<Record<string, PortalActivity>>({});
+  const [activity, setActivity] = useState<Record<string, PortalActivity>>(clientsCache?.activity ?? {});
   const shown = useRef(false);
 
   const loadClients = async (silent = false) => {
-    if (!silent) setLoading(true);
+    if (!silent && !clientsCache) setLoading(true);
     const { data: authData, error: authError } = await supabase.auth.getUser();
     const user = authData.user;
     if (authError || !user) {
       toast.error('Klientov sa nepodarilo načítať.');
-      setClients([]);
+      if (!clientsCache) setClients([]);
       setLoading(false);
       return;
     }
 
-    const billing = await loadClientBilling(user);
-    const balance = await readCreditBalance(user.id);
     const meta = user.user_metadata ?? {};
+    const [billing, balance, stats] = await Promise.all([
+      loadClientBilling(user),
+      readCreditBalance(user.id),
+      loadPortalActivityByClient([{ id: user.id, email: user.email || '' }]),
+    ]);
     const metaName = joinProfileName(
       typeof meta.first_name === 'string' ? meta.first_name : '',
       typeof meta.last_name === 'string' ? meta.last_name : '',
@@ -93,9 +99,10 @@ const ClientCredits = ({ onlineIds, reloadKey = 0 }: ClientCreditsProps) => {
       company: billing?.company || text(meta.company) || text(meta.company_name),
       balance: Number.isFinite(balance) ? balance : 0,
     }];
-    const stats = await loadPortalActivityByClient(rows);
+    const nextActivity = Object.fromEntries(stats);
+    clientsCache = { clients: rows, activity: nextActivity };
     setClients(rows);
-    setActivity(Object.fromEntries(stats));
+    setActivity(nextActivity);
     setLoading(false);
   };
 

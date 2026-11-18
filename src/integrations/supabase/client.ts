@@ -19,6 +19,10 @@ export interface Order {
   status: string;
   file_url: string | null;
   result_file_url: string | null;
+  client_file_name?: string | null;
+  client_file_path?: string | null;
+  result_file_name?: string | null;
+  result_file_path?: string | null;
   legal_consent: boolean;
   customer_note: string | null;
   checksum_crc: string | null;

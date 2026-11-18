@@ -92,23 +92,6 @@ const freshSelect = async (source: SupabaseClient, table: string, select: string
   return response.json();
 };
 
-const loadDescriptions = async () => {
-  const descriptions = new Map<string, string>();
-  try {
-    const data = await freshSelect(supabase, 'service_details', 'service_id,description');
-    if (!Array.isArray(data)) return descriptions;
-    for (const row of data) {
-      if (!row || typeof row !== 'object') continue;
-      const record = row as { service_id?: unknown; description?: unknown };
-      const id = typeof record.service_id === 'string' ? record.service_id : '';
-      if (id) descriptions.set(id, typeof record.description === 'string' ? record.description : '');
-    }
-  } catch {
-    return descriptions;
-  }
-  return descriptions;
-};
-
 export const groupCatalog = (services: CatalogService[]) => {
   const grouped = new Map<string, CatalogService[]>();
   for (const service of services) {
@@ -148,27 +131,43 @@ export const notifyServiceCatalogChanged = () => {
   }
 };
 
-export const loadServiceCatalog = async (): Promise<CatalogService[]> => {
-  const data = await readServices();
-  const descriptions = await loadDescriptions();
-  const services = normalize(data).map((service) => ({
-    ...service,
-    description: descriptions.get(service.id) ?? '',
-  }));
-  rememberNames(services);
-  return services;
+let catalogCache: CatalogService[] | null = null;
+let catalogPending: Promise<CatalogService[]> | null = null;
+
+const pullCatalog = () => {
+  if (catalogPending) return catalogPending;
+  catalogPending = readServices()
+    .then((data) => {
+      const services = normalize(data);
+      rememberNames(services);
+      catalogCache = services;
+      return services;
+    })
+    .finally(() => {
+      catalogPending = null;
+    });
+  return catalogPending;
+};
+
+export const peekServiceCatalog = () => catalogCache;
+
+export const loadServiceCatalog = (fresh = false): Promise<CatalogService[]> => {
+  if (!fresh && catalogCache) {
+    void pullCatalog();
+    return Promise.resolve(catalogCache);
+  }
+  return pullCatalog();
 };
 
 export const subscribeServiceCatalog = (onChange: () => void) => {
   const id = Math.random().toString(36).slice(2);
-  const listen = (source: SupabaseClient, table: 'services' | 'service_details', name: string) =>
+  const listen = (source: SupabaseClient, table: 'services', name: string) =>
     source
       .channel(name)
       .on('postgres_changes', { event: '*', schema: 'public', table }, onChange)
       .subscribe();
 
   const services = listen(supabase, 'services', `services-${id}`);
-  const details = listen(supabase, 'service_details', `service-details-${id}`);
   const primaryUrl = (supabase as LiveClient).supabaseUrl?.replace(/\/$/, '');
   const backup = primaryUrl && primaryUrl !== CATALOG_URL.replace(/\/$/, '')
     ? listen(client(), 'services', `services-backup-${id}`)
@@ -181,7 +180,6 @@ export const subscribeServiceCatalog = (onChange: () => void) => {
   return () => {
     window.removeEventListener('storage', onStorage);
     supabase.removeChannel(services);
-    supabase.removeChannel(details);
     if (backup) client().removeChannel(backup);
   };
 };

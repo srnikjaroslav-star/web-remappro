@@ -5,8 +5,8 @@ import { useLanguage } from '@/i18n/LanguageContext';
 import type { TranslationKey } from '@/i18n/translations';
 import { SERVICES } from '@/data/services';
 import { loadServiceCatalog, lookupServiceName } from '@/lib/serviceCatalog';
-import { orderFileLocation, RESULT_FILE_MARK, unpackOrderFile } from '@/lib/ecuFile';
-import { downloadStoredInvoice, invoiceLinksFor, mergeInvoice, readInvoiceMark } from '@/lib/orderInvoice';
+import { lightFileRef, loadOrderFile, orderFileLocation } from '@/lib/ecuFile';
+import { downloadStoredInvoice, readInvoiceMark } from '@/lib/orderInvoice';
 import { supabase } from '@/lib/supabase';
 
 type ClientOrder = {
@@ -22,6 +22,7 @@ type ClientOrder = {
   total_price: number | string | null;
   status: string;
   result_file_url: string | null;
+  result_file_name?: string | null;
   invoice_number: string | null;
   invoice_url: string | null;
   customer_note: string | null;
@@ -94,6 +95,10 @@ type StoredClientOrder = ClientOrder & {
   fuel?: string | null;
   services?: string[] | string | null;
   note?: string | null;
+  client_file_name?: string | null;
+  client_file_path?: string | null;
+  result_file_name?: string | null;
+  result_file_path?: string | null;
 };
 
 const toClientOrder = (row: StoredClientOrder): ClientOrder => {
@@ -116,7 +121,9 @@ const toClientOrder = (row: StoredClientOrder): ClientOrder => {
     service_type: services,
     total_price: row.total_price ?? null,
     status: row.status || 'pending',
-    result_file_url: row.result_file_url ?? null,
+    result_file_url: lightFileRef(row.result_file_path, row.result_file_name)
+      ?? lightFileRef(row.result_file_url, row.result_file_url ? 'file' : null),
+    result_file_name: row.result_file_name ?? null,
     invoice_number: row.invoice_number || marked.invoice_number || null,
     invoice_url: row.invoice_url || marked.invoice_url || null,
     customer_note: row.customer_note || (tagged ? lines.slice(1).join('\n').trim() : note.trim()) || null,
@@ -154,10 +161,13 @@ const matchesFocus = (order: ClientOrder, focus: string) => {
   return label === key || id === key || id.startsWith(key);
 };
 
+const ordersCache = new Map<string, ClientOrder[]>();
+
 const MyOrders = ({ email, focusOrder = '' }: { email: string; focusOrder?: string }) => {
   const { t } = useLanguage();
-  const [orders, setOrders] = useState<ClientOrder[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cachedOrders = ordersCache.get(email);
+  const [orders, setOrders] = useState<ClientOrder[]>(cachedOrders ?? []);
+  const [loading, setLoading] = useState(cachedOrders === undefined);
   const [failed, setFailed] = useState(false);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -166,30 +176,34 @@ const MyOrders = ({ email, focusOrder = '' }: { email: string; focusOrder?: stri
   const focusedKey = useRef('');
   const rowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
   const downloadResult = async (order: ClientOrder) => {
-    let stored = order.result_file_url || '';
-    if (!stored || stored === 'stored') {
-      const { data } = await supabase.from('orders').select('file_url').eq('id', order.id).maybeSingle();
-      stored = unpackOrderFile(data?.file_url || '').resultFile;
-    } else {
-      stored = unpackOrderFile(stored).resultFile || stored;
+    try {
+      const stored = await loadOrderFile(order.id, 'result', order.result_file_url);
+      const located = stored ? orderFileLocation(stored) : null;
+      const filename = order.result_file_name
+        || (located && 'filename' in located ? located.filename : '')
+        || `result-${orderLabel(order)}`;
+      let href = located && 'href' in located ? located.href : '';
+      if (!href && located && 'bucket' in located && located.bucket && located.path) {
+        const signed = await supabase.storage.from(located.bucket).createSignedUrl(located.path, 180);
+        href = signed.data?.signedUrl
+          || supabase.storage.from(located.bucket).getPublicUrl(located.path).data.publicUrl;
+      }
+      if (!href) throw new Error('missing file');
+      const response = await fetch(href);
+      if (!response.ok) throw new Error('download failed');
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+    } catch (error) {
+      console.error('Result download error:', error);
+      toast.error(t('fileDownloadFailed'));
     }
-    const located = orderFileLocation(stored);
-    const href = located && 'href' in located
-      ? located.href
-      : located
-        ? supabase.storage.from(located.bucket).getPublicUrl(located.path).data.publicUrl
-        : '';
-    if (!href) return;
-    const response = await fetch(href);
-    const blob = await response.blob();
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = located && 'filename' in located ? located.filename : `result-${orderLabel(order)}`;
-    document.body.appendChild(link);
-    link.click();
-    window.URL.revokeObjectURL(url);
-    document.body.removeChild(link);
   };
 
   const visibleOrders = orders.filter((order) =>
@@ -211,51 +225,38 @@ const MyOrders = ({ email, focusOrder = '' }: { email: string; focusOrder?: stri
           setLoading(false);
           return;
         }
-        const catalogReady = loadServiceCatalog().catch(() => undefined);
-        const columns = 'id, user_id, created_at, vehicle_brand, vehicle_model, vehicle_year, engine, ecu, fuel, services, total_price, status, note, result_file_url';
-        let result = await supabase
-          .from('orders')
-          .select(columns)
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false });
-        if (result.error) {
-          result = await supabase
-            .from('orders')
-            .select('id, user_id, created_at, vehicle_brand, vehicle_model, vehicle_year, engine, ecu, fuel, services, total_price, status, note')
-            .eq('user_id', user.id)
-            .order('created_at', { ascending: false });
-        }
-        const { data, error } = result;
-        await catalogReady;
+        const listBase = 'id, user_id, created_at, vehicle_brand, vehicle_model, vehicle_year, engine, ecu, fuel, services, total_price, status, note';
+        const [listed] = await Promise.all([
+          supabase.from('orders').select(listBase).eq('user_id', user.id).order('created_at', { ascending: false }),
+          loadServiceCatalog().catch(() => undefined),
+        ]);
         if (!active) return;
-        if (error) {
-          console.error('My orders load error:', error);
-          setOrders([]);
+        if (listed.error) {
+          console.error('My orders load error:', listed.error);
+          if (!ordersCache.has(email)) setOrders([]);
           setFailed(false);
           setLoading(false);
           return;
         }
-        const ready = await supabase
-          .from('orders')
-          .select('id')
-          .eq('user_id', user.id)
-          .like('file_url', `%${RESULT_FILE_MARK}%`);
-        const withResult = new Set((ready.data || []).map((row) => row.id));
-        const own = ((data ?? []) as StoredClientOrder[])
+        const own = ((listed.data ?? []) as StoredClientOrder[])
           .filter((order) => !order.user_id || order.user_id === user.id)
           .map((row) => toClientOrder({
             ...row,
-            result_file_url: row.result_file_url || (withResult.has(row.id) ? 'stored' : null),
+            result_file_url: row.status === 'completed' ? 'stored' : null,
           }));
-        const links = await invoiceLinksFor(own.map((order) => order.id));
+        ordersCache.set(email, own);
         setFailed(false);
-        setOrders(own.map((order) => mergeInvoice(order, links.get(order.id))));
+        setOrders(own);
         setLoading(false);
       } finally {
         busy.current = false;
       }
     };
-    setLoading(true);
+    if (!ordersCache.has(email)) setLoading(true);
+    else {
+      setOrders(ordersCache.get(email) ?? []);
+      setLoading(false);
+    }
     load();
     const timer = window.setInterval(load, 5000);
     const channel = supabase
@@ -409,19 +410,18 @@ const MyOrders = ({ email, focusOrder = '' }: { email: string; focusOrder?: stri
                   </td>
                   <td className={`${glow} text-center`}>
                     {order.status === 'completed' && order.result_file_url ? (
-                      <a
-                        href={order.result_file_url.startsWith('http') || order.result_file_url.startsWith('data:') ? order.result_file_url : '#'}
-                        download
+                      <button
+                        type="button"
+                        title={order.result_file_name || t('downloadFile')}
                         onClick={(event) => {
-                          if (order.result_file_url?.startsWith('http') || order.result_file_url?.startsWith('data:')) return;
-                          event.preventDefault();
+                          event.stopPropagation();
                           void downloadResult(order);
                         }}
                         className={`${action} border border-primary/40 bg-primary/10 text-primary hover:bg-primary/20`}
                       >
                         <Download className="h-4 w-4" />
                         {t('downloadFile')}
-                      </a>
+                      </button>
                     ) : (
                       <span className="text-xs text-slate-500">
                         {order.status === 'completed' ? t('filePending') : '—'}
