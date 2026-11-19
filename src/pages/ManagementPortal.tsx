@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   Download, Upload, Eye, CheckCircle, CalendarDays, ChevronLeft, ChevronRight,
-  Search, Power, Save, Trash2, LogOut, FileText, X
+  Search, Power, Save, RotateCcw, LogOut, FileText, X
 } from 'lucide-react';
 import { DayPicker } from 'react-day-picker';
 import { sk } from 'date-fns/locale';
@@ -748,31 +748,44 @@ const ManagementPortal = () => {
       ...(language ? { language, lang: language } : {}),
       ...(creditNoteNumber?.trim() ? { creditNoteNumber: creditNoteNumber.trim() } : {}),
     };
-    const controller = new AbortController();
-    const timer = window.setTimeout(() => controller.abort(), 8000);
-    try {
-      const response = await fetch(`${SUPABASE_URL}/functions/v1/status-email`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-          apikey: SUPABASE_ANON_KEY,
-          ...(language ? { 'x-client-language': language } : {}),
-        },
-        body: JSON.stringify(payload),
-        signal: controller.signal,
-      });
-      const responseData = await response.json().catch(() => ({}));
-      if (!response.ok || responseData.success === false) {
-        throw new Error(responseData.error || responseData.message || `HTTP ${response.status}`);
+    const postStatusEmail = async () => {
+      const controller = new AbortController();
+      const timer = window.setTimeout(() => controller.abort(), 20000);
+      try {
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/status-email`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+            apikey: SUPABASE_ANON_KEY,
+            ...(language ? { 'x-client-language': language } : {}),
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
+        const responseData = await response.json().catch(() => ({}));
+        if (!response.ok || responseData.success === false) {
+          throw new Error(responseData.error || responseData.message || `HTTP ${response.status}`);
+        }
+        return responseData;
+      } finally {
+        window.clearTimeout(timer);
       }
-      return responseData;
+    };
+    try {
+      return await postStatusEmail();
     } catch (error: any) {
-      const message = error?.name === 'AbortError' ? 'Email request timed out' : (error?.message || 'Failed to fetch');
-      console.error('[sendStatusEmail]', message);
-      throw new Error(message);
-    } finally {
-      window.clearTimeout(timer);
+      const network = error?.name === 'AbortError' || error instanceof TypeError || /Failed to fetch|NetworkError|aborted/i.test(String(error?.message || ''));
+      if (network) {
+        try {
+          return await postStatusEmail();
+        } catch (retryError: any) {
+          console.error('[sendStatusEmail] Network error, credit note stays saved:', retryError);
+          throw new Error('EMAIL_NETWORK');
+        }
+      }
+      console.error('[sendStatusEmail]', error);
+      throw new Error(error?.message || 'Email sa nepodarilo odoslať');
     }
   };
 
@@ -785,6 +798,10 @@ const ManagementPortal = () => {
         .catch((emailError: any) => {
           console.error('[notifyStatusChange] Email sending failed:', emailError);
           const errorMsg = emailError?.message || 'Neznáma chyba';
+          if (errorMsg === 'EMAIL_NETWORK' || /Failed to fetch|NetworkError|timed out|aborted/i.test(errorMsg)) {
+            toast.warning('Doklad je uložený. E-mail sa nepodarilo odoslať.');
+            return;
+          }
           if (errorMsg.includes('RESEND_API_KEY') || errorMsg.includes('API key')) {
             toast.error('Chyba: RESEND_API_KEY nie je nastavený alebo je neplatný');
           } else if (errorMsg.includes('domain') || errorMsg.includes('verified')) {
@@ -1981,9 +1998,9 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                               setCancelConfirmOrder(order);
                             }}
                             className={`${actionCell} bg-red-500/10 text-red-400 hover:bg-red-500/20`}
-                            title="Zmazať objednávku"
+                            title="Zrušiť objednávku"
                           >
-                            <Trash2 className="h-5 w-5" />
+                            <RotateCcw className="h-5 w-5" />
                           </button>
                         </div>
                       </div>

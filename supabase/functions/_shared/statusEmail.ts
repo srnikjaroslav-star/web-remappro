@@ -247,9 +247,6 @@ const copy = {
     download: "Stiahnuť súbor",
     cancelled:
       "Ospravedlňujeme sa, ale túto objednávku nebolo možné dokončiť. Vaše kredity boli v plnej výške vrátené späť na Váš účet. Veríme, že pri ďalšej objednávke všetko prebehne úspešne.",
-    creditNote: (number: string) =>
-      `K objednávke bol vystavený dobropis č. ${number}. Stiahnuť si ho môžete v sekcii Moje objednávky.`,
-    creditNoteLink: "Moje objednávky",
     pending: "Vaša objednávka bola prijatá. Ďakujeme.",
     other: (status: string) => `Stav objednávky bol aktualizovaný: ${status}.`,
     subject: {
@@ -271,9 +268,6 @@ const copy = {
     download: "Download File",
     cancelled:
       "We apologize, but this order could not be completed. Your credits have been fully refunded to your account. We look forward to serving you successfully next time.",
-    creditNote: (number: string) =>
-      `A credit note ${number} has been issued for this order. You can download it in the My Orders section.`,
-    creditNoteLink: "My Orders",
     pending: "Your order has been received. Thank you.",
     other: (status: string) => `Your order status has been updated: ${status}.`,
     subject: {
@@ -311,14 +305,14 @@ export const renderStatusEmail = (input: {
     ? text.pending
     : text.other(input.status.trim());
   const creditNoteNumber = input.creditNoteNumber?.trim() || "";
+  const ordersLink = `<a href="${escapeHtml(portalOrderUrl(orderNumber))}" target="_blank" style="color: #00d2ff; text-decoration: underline;">${language === "EN" ? "My Orders" : "Moje objednávky"}</a>`;
   const creditNote = key === "cancelled" && creditNoteNumber
     ? `
           <tr>
             <td style="padding: 0 32px 28px 32px; color: #c9d1d9; font-size: 15px; line-height: 1.6; font-family: Arial, Helvetica, sans-serif;">
-              ${escapeHtml(text.creditNote(creditNoteNumber)).replace(
-                escapeHtml(text.creditNoteLink),
-                `<a href="${escapeHtml(portalOrderUrl(orderNumber))}" target="_blank" style="color: #00d2ff; text-decoration: underline;">${escapeHtml(text.creditNoteLink)}</a>`,
-              )}
+              ${language === "EN"
+                ? `A credit note <strong>${escapeHtml(creditNoteNumber)}</strong> has been issued for this order. You can download it in the ${ordersLink} section.`
+                : `K objednávke bol vystavený dobropis č. <strong>${escapeHtml(creditNoteNumber)}</strong>. Stiahnuť si ho môžete v sekcii ${ordersLink}.`}
             </td>
           </tr>`
     : "";
