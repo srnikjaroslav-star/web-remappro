@@ -24,6 +24,23 @@ export type InvoicePdfInput = {
   price: number;
 };
 
+export type CreditNotePdfInput = {
+  creditNoteNumber: string;
+  invoiceNumber: string;
+  issuedAt?: Date;
+  buyer: InvoiceBuyer;
+  price: number;
+};
+
+type AccountingPdfInput = {
+  documentNumber: string;
+  title: string;
+  referenceLine?: string;
+  issuedAt?: Date;
+  buyer: InvoiceBuyer;
+  price: number;
+};
+
 const fontCache = new Map<string, Promise<string>>();
 
 const fontBase64 = (url: string) => {
@@ -58,8 +75,9 @@ const registerFonts = async (doc: jsPDF) => {
 
 const money = (value: number) => {
   const amount = Math.round((Number.isFinite(value) ? value : 0) * 100) / 100;
-  const [whole, fraction] = amount.toFixed(2).split('.');
-  return `${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')},${fraction} €`;
+  const negative = amount < 0;
+  const [whole, fraction] = Math.abs(amount).toFixed(2).split('.');
+  return `${negative ? '-' : ''}${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')},${fraction} €`;
 };
 
 const formatDate = (date: Date) => {
@@ -154,7 +172,9 @@ const drawFacts = (doc: jsPDF, rows: Array<[string, string]>, x: number, y: numb
   return cursor;
 };
 
-export const generateInvoicePdf = async (input: InvoicePdfInput) => {
+const pdfFilename = (documentNumber: string) => `${documentNumber.replace(/[^\w.-]+/g, '_')}.pdf`;
+
+const renderAccountingPdf = async (input: AccountingPdfInput) => {
   const doc = new jsPDF({ unit: 'mm', format: 'a4', compress: true });
   await registerFonts(doc);
   const margin = 18;
@@ -163,7 +183,7 @@ export const generateInvoicePdf = async (input: InvoicePdfInput) => {
   const invoiceSettings = await loadInvoiceSettings();
 
   doc.setProperties({
-    title: `${input.invoiceNumber}`,
+    title: `${input.documentNumber}`,
     creator: 'REMAPPRO B2B',
   });
 
@@ -178,11 +198,22 @@ export const generateInvoicePdf = async (input: InvoicePdfInput) => {
   doc.setFont('Roboto', 'bold');
   doc.setFontSize(16);
   doc.setTextColor(...INK);
-  const title = doc.splitTextToSize(`FAKTÚRA č. ${input.invoiceNumber}`, titleWidth) as string[];
+  const title = doc.splitTextToSize(input.title, titleWidth) as string[];
   const titleY = headerTop + Math.max(6, (logoHeight - title.length * 7) / 2 + 5);
   doc.text(title, right, titleY, { align: 'right' });
 
-  const ruleY = Math.max(headerTop + logoHeight, titleY + title.length * 7) + 4;
+  let belowTitle = titleY + title.length * 7;
+  if (input.referenceLine) {
+    doc.setFont('Roboto', 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(...INK);
+    const referenceY = belowTitle + 1.5;
+    const reference = doc.splitTextToSize(input.referenceLine, titleWidth) as string[];
+    doc.text(reference, right, referenceY, { align: 'right' });
+    belowTitle = referenceY + reference.length * 4.4;
+  }
+
+  const ruleY = Math.max(headerTop + logoHeight, belowTitle) + 4;
   doc.setDrawColor(...LINE);
   doc.setLineWidth(0.25);
   doc.line(margin, ruleY, right, ruleY);
@@ -214,7 +245,7 @@ export const generateInvoicePdf = async (input: InvoicePdfInput) => {
     drawFacts(doc, [
       ['IBAN', invoiceSettings.iban],
       ['SWIFT / BIC', invoiceSettings.swift],
-      ['Variabilný symbol', input.invoiceNumber],
+      ['Variabilný symbol', input.documentNumber],
     ], margin, factsY + 2, columnWidth),
     drawFacts(doc, [
       ['Forma úhrady', 'Bankový prevod'],
@@ -267,6 +298,25 @@ export const generateInvoicePdf = async (input: InvoicePdfInput) => {
   doc.text(invoiceSettings.vatNote, margin, totalY + 8);
 
   const blob = doc.output('blob');
-  const filename = `${input.invoiceNumber.replace(/[^\w.\-]+/g, '_')}.pdf`;
-  return new File([blob], filename, { type: 'application/pdf' });
+  return new File([blob], pdfFilename(input.documentNumber), { type: 'application/pdf' });
+};
+
+export const generateInvoicePdf = (input: InvoicePdfInput) => renderAccountingPdf({
+  documentNumber: input.invoiceNumber,
+  title: `FAKTÚRA č. ${input.invoiceNumber}`,
+  issuedAt: input.issuedAt,
+  buyer: input.buyer,
+  price: input.price,
+});
+
+export const generateCreditNotePdf = (input: CreditNotePdfInput) => {
+  const amount = Math.abs(Number(input.price) || 0);
+  return renderAccountingPdf({
+    documentNumber: input.creditNoteNumber,
+    title: `DOBROPIS Č. ${input.creditNoteNumber}`,
+    referenceLine: `K faktúre č.: ${input.invoiceNumber}`,
+    issuedAt: input.issuedAt,
+    buyer: input.buyer,
+    price: amount === 0 ? 0 : -amount,
+  });
 };

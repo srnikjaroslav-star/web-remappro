@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useOnlineClients } from '@/lib/clientPresence';
 import { fetchBlobWithProgress, lightFileRef, loadOrderFile, orderFileLocation, packOrderFile, unpackOrderFile, uploadOrderFile } from '@/lib/ecuFile';
-import { downloadStoredInvoice, exportInvoiceArchive, readInvoiceMark, saveOrderInvoice } from '@/lib/orderInvoice';
+import { creditNoteNumberFromInvoice, downloadStoredInvoice, exportInvoiceArchive, previewInvoiceArchive, readCreditNoteMark, readInvoiceMark, rememberCreditNote, saveOrderCreditNote, saveOrderInvoice, type InvoiceArchiveCounts } from '@/lib/orderInvoice';
 import { supabase } from '@/lib/supabase';
 import { statusAfterResultDelivery } from '@/lib/orderStatus';
 import { Order, ActivityLog, SUPABASE_ANON_KEY, SUPABASE_URL } from '@/integrations/supabase/client';
@@ -30,7 +30,7 @@ import { toast } from 'sonner';
 import { SERVICES } from '@/data/services';
 import { mailLanguageForClient } from '@/lib/clientLanguage';
 import { loadBillingByUserId, loadClientBilling, orderDisplayName, readCreditBalance, restoreClientCredits, saveCreditBalance, settleClientCredits } from '@/lib/clientProfile';
-import { generateInvoicePdf } from '@/utils/invoiceGenerator';
+import { generateCreditNotePdf, generateInvoicePdf } from '@/utils/invoiceGenerator';
 import { loadServiceCatalog, lookupServiceName } from '@/lib/serviceCatalog';
 import ClientCredits from '@/components/ClientCredits';
 import AdminServices from '@/components/AdminServices';
@@ -136,6 +136,7 @@ const IMPORTANT_MARK = '[[rp-important]]';
 
 const splitAdminNote = (raw: string) => {
   const marked = readInvoiceMark(raw);
+  const credit = readCreditNoteMark(raw);
   const source = marked.note;
   const crc = source.match(/\[\[rp-crc\]\]([^\n]*)/)?.[1]?.trim() ?? '';
   const important = source.match(/\[\[rp-important\]\]([\s\S]*)$/)?.[1]?.trim() ?? '';
@@ -150,6 +151,9 @@ const splitAdminNote = (raw: string) => {
     invoiceNumber: marked.invoice_number || '',
     invoiceUrl: marked.invoice_url || '',
     invoiceDate: marked.invoice_date || '',
+    creditNumber: credit.credit_note_number || '',
+    creditUrl: credit.credit_note_url || '',
+    creditDate: credit.credit_note_date || '',
   };
 };
 
@@ -164,7 +168,10 @@ const packAdminNote = (
   const invoice = current.invoiceNumber
     ? `[[rp-invoice]]${current.invoiceNumber}||${current.invoiceDate || ''}||${current.invoiceUrl || ''}`
     : '';
-  return [current.visible, crc ? `${CRC_MARK}${crc}` : '', important ? `${IMPORTANT_MARK}${important}` : '', invoice]
+  const credit = current.creditNumber
+    ? `[[rp-credit]]${current.creditNumber}||${current.creditDate || ''}||${current.creditUrl || ''}`
+    : '';
+  return [current.visible, crc ? `${CRC_MARK}${crc}` : '', important ? `${IMPORTANT_MARK}${important}` : '', invoice, credit]
     .filter(Boolean)
     .join('\n');
 };
@@ -204,6 +211,8 @@ const normalizeOrder = (row: StoredOrderRow, owner?: { name: string; email: stri
     important_note: row.important_note || packed.important || null,
     invoice_number: row.invoice_number || packed.invoiceNumber || null,
     invoice_url: row.invoice_url || packed.invoiceUrl || null,
+    credit_note_number: row.credit_note_number || packed.creditNumber || null,
+    credit_note_pdf: row.credit_note_pdf || packed.creditUrl || null,
     created_at: row.created_at || new Date().toISOString(),
     legal_consent: row.legal_consent ?? true,
   };
@@ -335,25 +344,29 @@ const readAdminSection = (): AdminSection => {
     || 'orders';
 };
 
-const issueCompletionInvoice = async (order: Order) => {
+const invoiceBuyerFor = async (order: Order) => {
   const billing = await loadBillingByUserId(clientIdOf(order), order.customer_email || '');
   const person = [billing.firstName, billing.lastName].map((part) => part.trim()).filter(Boolean).join(' ');
+  return {
+    name: billing.company.trim() || person || order.customer_name || 'Zákazník',
+    contact: billing.company.trim() && person ? person : '',
+    street: billing.street,
+    postalCode: billing.postalCode,
+    city: billing.city,
+    email: billing.email || order.customer_email || '',
+    phone: billing.phone,
+    vatId: billing.vatId,
+    taxId: billing.taxId,
+  };
+};
+
+const issueCompletionInvoice = async (order: Order) => {
   const invoiceNumber = order.invoice_number?.trim()
     || `INV-${String(order.order_number || order.id.slice(0, 8)).replace(/^INV-/i, '').toUpperCase()}`;
   const file = await generateInvoicePdf({
     invoiceNumber,
     issuedAt: new Date(),
-    buyer: {
-      name: billing.company.trim() || person || order.customer_name || 'Zákazník',
-      contact: billing.company.trim() && person ? person : '',
-      street: billing.street,
-      postalCode: billing.postalCode,
-      city: billing.city,
-      email: billing.email || order.customer_email || '',
-      phone: billing.phone,
-      vatId: billing.vatId,
-      taxId: billing.taxId,
-    },
+    buyer: await invoiceBuyerFor(order),
     price: Math.abs(Number(order.total_price) || 0),
   });
   return saveOrderInvoice({
@@ -364,6 +377,25 @@ const issueCompletionInvoice = async (order: Order) => {
     customer_email: order.customer_email,
     total_price: order.total_price,
     invoice_number: invoiceNumber,
+  }, file);
+};
+
+const issueCreditNote = async (order: Order, invoiceNumber: string) => {
+  const file = await generateCreditNotePdf({
+    creditNoteNumber: creditNoteNumberFromInvoice(invoiceNumber),
+    invoiceNumber: invoiceNumber.trim(),
+    issuedAt: new Date(),
+    buyer: await invoiceBuyerFor(order),
+    price: -Math.abs(Number(order.total_price) || 0),
+  });
+  return saveOrderCreditNote({
+    id: order.id,
+    order_number: order.order_number,
+    user_id: clientIdOf(order),
+    customer_name: order.customer_name,
+    customer_email: order.customer_email,
+    total_price: order.total_price,
+    invoice_number: invoiceNumber.trim(),
   }, file);
 };
 
@@ -384,6 +416,7 @@ const ManagementPortal = () => {
   const [exportPreset, setExportPreset] = useState<'month' | 'last' | 'year' | null>('month');
   const [exportCalendar, setExportCalendar] = useState<'from' | 'to' | null>(null);
   const [exportBusy, setExportBusy] = useState(false);
+  const [exportCounts, setExportCounts] = useState<InvoiceArchiveCounts | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pendingUploadId = useRef<string | null>(null);
   const uploadLock = useRef<string | null>(null);
@@ -425,6 +458,8 @@ const ManagementPortal = () => {
   const onlineIds = useOnlineClients(!isCheckingAuth);
   const [cancelConfirmOrder, setCancelConfirmOrder] = useState<Order | null>(null);
   const [cancellingOrder, setCancellingOrder] = useState(false);
+  const [issuingCreditId, setIssuingCreditId] = useState<string | null>(null);
+  const pendingCreditNotes = useRef(new Map<string, { credit_note_number: string; credit_note_pdf: string }>());
   const orderOwnerRef = useRef<{ id: string; name: string; email: string }>({ id: '', name: '', email: '' });
   const ordersBusy = useRef(false);
   const ordersSeen = useRef(adminSnapshot !== null);
@@ -554,11 +589,24 @@ const ManagementPortal = () => {
         email: billing?.email?.trim() || user.email || '',
       };
       orderOwnerRef.current = owner;
-      const next = ((listed.data || []) as StoredOrderRow[]).map((row) => normalizeOrder({
-        ...row,
-        file_url: 'stored',
-        result_file_url: row.status === 'completed' ? 'stored' : null,
-      }, owner));
+      const next = ((listed.data || []) as StoredOrderRow[]).map((row) => {
+        const order = normalizeOrder({
+          ...row,
+          file_url: 'stored',
+          result_file_url: row.status === 'completed' ? 'stored' : null,
+        }, owner);
+        const pending = pendingCreditNotes.current.get(order.id);
+        if (order.credit_note_number) {
+          pendingCreditNotes.current.delete(order.id);
+          return order;
+        }
+        if (!pending) return order;
+        return {
+          ...order,
+          credit_note_number: pending.credit_note_number,
+          credit_note_pdf: pending.credit_note_pdf,
+        };
+      });
       ordersSeen.current = true;
       setOrders(next);
       rememberAdmin({ orders: next });
@@ -869,21 +917,78 @@ const ManagementPortal = () => {
     setDetailOrder((current) => (current?.id === orderId ? { ...current, status: 'cancelled' } : current));
   };
 
-  const cancelOrderDirectly = async (order: Order) => {
-    if (order.status === 'cancelled') {
-      toast.info('Objednávka je už zrušená.');
-      setCancelConfirmOrder(null);
-      return;
-    }
+  const reportCreditError = (error: unknown) => {
+    const message = error instanceof Error && error.message
+      ? error.message
+      : 'Dobropis sa nepodarilo vygenerovať.';
+    console.error('[cancelOrderDirectly] Credit note error:', error);
+    toast.error(message, { duration: 12000 });
+  };
 
-    const current = await supabase.from('orders').select('user_id,total_price,status').eq('id', order.id).maybeSingle();
+  const resolveInvoiceNumber = (source: Order, note: string) => {
+    const marked = readInvoiceMark(note);
+    const direct = (source.invoice_number || marked.invoice_number || '').trim();
+    if (direct) return direct;
+    const orderNumber = (source.order_number || '').trim();
+    if ((marked.invoice_url || source.invoice_url) && /^RP-/i.test(orderNumber)) {
+      return `INV-${orderNumber.replace(/^INV-/i, '').toUpperCase()}`;
+    }
+    return '';
+  };
+
+  const rememberIssuedCredit = (
+    orderId: string,
+    saved: { credit_note_number: string; credit_note_pdf: string },
+  ) => {
+    pendingCreditNotes.current.set(orderId, saved);
+    setOrders((prev) => prev.map((item) => (item.id === orderId ? { ...item, ...saved } : item)));
+    setDetailOrder((currentOrder) => (currentOrder?.id === orderId ? { ...currentOrder, ...saved } : currentOrder));
+  };
+
+  const cancelOrderDirectly = async (order: Order) => {
+    const current = await supabase.from('orders').select('user_id,total_price,status,note').eq('id', order.id).maybeSingle();
     if (current.error || !current.data) {
+      console.error('[cancelOrderDirectly] Load failed:', current.error);
       toast.error(current.error?.message || 'Objednávku sa nepodarilo načítať.');
       return;
     }
-    if (current.data.status === 'cancelled') {
-      toast.info('Objednávka je už zrušená.');
+    const live = orders.find((item) => item.id === order.id) || order;
+    const note = String(current.data.note || '');
+    const existingCredit = readCreditNoteMark(note);
+    const invoiceNumber = resolveInvoiceNumber(live, note);
+    const alreadyCancelled = current.data.status === 'cancelled';
+    if (!invoiceNumber && (live.invoice_number || note.includes('INV-'))) {
+      console.error('[cancelOrderDirectly] Invoice was visible but its number could not be resolved', {
+        orderId: order.id,
+        orderNumber: live.order_number,
+        invoiceNumber: live.invoice_number,
+        note,
+      });
+      toast.error('Faktúra sa v objednávke nenašla, dobropis sa nevystavil.', { duration: 12000 });
+    }
+
+    let creditSaved: { credit_note_number: string; credit_note_pdf: string; credit_note_date: string } | null = null;
+    if (invoiceNumber && !existingCredit.credit_note_number) {
+      try {
+        creditSaved = await issueCreditNote(
+          { ...live, total_price: Number(current.data.total_price ?? live.total_price), invoice_number: invoiceNumber },
+          invoiceNumber,
+        );
+        rememberIssuedCredit(order.id, creditSaved);
+      } catch (creditError) {
+        reportCreditError(creditError);
+        if (alreadyCancelled) {
+          setCancelConfirmOrder(null);
+          return;
+        }
+      }
+    }
+
+    if (alreadyCancelled) {
       setCancelConfirmOrder(null);
+      if (creditSaved) toast.success('Dobropis bol vystavený.');
+      else if (!invoiceNumber || existingCredit.credit_note_number) toast.info('Objednávka je už zrušená.');
+      void fetchOrders(true);
       return;
     }
     const price = Math.round(Math.abs(Number(current.data.total_price) || 0) * 100) / 100;
@@ -894,10 +999,27 @@ const ManagementPortal = () => {
       .from('orders')
       .update({ status: 'cancelled' })
       .eq('id', order.id)
-      .select('id');
+      .select('id, note');
     if (updateError || !updated?.length) {
+      console.error('[cancelOrderDirectly] Status update failed:', updateError);
       toast.error(updateError?.message || 'Stav objednávky sa nepodarilo zmeniť.');
       return;
+    }
+    if (creditSaved) {
+      const after = readCreditNoteMark(String(updated[0].note || ''));
+      if (after.credit_note_number !== creditSaved.credit_note_number) {
+        console.error('[cancelOrderDirectly] Status update removed the credit note from the order note. Writing it again.');
+        try {
+          await rememberCreditNote(
+            order.id,
+            creditSaved.credit_note_number,
+            creditSaved.credit_note_date,
+            creditSaved.credit_note_pdf,
+          );
+        } catch (rewriteError) {
+          reportCreditError(rewriteError);
+        }
+      }
     }
 
     let refunded = !shouldRefund;
@@ -909,15 +1031,21 @@ const ManagementPortal = () => {
 
     markOrderCancelled(order.id);
     setCancelConfirmOrder(null);
+    if (creditSaved) rememberIssuedCredit(order.id, creditSaved);
+
     void fetchOrders(true);
     if (shouldRefund && !refunded) {
       toast.error('Objednávka je zrušená, ale kredity sa nepodarilo vrátiť.');
       return;
     }
     toast.success(
-      shouldRefund
-        ? 'Objednávka bola zrušená a kredity boli vrátené klientovi.'
-        : 'Objednávka bola zrušená.',
+      creditSaved
+        ? (shouldRefund
+          ? 'Objednávka bola zrušená, kredity boli vrátené a bol vystavený dobropis.'
+          : 'Objednávka bola zrušená a bol vystavený dobropis.')
+        : (shouldRefund
+          ? 'Objednávka bola zrušená a kredity boli vrátené klientovi.'
+          : 'Objednávka bola zrušená.'),
     );
     notifyStatusChange(order, 'cancelled');
   };
@@ -929,9 +1057,23 @@ const ManagementPortal = () => {
     try {
       await cancelOrderDirectly(order);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Objednávku sa nepodarilo zrušiť.');
+      console.error('[confirmCancelOrder] Credit note error:', error);
+      toast.error(error instanceof Error ? error.message : 'Objednávku sa nepodarilo zrušiť.', { duration: 12000 });
     } finally {
       setCancellingOrder(false);
+    }
+  };
+
+  const generateMissingCreditNote = async (order: Order) => {
+    if (issuingCreditId) return;
+    setIssuingCreditId(order.id);
+    try {
+      await cancelOrderDirectly(order);
+    } catch (error) {
+      console.error('[generateMissingCreditNote] Credit note error:', error);
+      toast.error(error instanceof Error ? error.message : 'Dobropis sa nepodarilo vygenerovať.', { duration: 12000 });
+    } finally {
+      setIssuingCreditId((current) => (current === order.id ? null : current));
     }
   };
 
@@ -1239,6 +1381,19 @@ const ManagementPortal = () => {
     }
   };
 
+  const openCreditNote = async (order: Order) => {
+    if (!order.credit_note_pdf) {
+      toast.warning('K tomuto dobropisu ešte nie je nahraté PDF.');
+      return;
+    }
+    try {
+      await downloadStoredInvoice(order.credit_note_pdf, `${order.credit_note_number || 'dobropis'}.pdf`);
+    } catch (error) {
+      console.error('Credit note download error:', error);
+      toast.error('Dobropis sa nepodarilo stiahnuť');
+    }
+  };
+
   const isoDate = (date: Date) => {
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
@@ -1282,6 +1437,27 @@ const ManagementPortal = () => {
     return () => window.removeEventListener('pointerdown', onPointer);
   }, [exportCalendar]);
 
+  useEffect(() => {
+    if (!accountingOpen) return;
+    if (!exportFrom || !exportTo || exportFrom > exportTo) {
+      setExportCounts({ invoices: 0, credits: 0, total: 0 });
+      return;
+    }
+    let cancelled = false;
+    setExportCounts(null);
+    void previewInvoiceArchive(exportFrom, exportTo)
+      .then((counts) => {
+        if (!cancelled) setExportCounts(counts);
+      })
+      .catch((error: unknown) => {
+        console.error('Invoice archive preview error:', error);
+        if (!cancelled) setExportCounts({ invoices: 0, credits: 0, total: 0 });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accountingOpen, exportFrom, exportTo]);
+
   const downloadAccountingZip = async () => {
     if (!exportFrom || !exportTo || exportFrom > exportTo) {
       toast.error('Vyberte platný dátum od a do.');
@@ -1290,8 +1466,8 @@ const ManagementPortal = () => {
     setExportBusy(true);
     try {
       const count = await exportInvoiceArchive(exportFrom, exportTo);
-      if (!count) toast.warning('V tomto období nie je žiadna PDF faktúra.');
-      else toast.success(`Záloha obsahuje ${count} ${count === 1 ? 'faktúru' : 'faktúr'}.`);
+      if (!count) toast.warning('V tomto období nie je žiadny PDF doklad.');
+      else toast.success(`Záloha obsahuje ${count} ${count === 1 ? 'doklad' : count < 5 ? 'doklady' : 'dokladov'}.`);
     } catch (error) {
       console.error('Invoice archive error:', error);
       toast.error(error instanceof Error ? error.message : 'Zálohu sa nepodarilo vytvoriť');
@@ -1330,7 +1506,7 @@ const ManagementPortal = () => {
     cancelled: '!border-red-400/70 !bg-red-500/25 shadow-[0_0_18px_rgba(248,113,113,0.55)] hover:!border-red-400 hover:!bg-red-500/35 hover:shadow-[0_0_22px_rgba(248,113,113,0.7)]',
   };
 
-  const ordersRow = 'grid w-full min-w-[640px] grid-cols-[minmax(0,0.7fr)_minmax(0,1.15fr)_minmax(0,1.7fr)_minmax(0,1.1fr)_minmax(0,1.7fr)_8.5rem_9.5rem_312px]';
+  const ordersRow = 'grid w-full min-w-[640px] grid-cols-[minmax(0,1.85fr)_minmax(0,1.7fr)_minmax(0,1.1fr)_minmax(0,1.7fr)_8.5rem_9.5rem_312px]';
 
   const STATUS_CELL_CLASS: Record<string, string> = {
     pending: 'border-yellow-400/80 bg-yellow-500/10 text-yellow-400 shadow-[0_0_12px_rgba(250,204,21,0.28)]',
@@ -1594,8 +1770,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
             <div role="table" className="w-full min-w-0 text-base">
               <div role="rowgroup" className="sticky top-0 z-50">
                 <div role="row" className={`${ordersRow} border-b border-primary/30 bg-[#0a192f] shadow-md`}>
-                  <div role="columnheader" className="min-w-0 overflow-hidden border-r border-slate-500 p-2.5 text-left text-sm font-bold uppercase tracking-wide text-white">Faktúra</div>
-                  <div role="columnheader" className="min-w-0 overflow-hidden border-r border-slate-500 p-2.5 text-left text-sm font-bold uppercase tracking-wide text-white">ID</div>
+                  <div role="columnheader" className="min-w-0 overflow-hidden border-r border-slate-500 p-2.5 text-left text-sm font-bold uppercase tracking-wide text-white">ID / Doklad</div>
                   <div role="columnheader" className="min-w-0 overflow-hidden border-r border-slate-500 p-2.5 text-left text-sm font-bold uppercase tracking-wide text-white">Vozidlo</div>
                   <div role="columnheader" className="min-w-0 overflow-hidden border-r border-slate-500 p-2.5 text-left text-sm font-bold uppercase tracking-wide text-white">Dátum</div>
                   <div role="columnheader" className="min-w-0 overflow-hidden border-r border-slate-500 p-2.5 text-left text-sm font-bold uppercase tracking-wide text-white">Zákazník</div>
@@ -1607,13 +1782,13 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
               <div role="rowgroup">
                 {loading ? (
                 <div role="row" className={ordersRow}>
-                      <div role="cell" className="col-span-8 py-12 text-center text-muted-foreground">
+                      <div role="cell" className="col-span-7 py-12 text-center text-muted-foreground">
                         Načítavam objednávky...
                       </div>
                     </div>
                   ) : filteredOrders.length === 0 ? (
                     <div role="row" className={ordersRow}>
-                      <div role="cell" className="col-span-8 py-12 text-center text-muted-foreground">
+                      <div role="cell" className="col-span-7 py-12 text-center text-muted-foreground">
                         Žiadne objednávky
                       </div>
                     </div>
@@ -1621,7 +1796,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                   filteredOrders.map((order) => {
                     const active = activeRowId === order.id;
                     const picked = active ? 'bg-[#0b2430] shadow-[inset_0_0_18px_rgba(0,242,255,0.16)]' : '';
-                    const flexCell = `min-w-0 overflow-hidden border-r border-slate-800/60 px-4 py-1 ${picked}`;
+                    const flexCell = `flex h-full min-w-0 items-center overflow-hidden border-r border-slate-800/60 px-4 py-1 ${picked}`;
                     const pinBg = active ? 'bg-[#0b2430] shadow-[inset_0_0_18px_rgba(0,242,255,0.16)]' : 'bg-[#070d16]';
                     const actionCell = 'inline-flex h-full min-h-8 flex-1 basis-0 items-center justify-center rounded-none border border-current shadow-[0_0_12px_color-mix(in_srgb,currentColor_32%,transparent)] transition-colors duration-200 hover:shadow-[0_0_14px_color-mix(in_srgb,currentColor_45%,transparent)]';
                     const vehicle = [order.car_brand, order.car_model].map((part) => String(part ?? '').trim()).filter(Boolean).join(' ');
@@ -1637,48 +1812,44 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                       role="row"
                       key={order.id}
                       onClick={() => setActiveRowId(order.id)}
-                      className={`${ordersRow} cursor-pointer border-b border-slate-800/60`}
+                      className={`${ordersRow} cursor-pointer items-stretch border-b border-slate-800/60`}
                     >
-                      <div role="cell" className={flexCell}>
-                        {documents.length === 0 ? (
-                          <span className="text-base text-slate-500">—</span>
-                        ) : (
-                          <div className="flex min-w-0 flex-col items-start gap-0.5">
-                            {documents.map((doc) => (
-                              doc.title === 'Stiahnuť dobropis' ? (
-                                <a
-                                  key={doc.number}
-                                  href={doc.href || '#'}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  onClick={(event) => event.stopPropagation()}
-                                  className="block max-w-full truncate font-mono text-base font-bold text-red-500 hover:text-red-400"
-                                  title={doc.title}
-                                >
-                                  {doc.number}
-                                </a>
-                              ) : (
-                                <button
-                                  key={doc.number}
-                                  type="button"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    void openInvoice(order);
-                                  }}
-                                  className="block max-w-full truncate text-left font-mono text-base font-bold text-red-500 hover:text-red-400"
-                                  title={doc.title}
-                                >
-                                  {doc.number}
-                                </button>
-                              )
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      <div role="cell" className={flexCell}>
-                        <span className="block truncate font-mono text-lg font-bold leading-none text-cyan-300">
-                          {order.order_number || order.id.slice(0, 6).toUpperCase()}
-                        </span>
+                      <div role="cell" className={`flex h-full min-w-0 flex-col justify-center overflow-visible border-r border-slate-800/60 px-4 py-1 ${picked}`}>
+                        <div className="flex flex-col items-start gap-0.5 overflow-visible">
+                          {!order.invoice_number && (
+                            <span className="block whitespace-nowrap font-mono text-lg font-bold leading-none text-cyan-300">
+                              {order.order_number || order.id.slice(0, 6).toUpperCase()}
+                            </span>
+                          )}
+                          {documents.map((doc) => (
+                            <button
+                              key={doc.number}
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                if (doc.title === 'Stiahnuť dobropis') void openCreditNote(order);
+                                else void openInvoice(order);
+                              }}
+                              className={`block whitespace-nowrap text-left font-mono font-bold leading-tight text-red-500 hover:text-red-400 ${doc.title === 'Stiahnuť dobropis' ? 'text-xs' : 'text-base'}`}
+                              title={doc.title}
+                            >
+                              {doc.number}
+                            </button>
+                          ))}
+                          {order.status === 'cancelled' && order.invoice_number && !order.credit_note_number && (
+                            <button
+                              type="button"
+                              disabled={issuingCreditId === order.id}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void generateMissingCreditNote(order);
+                              }}
+                              className="font-mono text-xs font-bold leading-tight text-red-400 underline hover:text-red-300 disabled:opacity-60"
+                            >
+                              {issuingCreditId === order.id ? 'DOB…' : '+ DOB'}
+                            </button>
+                          )}
+                        </div>
                       </div>
                       <div role="cell" className={flexCell}>
                         <p className="truncate text-base font-bold leading-none text-cyan-400" title={vehicle || '—'}>{vehicle || '—'}</p>
@@ -1694,7 +1865,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                           <p className="min-w-0 truncate whitespace-nowrap text-xs leading-none text-white" title={order.customer_email}>{order.customer_email}</p>
                         </div>
                       </div>
-                      <div role="cell" className={`sticky right-[calc(312px+9.5rem)] z-20 border-r border-slate-800/60 px-4 py-1 text-center ${pinBg}`}>
+                      <div role="cell" className={`sticky right-[calc(312px+9.5rem)] z-20 flex h-full items-center justify-center border-r border-slate-800/60 px-4 py-1 text-center ${pinBg}`}>
                         <p className={`flex items-center justify-center text-xl font-bold leading-none ${
                           order.status === 'cancelled' 
                             ? 'text-red-500' 
@@ -1922,7 +2093,12 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                   </button>
                 ))}
               </div>
-              <div className="mt-5 flex items-center gap-4">
+              <p className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-semibold tracking-wide text-muted-foreground">
+                <span>Faktúry: <span className="text-foreground">{exportCounts ? exportCounts.invoices : '…'}</span></span>
+                <span>Dobropisy: <span className="text-foreground">{exportCounts ? exportCounts.credits : '…'}</span></span>
+                <span>Spolu: <span className="text-primary">{exportCounts ? `${exportCounts.total} PDF` : '…'}</span></span>
+              </p>
+              <div className="mt-3 flex items-center gap-4">
                 <button
                   type="button"
                   onClick={closeAccounting}
@@ -1933,8 +2109,8 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                 <button
                   type="button"
                   onClick={() => void downloadAccountingZip()}
-                  disabled={exportBusy}
-                  className="inline-flex h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-lg border border-primary bg-primary/20 text-base font-bold uppercase tracking-wide text-primary shadow-[0_0_18px_rgba(0,242,255,0.45)] transition-colors hover:bg-primary/30 disabled:cursor-wait disabled:opacity-60"
+                  disabled={exportBusy || !exportCounts || exportCounts.total === 0}
+                  className={`inline-flex h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-lg border border-primary bg-primary/20 text-base font-bold uppercase tracking-wide text-primary shadow-[0_0_18px_rgba(0,242,255,0.45)] transition-colors hover:bg-primary/30 disabled:opacity-60 ${exportBusy ? 'cursor-wait' : 'disabled:cursor-not-allowed'}`}
                 >
                   <Download className="h-5 w-5" />
                   {exportBusy ? 'Pripravujem zálohu...' : 'Stiahnuť zálohu (ZIP)'}
@@ -2010,15 +2186,24 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                                 </button>
                               )}
                               {detailOrder.credit_note_number && (
-                                <a
-                                  href={detailOrder.credit_note_pdf || '#'}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
+                                <button
+                                  type="button"
+                                  onClick={() => void openCreditNote(detailOrder)}
                                   className="inline-flex items-center gap-2 text-red-500 hover:text-red-400 underline"
                                 >
                                   <FileText className="w-4 h-4" />
                                   <span className="break-all font-mono">{detailOrder.credit_note_number}</span>
-                                </a>
+                                </button>
+                              )}
+                              {detailOrder.status === 'cancelled' && detailOrder.invoice_number && !detailOrder.credit_note_number && (
+                                <button
+                                  type="button"
+                                  disabled={issuingCreditId === detailOrder.id}
+                                  onClick={() => void generateMissingCreditNote(detailOrder)}
+                                  className="font-mono text-xs font-bold text-red-400 underline hover:text-red-300 disabled:opacity-60"
+                                >
+                                  {issuingCreditId === detailOrder.id ? 'DOB…' : '+ DOB'}
+                                </button>
                               )}
                             </div>
                           )}

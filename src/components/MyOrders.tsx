@@ -6,7 +6,7 @@ import type { TranslationKey } from '@/i18n/translations';
 import { SERVICES } from '@/data/services';
 import { loadServiceCatalog, lookupServiceName } from '@/lib/serviceCatalog';
 import { fetchBlobWithProgress, lightFileRef, loadOrderFile, orderFileLocation } from '@/lib/ecuFile';
-import { downloadStoredInvoice, readInvoiceMark } from '@/lib/orderInvoice';
+import { downloadStoredInvoice, readCreditNoteMark, readInvoiceMark } from '@/lib/orderInvoice';
 import { supabase } from '@/lib/supabase';
 
 type ClientOrder = {
@@ -25,6 +25,8 @@ type ClientOrder = {
   result_file_name?: string | null;
   invoice_number: string | null;
   invoice_url: string | null;
+  credit_note_number: string | null;
+  credit_note_url: string | null;
   customer_note: string | null;
   customer_email: string | null;
 };
@@ -102,7 +104,9 @@ type StoredClientOrder = ClientOrder & {
 };
 
 const toClientOrder = (row: StoredClientOrder): ClientOrder => {
-  const marked = readInvoiceMark(String(row.note ?? ''));
+  const rawNote = String(row.note ?? '');
+  const marked = readInvoiceMark(rawNote);
+  const credit = readCreditNoteMark(rawNote);
   const note = marked.note;
   const lines = note.split('\n');
   const tagged = lines[0]?.startsWith('RP-') ? lines[0].trim() : '';
@@ -126,6 +130,8 @@ const toClientOrder = (row: StoredClientOrder): ClientOrder => {
     result_file_name: row.result_file_name ?? null,
     invoice_number: row.invoice_number || marked.invoice_number || null,
     invoice_url: row.invoice_url || marked.invoice_url || null,
+    credit_note_number: credit.credit_note_number,
+    credit_note_url: credit.credit_note_url,
     customer_note: row.customer_note || (tagged ? lines.slice(1).join('\n').trim() : note.trim()) || null,
     customer_email: row.customer_email ?? null,
   };
@@ -482,21 +488,48 @@ const MyOrders = ({ email, focusOrder = '' }: { email: string; focusOrder?: stri
                       </span>
                     )}
                   </td>
-                  <td className={`${glow} text-center`}>
-                    {order.status === 'completed' && order.invoice_url ? (
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void downloadStoredInvoice(order.invoice_url || '', `${order.invoice_number || 'faktura'}.pdf`).catch(() => {
-                            toast.error(t('invoiceDownloadFailed'));
-                          });
-                        }}
-                        className={`${action} border border-primary/40 bg-primary/10 text-primary hover:bg-primary/20`}
-                      >
-                        <FileText className="h-4 w-4" />
-                        {t('downloadFile')}
-                      </button>
+                  <td className={`${glow} overflow-visible align-top text-center`}>
+                    {order.invoice_number || order.invoice_url || order.credit_note_number ? (
+                      <div className="flex flex-col items-center gap-1 overflow-visible py-1">
+                        {order.invoice_url || order.invoice_number ? (
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              if (!order.invoice_url) {
+                                toast.error(t('invoiceDownloadFailed'));
+                                return;
+                              }
+                              void downloadStoredInvoice(order.invoice_url, `${order.invoice_number || 'faktura'}.pdf`).catch(() => {
+                                toast.error(t('invoiceDownloadFailed'));
+                              });
+                            }}
+                            className="max-w-full truncate font-mono text-xs font-bold leading-tight text-primary underline hover:text-cyan-200"
+                            title={order.invoice_number || t('downloadFile')}
+                          >
+                            {order.invoice_number || t('downloadFile')}
+                          </button>
+                        ) : null}
+                        {order.credit_note_number ? (
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              if (!order.credit_note_url) {
+                                toast.error(t('invoiceDownloadFailed'));
+                                return;
+                              }
+                              void downloadStoredInvoice(order.credit_note_url, `${order.credit_note_number}.pdf`).catch(() => {
+                                toast.error(t('invoiceDownloadFailed'));
+                              });
+                            }}
+                            className="max-w-full truncate font-mono text-xs font-bold leading-tight text-red-400 underline hover:text-red-300"
+                            title={order.credit_note_number}
+                          >
+                            {order.credit_note_number}
+                          </button>
+                        ) : null}
+                      </div>
                     ) : (
                       <span className="text-xs text-slate-500">—</span>
                     )}

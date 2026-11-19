@@ -123,35 +123,97 @@ const invoicePath = (stored: string) => {
   return { bucket, path: pathParts.join(':') };
 };
 
-export const readInvoiceMark = (note: string) => {
-  const source = String(note || '');
-  const raw = source.match(/\[\[rp-invoice\]\]([^\n]*)/)?.[1] ?? '';
+const MARK_INVOICE = '[[rp-invoice]]';
+const MARK_CREDIT = '[[rp-credit]]';
+
+const parseMarkValue = (raw: string) => {
   const parts = raw.split('||');
-  let invoice_number = '';
-  let invoice_date = '';
-  let invoice_url = '';
+  let number = '';
+  let date = '';
+  let url = '';
   if (parts.length >= 3) {
-    invoice_number = parts[0];
-    invoice_date = parts[1];
-    invoice_url = parts.slice(2).join('||');
+    number = parts[0];
+    date = parts[1];
+    url = parts.slice(2).join('||');
   } else if (parts.length === 2) {
-    invoice_number = parts[0];
-    invoice_url = parts[1];
+    number = parts[0];
+    url = parts[1];
   } else {
-    invoice_number = raw;
+    number = raw;
   }
   return {
-    invoice_number: invoice_number || null,
-    invoice_date: invoice_date || null,
-    invoice_url: invoice_url || null,
-    note: source.replace(/\n?\[\[rp-invoice\]\][^\n]*/g, ''),
+    number: number || null,
+    date: date || null,
+    url: url || null,
   };
 };
 
-const writeInvoiceMark = (note: string, number: string, date: string, url: string) => {
-  const clean = readInvoiceMark(note).note.replace(/\s+$/g, '');
-  return [clean, `[[rp-invoice]]${number}||${date}||${url}`].filter(Boolean).join('\n');
+const markValue = (source: string, tag: string) => {
+  const escaped = tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return source.match(new RegExp(`${escaped}([^\\n]*)`))?.[1] ?? '';
 };
+
+const stripDocumentMarks = (source: string) =>
+  source
+    .replace(/\n?\[\[rp-invoice\]\][^\n]*/g, '')
+    .replace(/\n?\[\[rp-credit\]\][^\n]*/g, '');
+
+const composeDocumentNote = (
+  note: string,
+  patch?: { kind: 'invoice' | 'credit'; number: string; date: string; url: string },
+) => {
+  const source = String(note || '');
+  const invoice = parseMarkValue(markValue(source, MARK_INVOICE));
+  const credit = parseMarkValue(markValue(source, MARK_CREDIT));
+  if (patch?.kind === 'invoice') {
+    invoice.number = patch.number;
+    invoice.date = patch.date;
+    invoice.url = patch.url;
+  }
+  if (patch?.kind === 'credit') {
+    credit.number = patch.number;
+    credit.date = patch.date;
+    credit.url = patch.url;
+  }
+  const clean = stripDocumentMarks(source).replace(/\s+$/g, '');
+  const lines = [clean];
+  if (invoice.number) lines.push(`${MARK_INVOICE}${invoice.number}||${invoice.date || ''}||${invoice.url || ''}`);
+  if (credit.number) lines.push(`${MARK_CREDIT}${credit.number}||${credit.date || ''}||${credit.url || ''}`);
+  return lines.filter(Boolean).join('\n');
+};
+
+export const readInvoiceMark = (note: string) => {
+  const source = String(note || '');
+  const parsed = parseMarkValue(markValue(source, MARK_INVOICE));
+  return {
+    invoice_number: parsed.number,
+    invoice_date: parsed.date,
+    invoice_url: parsed.url,
+    note: stripDocumentMarks(source),
+  };
+};
+
+export const readCreditNoteMark = (note: string) => {
+  const source = String(note || '');
+  const parsed = parseMarkValue(markValue(source, MARK_CREDIT));
+  return {
+    credit_note_number: parsed.number,
+    credit_note_date: parsed.date,
+    credit_note_url: parsed.url,
+    note: stripDocumentMarks(source),
+  };
+};
+
+export const creditNoteNumberFromInvoice = (invoiceNumber: string) => {
+  const body = invoiceNumber.trim().replace(/^INV-/i, '').replace(/^DOB-/i, '');
+  return `DOB-${body}`;
+};
+
+const writeInvoiceMark = (note: string, number: string, date: string, url: string) =>
+  composeDocumentNote(note, { kind: 'invoice', number, date, url });
+
+const writeCreditNoteMark = (note: string, number: string, date: string, url: string) =>
+  composeDocumentNote(note, { kind: 'credit', number, date, url });
 
 export const invoiceLinksFor = async (_orderIds: string[]) => new Map<string, InvoiceLink>();
 
@@ -197,16 +259,26 @@ const readDataUrl = (file: File) => new Promise<string>((resolve, reject) => {
   reader.readAsDataURL(file);
 });
 
-const storeInvoiceFile = async (orderId: string, file: File) => {
-  const path = `invoices/${orderId}.pdf`;
+const storeInvoiceFile = async (orderId: string, file: File, path = `invoices/${orderId}.pdf`) => {
   const uploaded = await supabase.storage.from(INVOICE_BUCKET).upload(path, file, {
     contentType: 'application/pdf',
     upsert: true,
-  }).catch(() => null);
+  }).catch((error: unknown) => {
+    console.error('[storeInvoiceFile] Storage upload failed:', error);
+    return null;
+  });
+  if (uploaded?.error) console.error('[storeInvoiceFile] Storage upload failed:', uploaded.error);
   if (uploaded?.data?.path && !uploaded.error) return `bucket:${INVOICE_BUCKET}:${uploaded.data.path}`;
   const dataUrl = await readDataUrl(file);
   if (!dataUrl.startsWith('data:')) throw new Error('PDF sa nepodarilo uložiť');
   return dataUrl;
+};
+
+const writeOrderNote = async (orderId: string, note: string, failure: string) => {
+  const saved = await supabase.from('orders').update({ note }).eq('id', orderId).select('id, note');
+  if (saved.error) throw new Error(saved.error.message || failure);
+  if (!saved.data?.length) throw new Error(failure);
+  return String(saved.data[0].note || '');
 };
 
 export const saveOrderInvoice = async (order: InvoiceTarget, file: File) => {
@@ -221,13 +293,93 @@ export const saveOrderInvoice = async (order: InvoiceTarget, file: File) => {
 
   const current = await supabase.from('orders').select('note').eq('id', order.id).maybeSingle();
   if (current.error) throw new Error(current.error.message || 'Faktúru sa nepodarilo priradiť k objednávke');
-  const saved = await supabase
-    .from('orders')
-    .update({ note: writeInvoiceMark(String(current.data?.note || ''), number, issued, stored) })
-    .eq('id', order.id);
-  if (saved.error) throw new Error(saved.error.message || 'Faktúru sa nepodarilo priradiť k objednávke');
+  await writeOrderNote(
+    order.id,
+    writeInvoiceMark(String(current.data?.note || ''), number, issued, stored),
+    'Faktúru sa nepodarilo priradiť k objednávke',
+  );
 
   return { invoice_number: number, invoice_url: stored };
+};
+
+export const rememberCreditNote = async (orderId: string, number: string, date: string, url: string) => {
+  const current = await supabase.from('orders').select('note').eq('id', orderId).maybeSingle();
+  if (current.error) throw new Error(current.error.message || 'Dobropis sa nepodarilo priradiť k objednávke');
+  const written = await writeOrderNote(
+    orderId,
+    writeCreditNoteMark(String(current.data?.note || ''), number, date, url),
+    'Dobropis sa nepodarilo zapísať k objednávke.',
+  );
+  const saved = readCreditNoteMark(written);
+  if (saved.credit_note_number !== number) {
+    throw new Error('Poznámka objednávky po uložení dobropis neobsahuje.');
+  }
+  return saved;
+};
+
+export const saveOrderCreditNote = async (order: InvoiceTarget, file: File) => {
+  const pdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+  if (!pdf) throw new Error('Nahrajte súbor PDF.');
+  if (file.size > 15 * 1024 * 1024) throw new Error('PDF môže mať najviac 15 MB.');
+  const invoiceNumber = order.invoice_number?.trim() || '';
+  if (!invoiceNumber) throw new Error('Dobropis vyžaduje pôvodnú faktúru.');
+
+  const stored = await storeInvoiceFile(order.id, file, `invoices/${order.id}-dobropis.pdf`);
+  const number = creditNoteNumberFromInvoice(invoiceNumber);
+  const issued = new Date().toISOString().slice(0, 10);
+
+  await rememberCreditNote(order.id, number, issued, stored);
+  return { credit_note_number: number, credit_note_pdf: stored, credit_note_date: issued };
+};
+
+const inExportRange = (issued: string, fromYmd: string, toYmd: string) =>
+  Boolean(issued) && issued >= fromYmd && issued <= toYmd;
+
+type ExportDocument = { kind: 'invoice' | 'credit'; number: string; url: string };
+
+const documentsForExport = (
+  rows: { note?: string | null; created_at?: string | null; status?: string | null }[],
+  fromYmd: string,
+  toYmd: string,
+) => {
+  const documents: ExportDocument[] = [];
+  for (const row of rows) {
+    const note = String(row.note || '');
+    const invoice = readInvoiceMark(note);
+    const credit = readCreditNoteMark(note);
+    const status = String(row.status || '').toLowerCase();
+    const created = String(row.created_at || '').slice(0, 10);
+    const invoiceDate = invoice.invoice_date || created;
+    const hasInvoice = Boolean(invoice.invoice_number && invoice.invoice_url);
+    const hasCredit = Boolean(credit.credit_note_number && credit.credit_note_url);
+
+    if (status === 'completed' && hasInvoice && inExportRange(invoiceDate, fromYmd, toYmd)) {
+      documents.push({ kind: 'invoice', number: invoice.invoice_number || '', url: invoice.invoice_url || '' });
+      continue;
+    }
+
+    if (status !== 'cancelled' || !hasInvoice || !hasCredit) continue;
+    const creditDate = credit.credit_note_date || invoiceDate;
+    if (!inExportRange(invoiceDate, fromYmd, toYmd) && !inExportRange(creditDate, fromYmd, toYmd)) continue;
+    documents.push({ kind: 'invoice', number: invoice.invoice_number || '', url: invoice.invoice_url || '' });
+    documents.push({ kind: 'credit', number: credit.credit_note_number || '', url: credit.credit_note_url || '' });
+  }
+  return documents;
+};
+
+const loadExportRows = async () => {
+  const fromOrders = await supabase.from('orders').select('note, created_at, status');
+  if (fromOrders.error) throw new Error(fromOrders.error.message || 'Faktúry sa nepodarilo načítať');
+  return fromOrders.data || [];
+};
+
+export type InvoiceArchiveCounts = { invoices: number; credits: number; total: number };
+
+export const previewInvoiceArchive = async (fromYmd: string, toYmd: string): Promise<InvoiceArchiveCounts> => {
+  const documents = documentsForExport(await loadExportRows(), fromYmd, toYmd);
+  const invoices = documents.filter((item) => item.kind === 'invoice').length;
+  const credits = documents.filter((item) => item.kind === 'credit').length;
+  return { invoices, credits, total: documents.length };
 };
 
 export const exportInvoiceArchive = async (fromYmd: string, toYmd: string) => {
@@ -246,14 +398,8 @@ export const exportInvoiceArchive = async (fromYmd: string, toYmd: string) => {
     files.push({ name, data: bytes });
   };
 
-  const fromOrders = await supabase.from('orders').select('note, created_at');
-  if (fromOrders.error) throw new Error(fromOrders.error.message || 'Faktúry sa nepodarilo načítať');
-  for (const row of fromOrders.data || []) {
-    const marked = readInvoiceMark(String(row.note || ''));
-    if (!marked.invoice_url || !marked.invoice_number || used.has(`${safePdfName(marked.invoice_number)}.pdf`)) continue;
-    const issued = marked.invoice_date || String(row.created_at || '').slice(0, 10);
-    if (!issued || issued < fromYmd || issued > toYmd) continue;
-    await pushFile(marked.invoice_number, marked.invoice_url);
+  for (const document of documentsForExport(await loadExportRows(), fromYmd, toYmd)) {
+    await pushFile(document.number, document.url);
   }
 
   if (files.length === 0) return 0;
