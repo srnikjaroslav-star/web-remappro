@@ -722,7 +722,7 @@ const ManagementPortal = () => {
     }
   };
 
-  const sendStatusEmail = async (order: Order, status: string) => {
+  const sendStatusEmail = async (order: Order, status: string, creditNoteNumber?: string) => {
     const orderId = order.order_number || order.id.slice(0, 8).toUpperCase();
     const clientUserId = clientIdOf(order);
     let language = await mailLanguageForClient(order.id, clientUserId);
@@ -746,6 +746,7 @@ const ManagementPortal = () => {
       status,
       ...(clientUserId ? { clientUserId } : {}),
       ...(language ? { language, lang: language } : {}),
+      ...(creditNoteNumber?.trim() ? { creditNoteNumber: creditNoteNumber.trim() } : {}),
     };
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), 8000);
@@ -775,9 +776,9 @@ const ManagementPortal = () => {
     }
   };
 
-  const notifyStatusChange = (order: Order, status: string) => {
+  const notifyStatusChange = (order: Order, status: string, creditNoteNumber?: string) => {
     window.setTimeout(() => {
-      void sendStatusEmail(order, status)
+      void sendStatusEmail(order, status, creditNoteNumber)
         .then(() => {
           toast.success('Email o zmene stavu bol odoslaný');
         })
@@ -986,8 +987,10 @@ const ManagementPortal = () => {
 
     if (alreadyCancelled) {
       setCancelConfirmOrder(null);
-      if (creditSaved) toast.success('Dobropis bol vystavený.');
-      else if (!invoiceNumber || existingCredit.credit_note_number) toast.info('Objednávka je už zrušená.');
+      if (creditSaved) {
+        toast.success('Dobropis bol vystavený.');
+        notifyStatusChange(order, 'cancelled', creditSaved.credit_note_number);
+      } else if (!invoiceNumber || existingCredit.credit_note_number) toast.info('Objednávka je už zrušená.');
       void fetchOrders(true);
       return;
     }
@@ -1034,6 +1037,7 @@ const ManagementPortal = () => {
     if (creditSaved) rememberIssuedCredit(order.id, creditSaved);
 
     void fetchOrders(true);
+    notifyStatusChange(order, 'cancelled', creditSaved?.credit_note_number);
     if (shouldRefund && !refunded) {
       toast.error('Objednávka je zrušená, ale kredity sa nepodarilo vrátiť.');
       return;
@@ -1047,7 +1051,6 @@ const ManagementPortal = () => {
           ? 'Objednávka bola zrušená a kredity boli vrátené klientovi.'
           : 'Objednávka bola zrušená.'),
     );
-    notifyStatusChange(order, 'cancelled');
   };
 
   const confirmCancelOrder = async () => {

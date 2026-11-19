@@ -22,6 +22,7 @@ interface StatusEmailRequest {
   language?: string;
   lang?: string;
   clientUserId?: string;
+  creditNoteNumber?: string;
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -46,6 +47,7 @@ const handler = async (req: Request): Promise<Response> => {
       language,
       lang,
       clientUserId,
+      creditNoteNumber,
     }: StatusEmailRequest = await req.json();
 
     const requestedLanguage = language || lang || req.headers.get("x-client-language") || "";
@@ -69,6 +71,7 @@ const handler = async (req: Request): Promise<Response> => {
       orderNumber: displayOrderId,
       customerName: mail.customerName,
       vehicle: vehicleInfo,
+      ...(creditNoteNumber?.trim() ? { creditNoteNumber: creditNoteNumber.trim() } : {}),
     });
     console.log(`Status email language ${mail.lang} for ${displayOrderId}, recipient ${mail.recipient}`);
 
