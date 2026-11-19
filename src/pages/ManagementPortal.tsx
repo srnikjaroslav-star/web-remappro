@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useOnlineClients } from '@/lib/clientPresence';
 import { fetchBlobWithProgress, lightFileRef, loadOrderFile, orderFileLocation, packOrderFile, unpackOrderFile, uploadOrderFile } from '@/lib/ecuFile';
-import { creditNoteNumberFromInvoice, exportInvoiceArchive, previewInvoiceArchive, readCreditNoteMark, readInvoiceMark, rememberCreditNote, saveOrderCreditNote, saveOrderInvoice, type InvoiceArchiveCounts } from '@/lib/orderInvoice';
+import { exportInvoiceArchive, nextCreditNoteNumber, nextInvoiceNumber, previewInvoiceArchive, readCreditNoteMark, readInvoiceMark, rememberCreditNote, saveOrderCreditNote, saveOrderInvoice, type InvoiceArchiveCounts } from '@/lib/orderInvoice';
 import { supabase } from '@/lib/supabase';
 import { statusAfterResultDelivery } from '@/lib/orderStatus';
 import { Order, ActivityLog, SUPABASE_ANON_KEY, SUPABASE_URL } from '@/integrations/supabase/client';
@@ -362,8 +362,7 @@ const invoiceBuyerFor = async (order: Order) => {
 };
 
 const issueCompletionInvoice = async (order: Order) => {
-  const invoiceNumber = order.invoice_number?.trim()
-    || `INV-${String(order.order_number || order.id.slice(0, 8)).replace(/^INV-/i, '').toUpperCase()}`;
+  const invoiceNumber = order.invoice_number?.trim() || await nextInvoiceNumber();
   const file = await generateInvoicePdf({
     invoiceNumber,
     issuedAt: new Date(),
@@ -382,8 +381,9 @@ const issueCompletionInvoice = async (order: Order) => {
 };
 
 const issueCreditNote = async (order: Order, invoiceNumber: string) => {
+  const creditNoteNumber = await nextCreditNoteNumber();
   const file = await generateCreditNotePdf({
-    creditNoteNumber: creditNoteNumberFromInvoice(invoiceNumber),
+    creditNoteNumber,
     invoiceNumber: invoiceNumber.trim(),
     issuedAt: new Date(),
     buyer: await invoiceBuyerFor(order),
@@ -397,7 +397,7 @@ const issueCreditNote = async (order: Order, invoiceNumber: string) => {
     customer_email: order.customer_email,
     total_price: order.total_price,
     invoice_number: invoiceNumber.trim(),
-  }, file);
+  }, file, creditNoteNumber);
 };
 
 const ManagementPortal = () => {

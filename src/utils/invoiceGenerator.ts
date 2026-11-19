@@ -219,6 +219,11 @@ const renderAccountingPdf = async (input: AccountingPdfInput) => {
   };
   heading('DODÁVATEĽ', 'Vyhotovil', margin + pad, mid);
   heading('ODBERATEĽ', 'Klient B2B', mid + pad, right);
+  doc.setDrawColor(...SOFT);
+  doc.setLineWidth(0.3);
+  const partiesRuleY = partiesY + 8.3;
+  doc.line(margin + pad, partiesRuleY, mid - pad, partiesRuleY);
+  doc.line(mid + pad, partiesRuleY, right - pad, partiesRuleY);
 
   let cursor = partiesY + 12;
   const supplierBody = [
@@ -271,7 +276,12 @@ const renderAccountingPdf = async (input: AccountingPdfInput) => {
   const factsY = partiesY + partiesHeight + 4;
   const factsHeight = input.originalInvoice ? 34 : 30;
   card(doc, margin, factsY, contentWidth, factsHeight);
+  doc.setDrawColor(...SOFT);
+  doc.setLineWidth(0.3);
   doc.line(mid, factsY + 2.2, mid, factsY + factsHeight - 2.2);
+  const factsRuleY = factsY + 8.3;
+  doc.line(margin + pad, factsRuleY, mid - pad, factsRuleY);
+  doc.line(mid + pad, factsRuleY, right - pad, factsRuleY);
   const labelAt = (text: string, x: number, y: number) => {
     doc.setFont('Roboto', 'bold');
     doc.setFontSize(7);
