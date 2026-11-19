@@ -267,7 +267,7 @@ const ClientCredits = ({ onlineIds, reloadKey = 0 }: ClientCreditsProps) => {
           />
         </div>
       </div>
-      <div className="overflow-x-auto">
+      <div className="max-h-[calc(100vh-18.5rem)] overflow-auto">
         <table className={sheetGrid}>
           <thead className="contents">
             <tr className="contents">

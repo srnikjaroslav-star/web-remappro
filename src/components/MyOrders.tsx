@@ -317,8 +317,8 @@ const MyOrders = ({ email, focusOrder = '' }: { email: string; focusOrder?: stri
   const focusedOrder = orders.find((order) => order.id === selectedId && matchesFocus(order, focusOrder)) || null;
 
   return (
-    <div className="overflow-hidden rounded-xl border border-primary/25 bg-black/45 shadow-[0_0_30px_hsl(185_100%_50%/0.08)] backdrop-blur-xl">
-      <div className="flex flex-col gap-3 border-b border-primary/30 bg-[#0a192f] px-4 py-3 sm:flex-row sm:items-center sm:justify-end">
+    <div className="flex max-h-[calc(100vh-12.5625rem)] min-h-0 flex-col overflow-hidden rounded-xl border border-primary/25 bg-black/45 shadow-[0_0_30px_hsl(185_100%_50%/0.08)] backdrop-blur-xl">
+      <div className="flex shrink-0 flex-col gap-3 border-b border-primary/30 bg-[#0a192f] px-4 py-3 sm:flex-row sm:items-center sm:justify-end">
         <label className="relative block w-full min-w-0 max-w-md shrink-0 sm:w-[28rem]">
           <span className="sr-only">{t('myOrdersSearch')}</span>
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-primary/70" />
@@ -345,7 +345,7 @@ const MyOrders = ({ email, focusOrder = '' }: { email: string; focusOrder?: stri
         </select>
       </div>
       {focusedOrder?.status === 'completed' && focusedOrder.result_file_url ? (
-        <div className="flex flex-col gap-3 border-b border-primary/30 bg-[#071820] px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex shrink-0 flex-col gap-3 border-b border-primary/30 bg-[#071820] px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="font-mono text-lg font-bold text-cyan-300">{orderLabel(focusedOrder)}</p>
           <button
             type="button"
@@ -373,12 +373,12 @@ const MyOrders = ({ email, focusOrder = '' }: { email: string; focusOrder?: stri
           </button>
         </div>
       ) : null}
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-base">
+      <div className="min-h-0 max-h-[calc(100vh-16.75rem)] flex-1 overflow-x-auto overflow-y-auto">
+        <table className="w-full border-separate border-spacing-0 text-base">
           <thead>
             <tr className="border-b border-primary/30 bg-[#0a192f]">
               {[t('myOrdersDate'), t('myOrdersId'), t('myOrdersSpec'), t('myOrdersPrice'), t('myOrdersStatus'), t('myOrdersFile'), t('myOrdersInvoice')].map((label) => (
-                <th key={label} className={`whitespace-nowrap border-r border-slate-500 p-2.5 align-middle text-sm font-bold uppercase tracking-wide text-white ${label === t('myOrdersFile') || label === t('myOrdersInvoice') ? 'text-center' : 'text-left'}`}>
+                <th key={label} className={`sticky top-0 z-20 whitespace-nowrap border-r border-slate-500 bg-[#0a192f] p-2.5 align-middle text-sm font-bold uppercase tracking-wide text-white ${label === t('myOrdersFile') || label === t('myOrdersInvoice') ? 'text-center' : 'text-left'}`}>
                   {label}
                 </th>
               ))}

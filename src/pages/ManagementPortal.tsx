@@ -1766,7 +1766,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
               Účtovníctvo / Export
             </button>
           </div>
-          <div className="overflow-x-auto">
+          <div className="max-h-[calc(100vh-23.25rem)] overflow-auto">
             <div role="table" className="w-full min-w-0 text-base">
               <div role="rowgroup" className="sticky top-0 z-50">
                 <div role="row" className={`${ordersRow} border-b border-primary/30 bg-[#0a192f] shadow-md`}>
