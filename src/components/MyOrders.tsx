@@ -6,7 +6,8 @@ import type { TranslationKey } from '@/i18n/translations';
 import { SERVICES } from '@/data/services';
 import { loadServiceCatalog, lookupServiceName } from '@/lib/serviceCatalog';
 import { fetchBlobWithProgress, lightFileRef, loadOrderFile, orderFileLocation } from '@/lib/ecuFile';
-import { downloadStoredInvoice, readCreditNoteMark, readInvoiceMark } from '@/lib/orderInvoice';
+import { downloadOrderCreditNote, downloadOrderInvoice } from '@/lib/accountingDocument';
+import { readCreditNoteMark, readInvoiceMark } from '@/lib/orderInvoice';
 import { supabase } from '@/lib/supabase';
 
 type ClientOrder = {
@@ -500,7 +501,7 @@ const MyOrders = ({ email, focusOrder = '' }: { email: string; focusOrder?: stri
                                 toast.error(t('invoiceDownloadFailed'));
                                 return;
                               }
-                              void downloadStoredInvoice(order.invoice_url, `${order.invoice_number || 'faktura'}.pdf`).catch(() => {
+                              void downloadOrderInvoice(order.id, { customerEmail: email }).catch(() => {
                                 toast.error(t('invoiceDownloadFailed'));
                               });
                             }}
@@ -519,7 +520,7 @@ const MyOrders = ({ email, focusOrder = '' }: { email: string; focusOrder?: stri
                                 toast.error(t('invoiceDownloadFailed'));
                                 return;
                               }
-                              void downloadStoredInvoice(order.credit_note_url, `${order.credit_note_number}.pdf`).catch(() => {
+                              void downloadOrderCreditNote(order.id, { customerEmail: email }).catch(() => {
                                 toast.error(t('invoiceDownloadFailed'));
                               });
                             }}

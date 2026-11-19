@@ -34,8 +34,9 @@ export type CreditNotePdfInput = {
 
 type AccountingPdfInput = {
   documentNumber: string;
+  invoiceNumber: string;
   title: string;
-  referenceLine?: string;
+  originalInvoice?: string;
   issuedAt?: Date;
   buyer: InvoiceBuyer;
   price: number;
@@ -86,16 +87,7 @@ const formatDate = (date: Date) => {
   return `${day}. ${month}. ${date.getFullYear()}`;
 };
 
-const buyerLines = (buyer: InvoiceBuyer) => {
-  const place = [buyer.postalCode, buyer.city].map((part) => part?.trim()).filter(Boolean).join(' ');
-  const tax = [
-    buyer.vatId?.trim() ? `IČO: ${buyer.vatId.trim()}` : '',
-    buyer.taxId?.trim() ? `DIČ: ${buyer.taxId.trim()}` : '',
-  ].filter(Boolean).join(', ');
-  return [buyer.name, buyer.contact, buyer.street, place, buyer.email, buyer.phone, tax]
-    .map((line) => line?.trim() || '')
-    .filter(Boolean);
-};
+const filled = (value?: string) => value?.trim() || '';
 
 const addDays = (date: Date, days: number) => {
   const next = new Date(date.getTime());
@@ -105,7 +97,6 @@ const addDays = (date: Date, days: number) => {
 
 const INK: [number, number, number] = [0, 0, 0];
 const MUTED: [number, number, number] = [90, 90, 90];
-const LINE: [number, number, number] = [176, 176, 176];
 
 const grayscaleLogo = (src: string) => new Promise<string>((resolve) => {
   if (typeof document === 'undefined') {
@@ -138,38 +129,24 @@ const grayscaleLogo = (src: string) => new Promise<string>((resolve) => {
   image.src = src;
 });
 
-const drawParty = (doc: jsPDF, title: string, lines: string[], x: number, y: number, width: number) => {
-  doc.setFont('Roboto', 'bold');
-  doc.setFontSize(8);
-  doc.setTextColor(...MUTED);
-  doc.text(title, x, y);
-  let cursor = y + 6;
-  lines.forEach((line, index) => {
-    doc.setFont('Roboto', index === 0 ? 'bold' : 'normal');
-    doc.setFontSize(10);
-    doc.setTextColor(...INK);
-    const wrapped = doc.splitTextToSize(line, width) as string[];
-    doc.text(wrapped, x, cursor);
-    cursor += wrapped.length * 4.6;
-  });
-  return cursor;
+const SOFT: [number, number, number] = [214, 219, 226];
+const LABEL: [number, number, number] = [120, 128, 138];
+
+const card = (doc: jsPDF, x: number, y: number, width: number, height: number) => {
+  doc.setDrawColor(...SOFT);
+  doc.setLineWidth(0.35);
+  doc.roundedRect(x, y, width, height, 2.2, 2.2);
 };
 
-const drawFacts = (doc: jsPDF, rows: Array<[string, string]>, x: number, y: number, width: number) => {
-  let cursor = y;
-  rows.forEach(([label, value]) => {
-    doc.setFont('Roboto', 'normal');
-    doc.setFontSize(8);
-    doc.setTextColor(...MUTED);
-    doc.text(label, x, cursor);
-    doc.setFont('Roboto', 'bold');
-    doc.setFontSize(10);
-    doc.setTextColor(...INK);
-    const wrapped = doc.splitTextToSize(value, width) as string[];
-    doc.text(wrapped, x, cursor + 4.4);
-    cursor += 4.4 + wrapped.length * 4.4 + 2.2;
-  });
-  return cursor;
+const fitText = (doc: jsPDF, text: string, width: number, size: number, bold = false) => {
+  doc.setFont('Roboto', bold ? 'bold' : 'normal');
+  let next = size;
+  doc.setFontSize(next);
+  while (next > 7 && doc.getTextWidth(text) > width) {
+    next -= 0.4;
+    doc.setFontSize(next);
+  }
+  return next;
 };
 
 const pdfFilename = (documentNumber: string) => `${documentNumber.replace(/[^\w.-]+/g, '_')}.pdf`;
@@ -193,109 +170,226 @@ const renderAccountingPdf = async (input: AccountingPdfInput) => {
   const logo = await grayscaleLogo(LOGO_BASE64);
   doc.addImage(logo, 'PNG', margin, headerTop, logoWidth, logoHeight);
 
-  const titleX = margin + logoWidth + 8;
-  const titleWidth = right - titleX;
+  const kind = input.originalInvoice ? 'DOBROPIS — DAŇOVÝ DOKLAD' : 'FAKTÚRA — DAŇOVÝ DOKLAD';
   doc.setFont('Roboto', 'bold');
-  doc.setFontSize(16);
+  const kindSize = fitText(doc, kind, 78, 7);
+  doc.setFontSize(kindSize);
+  doc.setTextColor(...LABEL);
+  const kindWidth = doc.getTextWidth(kind) + 6;
+  doc.setDrawColor(...SOFT);
+  doc.roundedRect(right - kindWidth, headerTop - 1.2, kindWidth, 5.4, 1.3, 1.3);
+  doc.text(kind, right - 3, headerTop + 2.4, { align: 'right' });
+  doc.setFont('Roboto', 'bold');
+  doc.setFontSize(15);
   doc.setTextColor(...INK);
-  const title = doc.splitTextToSize(input.title, titleWidth) as string[];
-  const titleY = headerTop + Math.max(6, (logoHeight - title.length * 7) / 2 + 5);
-  doc.text(title, right, titleY, { align: 'right' });
+  doc.text(input.title, right, headerTop + 11, { align: 'right' });
 
-  let belowTitle = titleY + title.length * 7;
-  if (input.referenceLine) {
+  const contentWidth = right - margin;
+  const mid = margin + contentWidth / 2;
+  const pad = 4;
+  const columnText = contentWidth / 2 - pad * 2;
+  const partiesY = Math.max(headerTop + logoHeight, headerTop + 16) + 6;
+  const lineStep = 4.5;
+  const supplierLines = 8;
+  const buyer = input.buyer;
+  const buyerRows = [
+    filled(buyer.name) || 'Zákazník',
+    filled(buyer.contact),
+    filled(buyer.street),
+    [buyer.postalCode, buyer.city].map((part) => part?.trim()).filter(Boolean).join(' '),
+    filled(buyer.phone) ? `Tel.: ${filled(buyer.phone)}` : '',
+    filled(buyer.email) ? `E-mail: ${filled(buyer.email)}` : '',
+    filled(buyer.vatId) ? `IČO: ${filled(buyer.vatId)}` : '',
+    filled(buyer.taxId) ? `DIČ: ${filled(buyer.taxId)}` : '',
+  ].filter(Boolean);
+  const partiesHeight = 8 + Math.max(supplierLines, buyerRows.length) * lineStep + 5;
+  card(doc, margin, partiesY, contentWidth, partiesHeight);
+  doc.setDrawColor(...SOFT);
+  doc.setLineWidth(0.3);
+  doc.line(mid, partiesY + 2.2, mid, partiesY + partiesHeight - 2.2);
+
+  const heading = (text: string, role: string, x: number, columnRight: number) => {
+    doc.setFont('Roboto', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(...LABEL);
+    doc.text(text, x, partiesY + 6);
     doc.setFont('Roboto', 'normal');
-    doc.setFontSize(10);
+    doc.setFontSize(7.5);
+    doc.text(role, columnRight - pad, partiesY + 6, { align: 'right' });
+  };
+  heading('DODÁVATEĽ', 'Vyhotovil', margin + pad, mid);
+  heading('ODBERATEĽ', 'Klient B2B', mid + pad, right);
+
+  let cursor = partiesY + 12;
+  const supplierBody = [
+    { text: invoiceSettings.supplierName || 'REMAPPRO', bold: true, size: 11 },
+    { text: 'Janka Kráľa 29', bold: false, size: 9 },
+    { text: '990 01 Veľký Krtíš, Slovakia', bold: false, size: 9 },
+  ];
+  supplierBody.forEach((line) => {
+    const size = fitText(doc, line.text, columnText, line.size, line.bold);
+    doc.setFont('Roboto', line.bold ? 'bold' : 'normal');
+    doc.setFontSize(size);
     doc.setTextColor(...INK);
-    const referenceY = belowTitle + 1.5;
-    const reference = doc.splitTextToSize(input.referenceLine, titleWidth) as string[];
-    doc.text(reference, right, referenceY, { align: 'right' });
-    belowTitle = referenceY + reference.length * 4.4;
-  }
+    doc.text(line.text, margin + pad, cursor);
+    cursor += lineStep;
+  });
+  const idValue = (label: string, value: string) => {
+    doc.setFont('Roboto', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(...INK);
+    doc.text(label, margin + pad, cursor);
+    doc.text(value, margin + pad + 14, cursor);
+    cursor += lineStep;
+  };
+  idValue('IČO:', invoiceSettings.supplierIco);
+  idValue('DIČ:', invoiceSettings.supplierDic);
+  [
+    'Nie je platiteľom DPH',
+    'Živnostenský register Okresného úradu Veľký Krtíš',
+    'Číslo živnostenského registra: 660-5049',
+  ].forEach((line) => {
+    const size = fitText(doc, line, columnText, 8.5);
+    doc.setFont('Roboto', 'normal');
+    doc.setFontSize(size);
+    doc.setTextColor(...INK);
+    doc.text(line, margin + pad, cursor);
+    cursor += lineStep;
+  });
 
-  const ruleY = Math.max(headerTop + logoHeight, belowTitle) + 4;
-  doc.setDrawColor(...LINE);
-  doc.setLineWidth(0.25);
-  doc.line(margin, ruleY, right, ruleY);
+  let buyerCursor = partiesY + 12;
+  buyerRows.forEach((line, index) => {
+    const size = fitText(doc, line, columnText, index === 0 ? 11 : 9, index === 0);
+    doc.setFont('Roboto', index === 0 ? 'bold' : 'normal');
+    doc.setFontSize(size);
+    doc.setTextColor(...INK);
+    doc.text(line, mid + pad, buyerCursor);
+    buyerCursor += lineStep;
+  });
 
-  const columnGap = 10;
-  const columnWidth = (right - margin - columnGap) / 2;
-  const partiesY = ruleY + 8;
-  const supplierEnd = drawParty(doc, 'DODÁVATEĽ', [
-    invoiceSettings.supplierName,
-    invoiceSettings.supplierAddress,
-    `IČO: ${invoiceSettings.supplierIco}, DIČ: ${invoiceSettings.supplierDic}`,
-    invoiceSettings.supplierRegister,
-  ], margin, partiesY, columnWidth);
-  const buyerEnd = drawParty(
-    doc,
-    'ODBERATEĽ',
-    buyerLines(input.buyer),
-    margin + columnWidth + columnGap,
-    partiesY,
-    columnWidth,
-  );
-
-  const factsY = Math.max(supplierEnd, buyerEnd) + 7;
-  doc.setDrawColor(...LINE);
-  doc.setLineWidth(0.2);
-  doc.line(margin, factsY - 3, right, factsY - 3);
   const due = addDays(issued, invoiceSettings.dueDays);
-  const factsEnd = Math.max(
-    drawFacts(doc, [
-      ['IBAN', invoiceSettings.iban],
-      ['SWIFT / BIC', invoiceSettings.swift],
-      ['Variabilný symbol', input.documentNumber],
-    ], margin, factsY + 2, columnWidth),
-    drawFacts(doc, [
-      ['Forma úhrady', 'Bankový prevod'],
-      ['Dátum vystavenia', formatDate(issued)],
-      ['Dátum splatnosti', formatDate(due)],
-    ], margin + columnWidth + columnGap, factsY + 2, columnWidth),
-  );
+  const factsY = partiesY + partiesHeight + 4;
+  const factsHeight = input.originalInvoice ? 34 : 30;
+  card(doc, margin, factsY, contentWidth, factsHeight);
+  doc.line(mid, factsY + 2.2, mid, factsY + factsHeight - 2.2);
+  const labelAt = (text: string, x: number, y: number) => {
+    doc.setFont('Roboto', 'bold');
+    doc.setFontSize(7);
+    doc.setTextColor(...LABEL);
+    doc.text(text, x, y);
+  };
+  const valueAt = (text: string, x: number, y: number, width: number, size = 9) => {
+    const fitted = fitText(doc, text, width, size, true);
+    doc.setFont('Roboto', 'bold');
+    doc.setFontSize(fitted);
+    doc.setTextColor(...INK);
+    doc.text(text, x, y);
+  };
+  labelAt('PLATOBNÉ ÚDAJE', margin + pad, factsY + 6);
+  labelAt('IBAN', margin + pad, factsY + 12);
+  valueAt(invoiceSettings.iban, margin + pad, factsY + 16.5, columnText, 9);
+  labelAt('SWIFT / BIC', margin + pad, factsY + 22);
+  labelAt('FORMA ÚHRADY', margin + contentWidth / 4, factsY + 22);
+  valueAt(invoiceSettings.swift, margin + pad, factsY + 26.2, columnText / 2 - 2, 9);
+  valueAt('Bankový prevod', margin + contentWidth / 4, factsY + 26.2, columnText / 2 - 2, 9);
 
-  const tableWidth = right - margin;
+  labelAt('IDENTIFIKÁCIA A DÁTUMY', mid + pad, factsY + 6);
+  labelAt('VARIABILNÝ SYMBOL', mid + pad, factsY + 12);
+  labelAt('ČÍSLO FAKTÚRY', mid + contentWidth / 4, factsY + 12);
+  valueAt(input.documentNumber, mid + pad, factsY + 16.5, columnText / 2 - 2, 8.5);
+  valueAt(input.invoiceNumber, mid + contentWidth / 4, factsY + 16.5, columnText / 2 - 2, 8.5);
+  if (input.originalInvoice) {
+    doc.setFont('Roboto', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(...INK);
+    doc.text(`K faktúre č. ${input.originalInvoice}`, mid + contentWidth / 4, factsY + 20);
+  }
+  const dateY = input.originalInvoice ? factsY + 25 : factsY + 22;
+  labelAt('DÁTUM VYSTAVENIA', mid + pad, dateY);
+  labelAt('DÁTUM SPLATNOSTI', mid + contentWidth / 4, dateY);
+  valueAt(formatDate(issued), mid + pad, dateY + 4.2, columnText / 2 - 2, 9);
+  valueAt(formatDate(due), mid + contentWidth / 4, dateY + 4.2, columnText / 2 - 2, 9);
+
+  const tableWidth = contentWidth;
   autoTable(doc, {
-    startY: factsEnd + 4,
+    startY: factsY + factsHeight + 4,
     margin: { left: margin, right: margin },
     theme: 'grid',
-    head: [['Položka', 'Cena']],
-    body: [[invoiceSettings.itemName, money(input.price)]],
+    head: [['P.Č.', 'NÁZOV POLOŽKY / SLUŽBY', 'MNOŽSTVO', 'CENA SPOLU']],
+    body: [['1.', invoiceSettings.itemName, '1 ks', money(input.price)]],
     styles: {
       font: 'Roboto',
       fontStyle: 'normal',
-      fontSize: 10,
+      fontSize: 9,
       textColor: INK,
       fillColor: [255, 255, 255],
-      lineColor: LINE,
+      lineColor: SOFT,
       lineWidth: 0.2,
-      cellPadding: 3,
+      cellPadding: { top: 2.2, right: 2, bottom: 5.2, left: 2 },
+      valign: 'top',
     },
     headStyles: {
       fontStyle: 'bold',
+      fontSize: 7.5,
       fillColor: [255, 255, 255],
-      textColor: INK,
-      lineColor: [90, 90, 90],
-      lineWidth: 0.3,
+      textColor: LABEL,
+      lineColor: SOFT,
+      lineWidth: 0.2,
+      cellPadding: 2.2,
     },
     columnStyles: {
-      0: { cellWidth: tableWidth - 42 },
-      1: { cellWidth: 42, halign: 'right' },
+      0: { cellWidth: 14, halign: 'center' },
+      1: { cellWidth: tableWidth - 14 - 28 - 34 },
+      2: { cellWidth: 28, halign: 'center' },
+      3: { cellWidth: 34, halign: 'right', fontStyle: 'bold' },
+    },
+    didDrawCell: (data) => {
+      if (data.section !== 'body' || data.column.index !== 1) return;
+      doc.setFont('Roboto', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(...LABEL);
+      doc.text('Digitálna služba B2B portálu REMAPPRO', data.cell.x + 2, data.cell.y + data.cell.height - 2);
     },
   });
 
-  const tableEnd = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? factsEnd + 24;
-  const totalY = tableEnd + 12;
-  doc.setDrawColor(...INK);
-  doc.setLineWidth(0.35);
-  doc.line(margin, totalY - 6, right, totalY - 6);
+  const tableEnd = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? factsY + factsHeight + 24;
+  const summaryY = tableEnd + 6;
+  const summaryWidth = 92;
+  card(doc, right - summaryWidth, summaryY, summaryWidth, 18);
   doc.setFont('Roboto', 'bold');
-  doc.setFontSize(13);
+  doc.setFontSize(7);
+  doc.setTextColor(...LABEL);
+  doc.text('REKAPITULÁCIA', right - summaryWidth + 4, summaryY + 5.5);
+  doc.text('EUR', right - 4, summaryY + 5.5, { align: 'right' });
+  doc.setFontSize(9);
   doc.setTextColor(...INK);
-  doc.text('Celková suma na úhradu', margin, totalY);
-  doc.text(money(input.price), right, totalY, { align: 'right' });
-  doc.setFontSize(11);
-  doc.text(invoiceSettings.vatNote, margin, totalY + 8);
+  doc.text('Celková suma na úhradu:', right - summaryWidth + 4, summaryY + 12.5);
+  doc.setFontSize(12);
+  doc.text(money(input.price), right - 4, summaryY + 12.5, { align: 'right' });
+  doc.setFont('Roboto', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(...LABEL);
+  doc.text('Poznámka:', margin, summaryY + 5);
+  doc.setFont('Roboto', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(...INK);
+  doc.text(invoiceSettings.vatNote, margin, summaryY + 9.2);
+
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const footerY = pageHeight - 12;
+  doc.setDrawColor(...SOFT);
+  doc.setLineWidth(0.25);
+  doc.line(margin, footerY - 6, right, footerY - 6);
+  doc.setFont('Roboto', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(...MUTED);
+  doc.text('REMAPPRO  |  Janka Kráľa 29, 990 01 Veľký Krtíš, Slovakia', (margin + right) / 2, footerY - 1.5, { align: 'center' });
+  doc.text(
+    `IČO: ${invoiceSettings.supplierIco}  |  DIČ: ${invoiceSettings.supplierDic}  |  info@remappro.eu`,
+    (margin + right) / 2,
+    footerY + 3,
+    { align: 'center' },
+  );
 
   const blob = doc.output('blob');
   return new File([blob], pdfFilename(input.documentNumber), { type: 'application/pdf' });
@@ -303,7 +397,8 @@ const renderAccountingPdf = async (input: AccountingPdfInput) => {
 
 export const generateInvoicePdf = (input: InvoicePdfInput) => renderAccountingPdf({
   documentNumber: input.invoiceNumber,
-  title: `FAKTÚRA č. ${input.invoiceNumber}`,
+  invoiceNumber: input.invoiceNumber,
+  title: `FAKTÚRA Č. ${input.invoiceNumber}`,
   issuedAt: input.issuedAt,
   buyer: input.buyer,
   price: input.price,
@@ -313,8 +408,9 @@ export const generateCreditNotePdf = (input: CreditNotePdfInput) => {
   const amount = Math.abs(Number(input.price) || 0);
   return renderAccountingPdf({
     documentNumber: input.creditNoteNumber,
+    invoiceNumber: input.invoiceNumber,
     title: `DOBROPIS Č. ${input.creditNoteNumber}`,
-    referenceLine: `K faktúre č.: ${input.invoiceNumber}`,
+    originalInvoice: input.invoiceNumber,
     issuedAt: input.issuedAt,
     buyer: input.buyer,
     price: amount === 0 ? 0 : -amount,

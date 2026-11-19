@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useOnlineClients } from '@/lib/clientPresence';
 import { fetchBlobWithProgress, lightFileRef, loadOrderFile, orderFileLocation, packOrderFile, unpackOrderFile, uploadOrderFile } from '@/lib/ecuFile';
-import { creditNoteNumberFromInvoice, downloadStoredInvoice, exportInvoiceArchive, previewInvoiceArchive, readCreditNoteMark, readInvoiceMark, rememberCreditNote, saveOrderCreditNote, saveOrderInvoice, type InvoiceArchiveCounts } from '@/lib/orderInvoice';
+import { creditNoteNumberFromInvoice, exportInvoiceArchive, previewInvoiceArchive, readCreditNoteMark, readInvoiceMark, rememberCreditNote, saveOrderCreditNote, saveOrderInvoice, type InvoiceArchiveCounts } from '@/lib/orderInvoice';
 import { supabase } from '@/lib/supabase';
 import { statusAfterResultDelivery } from '@/lib/orderStatus';
 import { Order, ActivityLog, SUPABASE_ANON_KEY, SUPABASE_URL } from '@/integrations/supabase/client';
@@ -30,6 +30,7 @@ import { toast } from 'sonner';
 import { SERVICES } from '@/data/services';
 import { mailLanguageForClient } from '@/lib/clientLanguage';
 import { loadBillingByUserId, loadClientBilling, orderDisplayName, readCreditBalance, restoreClientCredits, saveCreditBalance, settleClientCredits } from '@/lib/clientProfile';
+import { downloadOrderCreditNote, downloadOrderInvoice } from '@/lib/accountingDocument';
 import { generateCreditNotePdf, generateInvoicePdf } from '@/utils/invoiceGenerator';
 import { loadServiceCatalog, lookupServiceName } from '@/lib/serviceCatalog';
 import ClientCredits from '@/components/ClientCredits';
@@ -1394,7 +1395,10 @@ const ManagementPortal = () => {
       return;
     }
     try {
-      await downloadStoredInvoice(order.invoice_url, `${order.invoice_number || 'faktura'}.pdf`);
+      await downloadOrderInvoice(order.id, {
+        customerName: order.customer_name,
+        customerEmail: order.customer_email,
+      });
     } catch (error) {
       console.error('Invoice download error:', error);
       toast.error('Faktúru sa nepodarilo stiahnuť');
@@ -1407,7 +1411,10 @@ const ManagementPortal = () => {
       return;
     }
     try {
-      await downloadStoredInvoice(order.credit_note_pdf, `${order.credit_note_number || 'dobropis'}.pdf`);
+      await downloadOrderCreditNote(order.id, {
+        customerName: order.customer_name,
+        customerEmail: order.customer_email,
+      });
     } catch (error) {
       console.error('Credit note download error:', error);
       toast.error('Dobropis sa nepodarilo stiahnuť');

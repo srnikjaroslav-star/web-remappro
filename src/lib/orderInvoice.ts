@@ -335,13 +335,24 @@ export const saveOrderCreditNote = async (order: InvoiceTarget, file: File) => {
 const inExportRange = (issued: string, fromYmd: string, toYmd: string) =>
   Boolean(issued) && issued >= fromYmd && issued <= toYmd;
 
-type ExportDocument = { kind: 'invoice' | 'credit'; number: string; url: string };
+type ExportDocument = {
+  kind: 'invoice' | 'credit';
+  number: string;
+  url: string;
+  userId: string;
+  note: string;
+  total: number | string | null;
+};
 
-const documentsForExport = (
-  rows: { note?: string | null; created_at?: string | null; status?: string | null }[],
-  fromYmd: string,
-  toYmd: string,
-) => {
+type ExportRow = {
+  user_id?: string | null;
+  note?: string | null;
+  created_at?: string | null;
+  status?: string | null;
+  total_price?: number | string | null;
+};
+
+const documentsForExport = (rows: ExportRow[], fromYmd: string, toYmd: string) => {
   const documents: ExportDocument[] = [];
   for (const row of rows) {
     const note = String(row.note || '');
@@ -352,25 +363,30 @@ const documentsForExport = (
     const invoiceDate = invoice.invoice_date || created;
     const hasInvoice = Boolean(invoice.invoice_number && invoice.invoice_url);
     const hasCredit = Boolean(credit.credit_note_number && credit.credit_note_url);
+    const base = {
+      userId: String(row.user_id || ''),
+      note,
+      total: row.total_price ?? null,
+    };
 
     if (status === 'completed' && hasInvoice && inExportRange(invoiceDate, fromYmd, toYmd)) {
-      documents.push({ kind: 'invoice', number: invoice.invoice_number || '', url: invoice.invoice_url || '' });
+      documents.push({ kind: 'invoice', number: invoice.invoice_number || '', url: invoice.invoice_url || '', ...base });
       continue;
     }
 
     if (status !== 'cancelled' || !hasInvoice || !hasCredit) continue;
     const creditDate = credit.credit_note_date || invoiceDate;
     if (!inExportRange(invoiceDate, fromYmd, toYmd) && !inExportRange(creditDate, fromYmd, toYmd)) continue;
-    documents.push({ kind: 'invoice', number: invoice.invoice_number || '', url: invoice.invoice_url || '' });
-    documents.push({ kind: 'credit', number: credit.credit_note_number || '', url: credit.credit_note_url || '' });
+    documents.push({ kind: 'invoice', number: invoice.invoice_number || '', url: invoice.invoice_url || '', ...base });
+    documents.push({ kind: 'credit', number: credit.credit_note_number || '', url: credit.credit_note_url || '', ...base });
   }
   return documents;
 };
 
 const loadExportRows = async () => {
-  const fromOrders = await supabase.from('orders').select('note, created_at, status');
+  const fromOrders = await supabase.from('orders').select('user_id, note, created_at, status, total_price');
   if (fromOrders.error) throw new Error(fromOrders.error.message || 'Faktúry sa nepodarilo načítať');
-  return fromOrders.data || [];
+  return (fromOrders.data || []) as ExportRow[];
 };
 
 export type InvoiceArchiveCounts = { invoices: number; credits: number; total: number };
@@ -385,9 +401,21 @@ export const previewInvoiceArchive = async (fromYmd: string, toYmd: string): Pro
 export const exportInvoiceArchive = async (fromYmd: string, toYmd: string) => {
   const files: { name: string; data: Uint8Array }[] = [];
   const used = new Set<string>();
-  const pushFile = async (number: string, url: string) => {
-    const bytes = await readInvoiceBytes(url);
-    const base = safePdfName(number || 'faktura');
+  const pushFile = async (document: ExportDocument) => {
+    let bytes: Uint8Array | null = null;
+    try {
+      const { materializeAccountingFile } = await import('@/lib/accountingDocument');
+      const built = await materializeAccountingFile({
+        userId: document.userId,
+        note: document.note,
+        total: document.total,
+      }, document.kind);
+      if (built) bytes = new Uint8Array(await built.file.arrayBuffer());
+    } catch (error) {
+      console.error('[exportInvoiceArchive] Nové PDF sa nepodarilo zostaviť, použije sa uložený súbor:', error);
+    }
+    if (!bytes) bytes = await readInvoiceBytes(document.url);
+    const base = safePdfName(document.number || 'faktura');
     let name = `${base}.pdf`;
     let copy = 2;
     while (used.has(name)) {
@@ -399,7 +427,7 @@ export const exportInvoiceArchive = async (fromYmd: string, toYmd: string) => {
   };
 
   for (const document of documentsForExport(await loadExportRows(), fromYmd, toYmd)) {
-    await pushFile(document.number, document.url);
+    await pushFile(document);
   }
 
   if (files.length === 0) return 0;
