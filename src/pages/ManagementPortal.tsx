@@ -1533,7 +1533,7 @@ const ManagementPortal = () => {
     cancelled: '!border-red-400/70 !bg-red-500/25 shadow-[0_0_18px_rgba(248,113,113,0.55)] hover:!border-red-400 hover:!bg-red-500/35 hover:shadow-[0_0_22px_rgba(248,113,113,0.7)]',
   };
 
-  const ordersRow = 'grid w-full min-w-[640px] grid-cols-[minmax(0,1.45fr)_minmax(0,1.7fr)_minmax(0,1.5fr)_minmax(0,1.7fr)_8.5rem_9.5rem_312px]';
+  const ordersRow = 'grid w-full min-w-[640px] grid-cols-[minmax(0,1.45fr)_minmax(0,1.7fr)_minmax(0,1.44fr)_minmax(0,1.76fr)_8.5rem_9.5rem_312px]';
 
   const STATUS_CELL_CLASS: Record<string, string> = {
     pending: 'border-yellow-400/80 bg-yellow-500/10 text-yellow-400 shadow-[0_0_12px_rgba(250,204,21,0.28)]',
@@ -1887,7 +1887,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                         </p>
                       </div>
                       <div role="cell" className={flexCell}>
-                        <div className="flex min-w-0 items-baseline gap-x-2">
+                        <div className="flex min-w-0 items-baseline gap-x-0.5">
                           <p className="min-w-0 truncate whitespace-nowrap text-lg font-bold leading-none text-cyan-400" title={order.customer_name}>{order.customer_name}</p>
                           <p className="min-w-0 truncate whitespace-nowrap text-xs leading-none text-white" title={order.customer_email}>{order.customer_email}</p>
                         </div>
