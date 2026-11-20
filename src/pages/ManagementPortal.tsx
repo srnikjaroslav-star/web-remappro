@@ -429,8 +429,6 @@ const ManagementPortal = () => {
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [activeRowId, setActiveRowId] = useState<string | null>(null);
   const [editingFields, setEditingFields] = useState<Record<string, { checksum_crc: string; internal_note: string; important_note: string }>>({});
-  const [importantNote, setImportantNote] = useState<string>('');
-  const [savingImportantNote, setSavingImportantNote] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [statusMode, setStatusMode] = useState<SystemStatusMode>('auto');
   const [statusLoading, setStatusLoading] = useState(false);
@@ -673,7 +671,7 @@ const ManagementPortal = () => {
     });
   }, [orders]);
 
-  // Sync detailOrder with orders array when invoice_number or important_note changes
+  // Sync detailOrder with orders array when invoice or status changes
   useEffect(() => {
     if (detailOrder) {
       const updatedOrder = orders.find(o => o.id === detailOrder.id);
@@ -683,37 +681,15 @@ const ManagementPortal = () => {
         updatedOrder.credit_note_number !== detailOrder.credit_note_number ||
         updatedOrder.credit_note_pdf !== detailOrder.credit_note_pdf ||
         updatedOrder.status !== detailOrder.status ||
-        updatedOrder.result_file_url !== detailOrder.result_file_url ||
-        updatedOrder.important_note !== detailOrder.important_note
+        updatedOrder.result_file_url !== detailOrder.result_file_url
       )) {
         setDetailOrder(updatedOrder);
-        // Sync important_note from updated order to textarea
-        if (updatedOrder.important_note !== detailOrder.important_note) {
-          setImportantNote(updatedOrder.important_note || '');
-        }
-        
-        // Fetch activity logs when detail order is set
         if (updatedOrder.id) {
           fetchActivityLogs(updatedOrder.id);
         }
       }
     }
   }, [orders, detailOrder]);
-
-  // Initialize important_note when detailOrder changes (on open or refresh)
-  useEffect(() => {
-    if (detailOrder) {
-      // Always sync with detailOrder.important_note to ensure persistence
-      // This ensures the textarea shows the value from database
-      setImportantNote(detailOrder.important_note || '');
-      // Reset saved state when switching orders
-      setSavedImportantNote(null);
-    } else {
-      // Clear when no detail order is selected
-      setImportantNote('');
-      setSavedImportantNote(null);
-    }
-  }, [detailOrder?.id, detailOrder?.important_note]);
 
   const handleLogout = async () => {
     try {
@@ -1184,7 +1160,7 @@ const ManagementPortal = () => {
     if (noteUpdate.error) throw noteUpdate.error;
   };
 
-  const handleSaveFields = async (orderId: string) => {
+  const handleSaveFields = async (orderId: string, closeDetail = false) => {
     const order = orders.find((item) => item.id === orderId);
     const crc = (editingFields[orderId]?.checksum_crc ?? order?.checksum_crc ?? '').trim();
 
@@ -1193,13 +1169,17 @@ const ManagementPortal = () => {
       const stored = crc || null;
       await persistOrderField(orderId, 'checksum_crc', stored);
       setOrders((prev) => prev.map((item) => (item.id === orderId ? { ...item, checksum_crc: stored } : item)));
-      setDetailOrder((current) => (current?.id === orderId ? { ...current, checksum_crc: stored } : current));
-      toast.success('CRC uložené');
       setEditingFields((prev) => {
         const next = { ...prev };
         delete next[orderId];
         return next;
       });
+      if (closeDetail) {
+        setDetailOrder((current) => (current?.id === orderId ? null : current));
+      } else {
+        setDetailOrder((current) => (current?.id === orderId ? { ...current, checksum_crc: stored } : current));
+      }
+      toast.success('CRC uložené');
       await fetchOrders(true);
     } catch (error) {
       console.error('Save error:', error);
@@ -1209,54 +1189,23 @@ const ManagementPortal = () => {
     }
   };
 
+  const closeOrderDetail = () => {
+    if (!detailOrder || savingId === detailOrder.id) return;
+    const orderId = detailOrder.id;
+    setEditingFields((prev) => {
+      if (!prev[orderId]) return prev;
+      const next = { ...prev };
+      delete next[orderId];
+      return next;
+    });
+    setDetailOrder(null);
+  };
+
   const getEditableValue = (order: Order, field: 'checksum_crc' | 'internal_note') => {
     if (editingFields[order.id]?.[field] !== undefined) {
       return editingFields[order.id][field];
     }
     return order[field] || '';
-  };
-
-  // Sanitize text input - remove potentially harmful HTML/JS
-  const sanitizeText = (text: string): string => {
-    return text
-      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '') // Remove script tags
-      .replace(/<[^>]+>/g, '') // Remove all HTML tags
-      .replace(/javascript:/gi, '') // Remove javascript: protocol
-      .replace(/on\w+\s*=/gi, '') // Remove event handlers
-      .trim();
-  };
-
-  const [savedImportantNote, setSavedImportantNote] = useState<string | null>(null);
-
-  const handleSaveImportantNote = async (orderId: string) => {
-    setSavingImportantNote(orderId);
-    try {
-      const sanitizedNote = importantNote.trim() ? sanitizeText(importantNote) : null;
-      await persistOrderField(orderId, 'important_note', sanitizedNote);
-      setOrders((prev) => prev.map((item) => (item.id === orderId ? { ...item, important_note: sanitizedNote } : item)));
-      
-      toast.success('Poznámka uložená');
-      
-      // Refresh orders to get latest data
-      await fetchOrders();
-      
-      // Update detailOrder if it's currently open - keep the saved value
-      if (detailOrder?.id === orderId) {
-        setDetailOrder(prev => prev ? { ...prev, important_note: sanitizedNote } : null);
-        // Keep the text in textarea (don't clear it)
-        // The textarea will show the saved value
-        setSavedImportantNote(sanitizedNote);
-        // Reset saved state after 2 seconds to show normal state again
-        setTimeout(() => {
-          setSavedImportantNote(null);
-        }, 2000);
-      }
-    } catch (error) {
-      console.error('Save important note error:', error);
-      toast.error('Failed to save important message');
-    } finally {
-      setSavingImportantNote(null);
-    }
   };
 
   const handleResultUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1541,7 +1490,8 @@ const ManagementPortal = () => {
       (order.customer_name || '').toLowerCase().includes(searchLower) ||
       (order.customer_email || '').toLowerCase().includes(searchLower) ||
       (order.car_brand || '').toLowerCase().includes(searchLower) ||
-      (order.car_model || '').toLowerCase().includes(searchLower);
+      (order.car_model || '').toLowerCase().includes(searchLower) ||
+      (order.checksum_crc || '').toLowerCase().includes(searchLower);
     
     const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
     
@@ -1564,7 +1514,7 @@ const ManagementPortal = () => {
     cancelled: '!border-red-400/70 !bg-red-500/25 shadow-[0_0_18px_rgba(248,113,113,0.55)] hover:!border-red-400 hover:!bg-red-500/35 hover:shadow-[0_0_22px_rgba(248,113,113,0.7)]',
   };
 
-  const ordersRow = 'grid w-full min-w-[640px] grid-cols-[minmax(0,1.41fr)_minmax(0,1.7fr)_minmax(0,1.44fr)_minmax(0,1.8fr)_8.5rem_9.5rem_312px]';
+  const ordersRow = 'grid w-full min-w-[640px] grid-cols-[minmax(0,1.02fr)_minmax(0,1.62fr)_6rem_minmax(0,1.48fr)_minmax(0,1.91fr)_7.5rem_9.5rem_312px]';
 
   const STATUS_CELL_CLASS: Record<string, string> = {
     pending: 'border-yellow-400/80 bg-yellow-500/10 text-yellow-400 shadow-[0_0_12px_rgba(250,204,21,0.28)]',
@@ -1830,6 +1780,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                 <div role="row" className={`${ordersRow} border-b border-primary/30 bg-[#0a192f] shadow-md`}>
                   <div role="columnheader" className="min-w-0 overflow-hidden border-r border-slate-500 p-2.5 text-left text-sm font-bold uppercase tracking-wide text-white">ID / Doklad</div>
                   <div role="columnheader" className="min-w-0 overflow-hidden border-r border-slate-500 p-2.5 text-left text-sm font-bold uppercase tracking-wide text-white">Vozidlo</div>
+                  <div role="columnheader" className="min-w-0 overflow-hidden border-r border-slate-500 p-2.5 text-center text-sm font-bold uppercase tracking-wide text-white">CRC</div>
                   <div role="columnheader" className="min-w-0 overflow-hidden border-r border-slate-500 p-2.5 text-left text-sm font-bold uppercase tracking-wide text-white">Dátum</div>
                   <div role="columnheader" className="min-w-0 overflow-hidden border-r border-slate-500 p-2.5 text-left text-sm font-bold uppercase tracking-wide text-white">Zákazník</div>
                   <div role="columnheader" className="sticky right-[calc(312px+9.5rem)] z-30 border-r border-slate-500 bg-[#0a192f] p-4 text-center text-sm font-bold uppercase tracking-wide text-white">Cena</div>
@@ -1840,13 +1791,13 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
               <div role="rowgroup">
                 {loading ? (
                 <div role="row" className={ordersRow}>
-                      <div role="cell" className="col-span-7 py-12 text-center text-muted-foreground">
+                      <div role="cell" className="col-span-8 py-12 text-center text-muted-foreground">
                         Načítavam objednávky...
                       </div>
                     </div>
                   ) : filteredOrders.length === 0 ? (
                     <div role="row" className={ordersRow}>
-                      <div role="cell" className="col-span-7 py-12 text-center text-muted-foreground">
+                      <div role="cell" className="col-span-8 py-12 text-center text-muted-foreground">
                         Žiadne objednávky
                       </div>
                     </div>
@@ -1912,8 +1863,22 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                       <div role="cell" className={flexCell}>
                         <p className="truncate text-base font-bold leading-none text-cyan-400" title={vehicle || '—'}>{vehicle || '—'}</p>
                       </div>
+                      <div role="cell" className={`${flexCell} px-1.5`}>
+                        {order.checksum_crc?.trim() ? (
+                          <span
+                            className="flex h-6 w-full min-w-0 items-center justify-center truncate rounded border border-primary/60 bg-[#0a192f] px-1.5 text-base font-bold leading-none text-cyan-400"
+                            title={order.checksum_crc.trim()}
+                          >
+                            {order.checksum_crc.trim()}
+                          </span>
+                        ) : (
+                          <span className="flex h-6 w-full min-w-0 items-center justify-center rounded border border-slate-600 bg-[#0a192f] px-1.5 text-base font-bold leading-none text-slate-500">
+                            —
+                          </span>
+                        )}
+                      </div>
                       <div role="cell" className={flexCell}>
-                        <p className="truncate text-base font-medium leading-none text-white">
+                        <p className="truncate text-base font-medium leading-none text-white" title={formatLocalDateTime(order.created_at)}>
                           {formatLocalDateTime(order.created_at)}
                         </p>
                       </div>
@@ -2195,25 +2160,27 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
         {/* Order Detail Modal */}
         {detailOrder && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-            <div className="max-w-5xl w-full max-h-[90vh] overflow-y-auto overflow-x-hidden rounded-xl border border-[rgba(0,242,255,0.4)] bg-[#070b10] shadow-[0_0_28px_rgba(0,242,255,0.16)]">
-              <div className="p-2">
-                <div className="mb-2 flex items-center justify-between">
+            <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-primary/40 bg-[#070d16] shadow-[0_0_30px_rgba(0,242,255,0.22)]">
+              <div className="flex min-h-0 flex-1 flex-col p-2">
+                <div className="mb-2 flex shrink-0 items-center justify-between">
                   <h2 className="flex items-center gap-2 text-xl font-bold text-foreground">
                     <FileText className="w-6 h-6 text-primary" />
                     Detail objednávky
                   </h2>
                   <button
-                    onClick={() => setDetailOrder(null)}
+                    type="button"
+                    onClick={closeOrderDetail}
                     className="shrink-0 rounded-none border border-red-400/70 bg-red-500/10 p-2 text-red-400 shadow-[0_0_12px_rgba(248,113,113,0.32)] transition-colors duration-200 hover:bg-red-500/16 hover:text-red-400 hover:shadow-[0_0_16px_rgba(248,113,113,0.42)]"
                   >
                     <X className="h-5 w-5" />
                   </button>
                 </div>
 
+                <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
                 <div className="grid min-w-0 grid-cols-1 items-start gap-2 lg:grid-cols-2">
                   <div className="flex min-w-0 flex-col gap-1">
-                    <section className="min-w-0 rounded-lg border border-[rgba(0,242,255,0.25)] bg-[#070b10] p-2.5">
-                      <h3 className="mb-1.5 border-b border-primary/20 pb-1 text-sm font-semibold text-foreground">
+                    <section className="min-w-0 rounded-lg border border-primary/35 bg-[#0a192f] p-2.5 shadow-[inset_0_0_18px_rgba(0,242,255,0.08)]">
+                      <h3 className="mb-1.5 border-b border-primary/30 pb-1 text-sm font-semibold text-primary">
                         Základné informácie
                       </h3>
                       <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
@@ -2283,8 +2250,8 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                       </div>
                     </section>
 
-                    <section className="min-w-0 rounded-lg border border-[rgba(0,242,255,0.25)] bg-[#070b10] p-2.5">
-                      <h3 className="mb-1.5 border-b border-primary/20 pb-1 text-sm font-semibold text-primary">
+                    <section className="min-w-0 rounded-lg border border-primary/35 bg-[#0a192f] p-2.5 shadow-[inset_0_0_18px_rgba(0,242,255,0.08)]">
+                      <h3 className="mb-1.5 border-b border-primary/30 pb-1 text-sm font-semibold text-primary">
                         Vozidlo
                       </h3>
                       <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
@@ -2307,8 +2274,8 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                       </div>
                     </section>
 
-                    <section className="min-w-0 rounded-lg border border-[rgba(0,242,255,0.25)] bg-[#070b10] p-2.5">
-                      <h3 className="mb-1.5 border-b border-primary/20 pb-1 text-sm font-semibold text-primary">
+                    <section className="min-w-0 rounded-lg border border-primary/35 bg-[#0a192f] p-2.5 shadow-[inset_0_0_18px_rgba(0,242,255,0.08)]">
+                      <h3 className="mb-1.5 border-b border-primary/30 pb-1 text-sm font-semibold text-primary">
                         Poznámka zákazníka
                       </h3>
                       <p className="break-words whitespace-pre-wrap text-foreground">{detailOrder.customer_note || '—'}</p>
@@ -2316,8 +2283,8 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                   </div>
 
                   <div className="flex min-w-0 flex-col gap-1">
-                    <section className="min-w-0 rounded-lg border border-[rgba(0,242,255,0.25)] bg-[#070b10] p-2.5">
-                      <h3 className="mb-1.5 border-b border-primary/20 pb-1 text-sm font-semibold text-primary">
+                    <section className="min-w-0 rounded-lg border border-primary/35 bg-[#0a192f] p-2.5 shadow-[inset_0_0_18px_rgba(0,242,255,0.08)]">
+                      <h3 className="mb-1.5 border-b border-primary/30 pb-1 text-sm font-semibold text-primary">
                         Zákazník
                       </h3>
                       <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
@@ -2332,59 +2299,33 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                       </div>
                     </section>
 
-                    <section className="min-w-0 rounded-lg border border-[rgba(0,242,255,0.25)] bg-[#070b10] p-2.5">
-                      <h3 className="mb-1.5 border-b border-primary/20 pb-1 text-sm font-semibold text-primary">
+                    <section className="min-w-0 rounded-lg border border-primary/35 bg-[#0a192f] p-2.5 shadow-[inset_0_0_18px_rgba(0,242,255,0.08)]">
+                      <h3 className="mb-1.5 border-b border-primary/30 pb-1 text-sm font-semibold text-primary">
                         Služby
                       </h3>
                       <p className="break-words text-foreground">{getServiceNames(detailOrder.service_type) || '—'}</p>
                     </section>
 
-                    <section className="min-w-0 rounded-lg border border-[rgba(0,242,255,0.25)] bg-[#070b10] p-2.5">
-                      <h3 className="mb-1.5 border-b border-primary/20 pb-1 text-sm font-semibold text-primary">
+                    <section className="min-w-0 rounded-lg border border-primary/35 bg-[#0a192f] p-2.5 shadow-[inset_0_0_18px_rgba(0,242,255,0.08)]">
+                      <h3 className="mb-1.5 border-b border-primary/30 pb-1 text-sm font-semibold text-primary">
                         CRC
                       </h3>
-                      <div className="flex flex-wrap items-center gap-3">
-                        <input
-                          type="text"
-                          value={getEditableValue(detailOrder, 'checksum_crc')}
-                          onChange={(e) => {
-                            handleFieldChange(detailOrder.id, 'checksum_crc', e.target.value);
-                            if (!editingFields[detailOrder.id]) {
-                              setEditingFields(prev => ({
-                                ...prev,
-                                [detailOrder.id]: { ...prev[detailOrder.id], checksum_crc: e.target.value }
-                              }));
-                            }
-                          }}
-                          placeholder="CRC..."
-                          maxLength={6}
-                          className="h-9 w-[120px] max-w-full rounded border border-gray-600 bg-secondary/50 px-3 py-2 font-mono text-sm text-white placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-primary/50"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setDetailOrder(null)}
-                          className="rounded-none border border-red-400/70 bg-red-500/10 px-4 py-2 text-red-400 shadow-[0_0_14px_rgba(248,113,113,0.32)] transition-colors hover:border-red-400 hover:bg-red-500/16 hover:shadow-[0_0_16px_rgba(248,113,113,0.42)]"
-                        >
-                          Zrušiť
-                        </button>
-                        <button
-                          onClick={() => handleSaveFields(detailOrder.id)}
-                          disabled={savingId === detailOrder.id}
-                          className="flex items-center gap-2 rounded-none border border-primary/80 bg-primary/10 px-4 py-2 text-primary shadow-[0_0_14px_rgba(0,242,255,0.32)] transition-colors hover:border-primary hover:bg-primary/16 hover:shadow-[0_0_16px_rgba(0,242,255,0.42)] disabled:cursor-not-allowed disabled:opacity-50"
-                          title="Uložiť CRC"
-                        >
-                          <Save className={`w-4 h-4 ${savingId === detailOrder.id ? 'animate-pulse' : ''}`} />
-                          Uložiť
-                        </button>
-                      </div>
+                      <input
+                        type="text"
+                        value={getEditableValue(detailOrder, 'checksum_crc')}
+                        onChange={(e) => handleFieldChange(detailOrder.id, 'checksum_crc', e.target.value)}
+                        placeholder="CRC..."
+                        maxLength={6}
+                        className="h-9 w-[92px] max-w-full rounded border border-primary/60 bg-[#070d16] px-3 py-2 font-mono text-xl leading-none text-cyan-400 shadow-[0_0_12px_rgba(0,242,255,0.18)] placeholder:text-primary/40 focus:border-primary focus:outline-none focus:shadow-[0_0_16px_rgba(0,242,255,0.35)]"
+                      />
                     </section>
                   </div>
                 </div>
 
                 {/* Interná poznámka */}
                 {detailOrder.internal_note && (
-                  <section className="mt-2 min-w-0 rounded-lg border border-[rgba(0,242,255,0.25)] bg-[#070b10] p-2.5">
-                    <h3 className="mb-1.5 border-b border-primary/20 pb-1 text-sm font-semibold text-foreground">
+                  <section className="mt-2 min-w-0 rounded-lg border border-primary/35 bg-[#0a192f] p-2.5 shadow-[inset_0_0_18px_rgba(0,242,255,0.08)]">
+                    <h3 className="mb-1.5 border-b border-primary/30 pb-1 text-sm font-semibold text-primary">
                       Interná poznámka
                     </h3>
                     <p className="break-words whitespace-pre-wrap text-foreground">{detailOrder.internal_note}</p>
@@ -2393,8 +2334,8 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
 
                 {/* Activity Log */}
                 {activityLogs.length > 0 && (
-                  <section className="mt-2 min-w-0 rounded-lg border border-[rgba(0,242,255,0.25)] bg-[#070b10] p-2.5">
-                    <h3 className="mb-1.5 border-b border-primary/20 pb-1 text-sm font-semibold text-foreground">
+                  <section className="mt-2 min-w-0 rounded-lg border border-primary/35 bg-[#0a192f] p-2.5 shadow-[inset_0_0_18px_rgba(0,242,255,0.08)]">
+                    <h3 className="mb-1.5 border-b border-primary/30 pb-1 text-sm font-semibold text-primary">
                       Časová os aktivít
                     </h3>
                     <div className="space-y-1.5">
@@ -2446,68 +2387,27 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                   </section>
                 )}
 
-                <section className="mt-1 w-full min-w-0 rounded-lg border border-[rgba(0,242,255,0.25)] bg-[#070b10] p-2.5">
-                  <h3 className="mb-1.5 border-b border-primary/20 pb-1 text-sm font-semibold text-foreground">
-                    *IMPORTANT*
-                  </h3>
-                  <div className="space-y-1.5">
-                    <textarea
-                      value={importantNote}
-                      onChange={(e) => {
-                        setImportantNote(e.target.value);
-                        // Reset saved state when user starts typing again
-                        if (savedImportantNote !== null && e.target.value !== savedImportantNote) {
-                          setSavedImportantNote(null);
-                        }
-                      }}
-                      placeholder="Enter important message for customer email..."
-                      rows={2}
-                      maxLength={500}
-                      className="h-8 w-full resize-none rounded-lg border border-gray-600 bg-secondary/50 px-3 py-1 text-sm text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/50"
-                    />
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <p className="min-w-0 flex-1 break-words text-xs text-muted-foreground">
-                        This message will appear in the customer email after file completion notification.
-                      </p>
-                      <div className="flex shrink-0 items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setDetailOrder(null)}
-                          className="rounded-none border border-red-400/70 bg-red-500/10 px-4 py-2 text-red-400 shadow-[0_0_14px_rgba(248,113,113,0.32)] transition-colors hover:border-red-400 hover:bg-red-500/16 hover:shadow-[0_0_16px_rgba(248,113,113,0.42)]"
-                        >
-                          Zrušiť
-                        </button>
-                        <button
-                        onClick={() => handleSaveImportantNote(detailOrder.id)}
-                        disabled={savingImportantNote === detailOrder.id || (savedImportantNote !== null && importantNote === savedImportantNote)}
-                        className={`inline-flex items-center gap-2 rounded-none border px-4 py-2 shadow-[0_0_14px_rgba(0,242,255,0.32)] transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                          savedImportantNote !== null && importantNote === savedImportantNote
-                            ? 'border-emerald-400/70 bg-emerald-500/10 text-emerald-400 shadow-[0_0_14px_rgba(52,211,153,0.32)]'
-                            : 'border-primary/80 bg-primary/10 text-primary hover:border-primary hover:bg-primary/16 hover:shadow-[0_0_16px_rgba(0,242,255,0.42)]'
-                        }`}
-                        title={savedImportantNote !== null && importantNote === savedImportantNote ? 'Uložené!' : 'Uložiť dôležitú správu'}
-                      >
-                        {savedImportantNote !== null && importantNote === savedImportantNote ? (
-                          <>
-                            <CheckCircle className="w-4 h-4" />
-                            Uložené!
-                          </>
-                        ) : savingImportantNote === detailOrder.id ? (
-                          <>
-                            <Save className="w-4 h-4 animate-pulse" />
-                            Ukladám...
-                          </>
-                        ) : (
-                          <>
-                            <Save className="w-4 h-4" />
-                            Uložiť poznámku
-                          </>
-                        )}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </section>
+                </div>
+                <div className="mt-2 flex shrink-0 items-center justify-end gap-3 border-t border-primary/30 pt-2">
+                  <button
+                    type="button"
+                    onClick={closeOrderDetail}
+                    disabled={savingId === detailOrder.id}
+                    className="rounded-none border border-red-400/70 bg-red-500/10 px-4 py-2 text-red-400 shadow-[0_0_14px_rgba(248,113,113,0.32)] transition-colors hover:border-red-400 hover:bg-red-500/16 hover:shadow-[0_0_16px_rgba(248,113,113,0.42)] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Zrušiť
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSaveFields(detailOrder.id, true)}
+                    disabled={savingId === detailOrder.id}
+                    className="flex items-center gap-2 rounded-none border border-primary/80 bg-primary/10 px-4 py-2 text-primary shadow-[0_0_14px_rgba(0,242,255,0.32)] transition-colors hover:border-primary hover:bg-primary/16 hover:shadow-[0_0_16px_rgba(0,242,255,0.42)] disabled:cursor-not-allowed disabled:opacity-50"
+                    title="Uložiť CRC"
+                  >
+                    <Save className={`w-4 h-4 ${savingId === detailOrder.id ? 'animate-pulse' : ''}`} />
+                    Uložiť
+                  </button>
+                </div>
               </div>
             </div>
           </div>
