@@ -116,12 +116,14 @@ export const saveBlob = (blob: Blob, filename: string) => {
   window.setTimeout(() => window.URL.revokeObjectURL(url), 60000);
 };
 
-const invoicePath = (stored: string) => {
+const bucketLocation = (stored: string) => {
   if (!stored.startsWith('bucket:')) return null;
   const [, bucket, ...pathParts] = stored.split(':');
   if (!bucket || pathParts.length === 0) return null;
   return { bucket, path: pathParts.join(':') };
 };
+
+const invoicePath = (stored: string) => bucketLocation(stored);
 
 const MARK_INVOICE = '[[rp-invoice]]';
 const MARK_CREDIT = '[[rp-credit]]';
@@ -210,19 +212,26 @@ type IssuedDocument = {
   credit: string;
 };
 
-const seriesPrefix = (kind: 'invoice' | 'credit', year: number) =>
-  kind === 'invoice' ? String(year) : `9${String(year).slice(1)}`;
+const SERIES_WIDTH = 4;
+
+const seriesPrefix = (kind: 'invoice' | 'credit', year: number) => {
+  const full = String(year);
+  return kind === 'invoice' ? full : `9${full.slice(1)}`;
+};
+
+const serialInYear = (value: string, prefix: string) => {
+  if (value.length !== prefix.length + SERIES_WIDTH || !value.startsWith(prefix)) return 0;
+  const tail = value.slice(prefix.length);
+  return /^\d{4}$/.test(tail) ? Number(tail) : 0;
+};
 
 const nextInSeries = (used: string[], prefix: string) => {
   let highest = 0;
   for (const value of used) {
-    if (!value.startsWith(prefix)) continue;
-    const tail = value.slice(prefix.length);
-    if (!/^\d+$/.test(tail)) continue;
-    const serial = Number(tail);
+    const serial = serialInYear(value, prefix);
     if (serial > highest) highest = serial;
   }
-  return `${prefix}${String(highest + 1).padStart(4, '0')}`;
+  return `${prefix}${String(highest + 1).padStart(SERIES_WIDTH, '0')}`;
 };
 
 const loadIssuedDocuments = async () => {
@@ -386,6 +395,39 @@ export const saveOrderCreditNote = async (order: InvoiceTarget, file: File, cred
 
   await rememberCreditNote(order.id, number, issued, stored);
   return { credit_note_number: number, credit_note_pdf: stored, credit_note_date: issued };
+};
+
+const RESULT_MARK = '|||RESULT|||';
+
+export const deleteOrderFilesAndRow = async (orderId: string) => {
+  const current = await supabase.from('orders').select('file_url, note').eq('id', orderId).maybeSingle();
+  if (current.error) throw new Error(current.error.message || 'Objednávku sa nepodarilo načítať.');
+  if (!current.data) throw new Error('Objednávka sa nenašla.');
+
+  const note = String(current.data.note || '');
+  const invoice = readInvoiceMark(note);
+  const credit = readCreditNoteMark(note);
+  const storedFile = String(current.data.file_url || '');
+  const splitAt = storedFile.indexOf(RESULT_MARK);
+  const fileRefs = splitAt < 0
+    ? [storedFile]
+    : [storedFile.slice(0, splitAt), storedFile.slice(splitAt + RESULT_MARK.length)];
+  const grouped = new Map<string, Set<string>>();
+  for (const ref of [...fileRefs, invoice.invoice_url, credit.credit_note_url]) {
+    const located = bucketLocation(String(ref || ''));
+    if (!located) continue;
+    const paths = grouped.get(located.bucket) ?? new Set<string>();
+    paths.add(located.path);
+    grouped.set(located.bucket, paths);
+  }
+  for (const [bucket, paths] of grouped) {
+    const removed = await supabase.storage.from(bucket).remove([...paths]);
+    if (removed.error) throw new Error(removed.error.message || 'Súbory objednávky sa nepodarilo zmazať.');
+  }
+
+  const deleted = await supabase.from('orders').delete().eq('id', orderId).select('id');
+  if (deleted.error) throw new Error(deleted.error.message || 'Objednávku sa nepodarilo zmazať.');
+  if (!deleted.data?.length) throw new Error('Objednávku sa nepodarilo zmazať.');
 };
 
 const inExportRange = (issued: string, fromYmd: string, toYmd: string) =>

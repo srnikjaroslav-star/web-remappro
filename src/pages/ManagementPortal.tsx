@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   Download, Upload, Eye, CheckCircle, CalendarDays, ChevronLeft, ChevronRight,
-  Search, Power, Save, RotateCcw, LogOut, FileText, X
+  Search, Power, Save, RotateCcw, LogOut, FileText, Trash2, X
 } from 'lucide-react';
 import { DayPicker } from 'react-day-picker';
 import { sk } from 'date-fns/locale';
@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useOnlineClients } from '@/lib/clientPresence';
 import { fetchBlobWithProgress, lightFileRef, loadOrderFile, orderFileLocation, packOrderFile, unpackOrderFile, uploadOrderFile } from '@/lib/ecuFile';
-import { exportInvoiceArchive, nextCreditNoteNumber, nextInvoiceNumber, previewInvoiceArchive, readCreditNoteMark, readInvoiceMark, rememberCreditNote, saveOrderCreditNote, saveOrderInvoice, type InvoiceArchiveCounts } from '@/lib/orderInvoice';
+import { deleteOrderFilesAndRow, exportInvoiceArchive, nextCreditNoteNumber, nextInvoiceNumber, previewInvoiceArchive, readCreditNoteMark, readInvoiceMark, rememberCreditNote, saveOrderCreditNote, saveOrderInvoice, type InvoiceArchiveCounts } from '@/lib/orderInvoice';
 import { supabase } from '@/lib/supabase';
 import { statusAfterResultDelivery } from '@/lib/orderStatus';
 import { Order, ActivityLog, SUPABASE_ANON_KEY, SUPABASE_URL } from '@/integrations/supabase/client';
@@ -332,7 +332,11 @@ const downloadOrderPart = async (
 };
 
 const STATUS_NOTIFY_EMAIL = 'srnik.jaroslav@gmail.com';
+const ADMIN_TEST_ACCOUNT = 'Admin Test';
 const ADMIN_SECTION_KEY = 'remappro-admin-section';
+
+const isAdminTestOrder = (order: { customer_name?: string | null }) =>
+  (order.customer_name || '').trim() === ADMIN_TEST_ACCOUNT;
 type AdminSection = 'orders' | 'clients' | 'services' | 'hours' | 'invoices';
 
 const parseAdminSection = (value: string | null): AdminSection | null =>
@@ -459,6 +463,8 @@ const ManagementPortal = () => {
   const onlineIds = useOnlineClients(!isCheckingAuth);
   const [cancelConfirmOrder, setCancelConfirmOrder] = useState<Order | null>(null);
   const [cancellingOrder, setCancellingOrder] = useState(false);
+  const [deleteConfirmOrder, setDeleteConfirmOrder] = useState<Order | null>(null);
+  const [deletingOrder, setDeletingOrder] = useState(false);
   const [issuingCreditId, setIssuingCreditId] = useState<string | null>(null);
   const pendingCreditNotes = useRef(new Map<string, { credit_note_number: string; credit_note_pdf: string }>());
   const orderOwnerRef = useRef<{ id: string; name: string; email: string }>({ id: '', name: '', email: '' });
@@ -1069,6 +1075,31 @@ const ManagementPortal = () => {
           ? 'Objednávka bola zrušená a kredity boli vrátené klientovi.'
           : 'Objednávka bola zrušená.'),
     );
+  };
+
+  const confirmDeleteOrder = async () => {
+    const order = deleteConfirmOrder;
+    if (!order || deletingOrder) return;
+    if (!isAdminTestOrder(order)) {
+      setDeleteConfirmOrder(null);
+      return;
+    }
+    setDeletingOrder(true);
+    try {
+      await deleteOrderFilesAndRow(order.id);
+      pendingCreditNotes.current.delete(order.id);
+      setOrders((prev) => prev.filter((item) => item.id !== order.id));
+      setDetailOrder((current) => (current?.id === order.id ? null : current));
+      setActiveRowId((current) => (current === order.id ? null : current));
+      setDeleteConfirmOrder(null);
+      toast.success('Testovacia objednávka bola zmazaná.');
+      void fetchOrders(true);
+    } catch (error) {
+      console.error('[confirmDeleteOrder]', error);
+      toast.error(error instanceof Error ? error.message : 'Objednávku sa nepodarilo zmazať.');
+    } finally {
+      setDeletingOrder(false);
+    }
   };
 
   const confirmCancelOrder = async () => {
@@ -2009,6 +2040,20 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                           >
                             <RotateCcw className="h-5 w-5" />
                           </button>
+                          {isAdminTestOrder(order) && (
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                if (!isAdminTestOrder(order)) return;
+                                setDeleteConfirmOrder(order);
+                              }}
+                              className={`${actionCell} bg-red-500/10 text-red-400 hover:bg-red-500/20`}
+                              title="Zmazať testovaciu objednávku"
+                            >
+                              <Trash2 className="h-5 w-5" />
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -2520,6 +2565,40 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
               className="rounded-none border border-red-500/80 bg-red-500/10 text-red-400 shadow-[0_0_14px_rgba(239,68,68,0.32)] hover:border-red-400 hover:bg-red-500/16 hover:text-red-400 hover:shadow-[0_0_16px_rgba(239,68,68,0.42)]"
             >
               Áno, zrušiť
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={deleteConfirmOrder !== null}
+        onOpenChange={(open) => {
+          if (!open && !deletingOrder) setDeleteConfirmOrder(null);
+        }}
+      >
+        <AlertDialogContent className="border border-red-500/80 bg-[#1a0b0b] shadow-[0_0_32px_rgba(239,68,68,0.45)] sm:max-w-[560px]">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-xl font-black tracking-wide text-red-400">UPOZORNENIE</AlertDialogTitle>
+            <AlertDialogDescription className="text-base leading-6 text-white">
+              Naozaj chcete natrvalo zmazať túto testovaciu objednávku vrátane jej súborov a dokladov?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              disabled={deletingOrder}
+              className="rounded-none border-slate-400/70 bg-white/5 text-white shadow-[0_0_12px_rgba(148,163,184,0.28)] hover:bg-white/10 hover:text-white hover:shadow-[0_0_16px_rgba(148,163,184,0.36)]"
+            >
+              Nie
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deletingOrder}
+              onClick={(event) => {
+                event.preventDefault();
+                void confirmDeleteOrder();
+              }}
+              className="rounded-none border border-red-500/80 bg-red-500/10 text-red-400 shadow-[0_0_14px_rgba(239,68,68,0.32)] hover:border-red-400 hover:bg-red-500/16 hover:text-red-400 hover:shadow-[0_0_16px_rgba(239,68,68,0.42)]"
+            >
+              Áno, zmazať
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
