@@ -2434,7 +2434,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                     type="button"
                     onClick={closeOrderDetail}
                     disabled={savingId === detailOrder.id}
-                    className="rounded-none border border-red-400/70 bg-red-500/10 px-4 py-2 text-red-400 shadow-[0_0_14px_rgba(248,113,113,0.32)] transition-colors hover:border-red-400 hover:bg-red-500/16 hover:shadow-[0_0_16px_rgba(248,113,113,0.42)] disabled:cursor-not-allowed disabled:opacity-50"
+                    className="rounded-none border border-primary/80 bg-primary/10 px-4 py-2 text-primary shadow-[0_0_14px_rgba(0,242,255,0.32)] transition-colors hover:border-primary hover:bg-primary/16 hover:shadow-[0_0_16px_rgba(0,242,255,0.42)] disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Zrušiť
                   </button>
@@ -2442,7 +2442,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                     type="button"
                     onClick={() => handleSaveFields(detailOrder.id, true)}
                     disabled={savingId === detailOrder.id}
-                    className="flex items-center gap-2 rounded-none border border-primary/80 bg-primary/10 px-4 py-2 text-primary shadow-[0_0_14px_rgba(0,242,255,0.32)] transition-colors hover:border-primary hover:bg-primary/16 hover:shadow-[0_0_16px_rgba(0,242,255,0.42)] disabled:cursor-not-allowed disabled:opacity-50"
+                    className="flex items-center gap-2 rounded-none border border-emerald-400/80 bg-emerald-500/15 px-4 py-2 text-emerald-300 shadow-[0_0_14px_rgba(52,211,153,0.35)] transition-colors hover:border-emerald-300 hover:bg-emerald-500/25 hover:text-emerald-200 hover:shadow-[0_0_16px_rgba(52,211,153,0.5)] disabled:cursor-not-allowed disabled:opacity-50"
                     title="Uložiť CRC"
                   >
                     <Save className={`w-4 h-4 ${savingId === detailOrder.id ? 'animate-pulse' : ''}`} />

@@ -187,9 +187,10 @@ const ClientCredits = ({ onlineIds, reloadKey = 0 }: ClientCreditsProps) => {
   };
 
   const confirmLabel = pending?.direction === 'subtract' ? 'Odrátať' : 'Pripísať';
+  const cancelClass = 'inline-flex h-[42px] items-center gap-2 rounded-none border border-primary/80 bg-primary/10 px-4 text-sm font-bold uppercase tracking-wide text-primary shadow-[0_0_14px_rgba(0,242,255,0.32)] transition-colors hover:border-primary hover:bg-primary/16 hover:shadow-[0_0_16px_rgba(0,242,255,0.42)] disabled:opacity-60';
   const confirmClass = pending?.direction === 'subtract'
     ? 'inline-flex h-[42px] items-center gap-2 rounded-none border border-red-500/80 bg-red-500/10 px-4 text-sm font-bold uppercase tracking-wide text-red-400 shadow-[0_0_14px_rgba(239,68,68,0.32)] transition-colors hover:border-red-400 hover:bg-red-500/16 hover:shadow-[0_0_16px_rgba(239,68,68,0.42)] disabled:opacity-60'
-    : 'inline-flex h-[42px] items-center gap-2 rounded-none border border-primary/80 bg-primary/10 px-4 text-sm font-bold uppercase tracking-wide text-primary shadow-[0_0_14px_rgba(0,242,255,0.32)] transition-colors hover:border-primary hover:bg-primary/16 hover:shadow-[0_0_16px_rgba(0,242,255,0.42)] disabled:opacity-60';
+    : 'inline-flex h-[42px] items-center gap-2 rounded-none border border-emerald-400/80 bg-emerald-500/15 px-4 text-sm font-bold uppercase tracking-wide text-emerald-300 shadow-[0_0_14px_rgba(52,211,153,0.35)] transition-colors hover:border-emerald-300 hover:bg-emerald-500/25 hover:text-emerald-200 hover:shadow-[0_0_16px_rgba(52,211,153,0.5)] disabled:opacity-60';
 
   return (
     <div className="h-fit w-full shrink-0 rounded-xl border border-primary/20 bg-background/40 shadow-[0_0_30px_rgba(59,130,246,0.15)] backdrop-blur-xl">
@@ -232,7 +233,7 @@ const ClientCredits = ({ onlineIds, reloadKey = 0 }: ClientCreditsProps) => {
               />
             </label>
             <div className="mt-3 flex justify-end gap-3">
-              <button type="button" onClick={closeCredit} disabled={adjustingId === pendingClient.id} className="inline-flex h-[42px] items-center gap-2 rounded-none border border-red-400/70 bg-red-500/10 px-4 text-sm font-bold uppercase tracking-wide text-red-400 shadow-[0_0_14px_rgba(248,113,113,0.32)] transition-colors hover:border-red-400 hover:bg-red-500/16 hover:shadow-[0_0_16px_rgba(248,113,113,0.42)] disabled:opacity-60">
+              <button type="button" onClick={closeCredit} disabled={adjustingId === pendingClient.id} className={cancelClass}>
                 Zrušiť
               </button>
               <button type="button" onClick={confirmAdjust} disabled={adjustingId === pendingClient.id} className={confirmClass}>
