@@ -165,10 +165,9 @@ const applyDetail = (current: SystemSettings, detail: unknown): SystemSettings =
   return current;
 };
 
-const SystemStatus = ({ showModeLabel = false }: { showModeLabel?: boolean }) => {
-  const { t } = useLanguage();
+export const useSystemOnline = () => {
   const [settings, setSettings] = useState<SystemSettings>(fallbackSettings);
-  const [loading, setLoading] = useState(true);
+  const [ready, setReady] = useState(false);
   const [clock, setClock] = useState(0);
 
   useEffect(() => {
@@ -176,7 +175,7 @@ const SystemStatus = ({ showModeLabel = false }: { showModeLabel?: boolean }) =>
     fetchSystemSettings().then((next) => {
       if (!active) return;
       if (next) setSettings((current) => (settingsMatch(current, next) ? current : next));
-      setLoading(false);
+      setReady(true);
     });
 
     const handleChange = (event: Event) => {
@@ -190,7 +189,7 @@ const SystemStatus = ({ showModeLabel = false }: { showModeLabel?: boolean }) =>
     window.addEventListener('systemStatusChange', handleChange);
 
     const channel = supabase
-      .channel('system_settings_changes')
+      .channel(`system_settings_changes_${crypto.randomUUID()}`)
       .on(
         'postgres_changes',
         {
@@ -226,8 +225,14 @@ const SystemStatus = ({ showModeLabel = false }: { showModeLabel?: boolean }) =>
 
   const online = isSystemOnline(settings.mode, settings.schedule);
   void clock;
+  return { online, ready, mode: settings.mode };
+};
 
-  if (loading) {
+const SystemStatus = ({ showModeLabel = false }: { showModeLabel?: boolean }) => {
+  const { t } = useLanguage();
+  const { online, ready, mode } = useSystemOnline();
+
+  if (!ready) {
     return (
       <div className="flex items-center gap-2 text-sm">
         <span className="w-2.5 h-2.5 rounded-full bg-gray-500 animate-pulse" />
@@ -248,7 +253,7 @@ const SystemStatus = ({ showModeLabel = false }: { showModeLabel?: boolean }) =>
       <span className={online ? 'text-green-500' : 'text-red-500 font-bold'}>
         {online ? t('statusOnline') : t('statusOffline')}
       </span>
-      {showModeLabel && settings.mode !== 'auto' && (
+      {showModeLabel && mode !== 'auto' && (
         <span className={`text-xs ${online ? 'text-muted-foreground/60' : 'text-red-400/60'}`}>{t('statusManual')}</span>
       )}
     </div>

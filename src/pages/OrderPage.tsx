@@ -8,7 +8,7 @@ import NavLogo from '@/components/NavLogo';
 import MyOrders from '@/components/MyOrders';
 import StageYearSelect from '@/components/StageYearSelect';
 import ConnectionDot from '@/components/ConnectionDot';
-import SystemStatus from '@/components/SystemStatus';
+import SystemStatus, { fetchSystemSettings, isSystemOnline, useSystemOnline } from '@/components/SystemStatus';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { saveProfileLanguage, syncAccountLanguage } from '@/lib/clientLanguage';
 import type { TranslationKey } from '@/i18n/translations';
@@ -35,6 +35,7 @@ import {
   joinProfileName,
 } from '@/lib/profileName';
 import { useClientPresence } from '@/lib/clientPresence';
+import { isPortalAdmin } from '@/lib/portalAdmin';
 import { authRemembered, setAuthRemember, supabase } from '@/lib/supabase';
 import {
   AlertTriangle,
@@ -153,6 +154,8 @@ const OrderPage = () => {
   const [languageOpen, setLanguageOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [operationClosed, setOperationClosed] = useState(false);
+  const { online: operationOnline, ready: operationReady } = useSystemOnline();
   const [authUser, setAuthUser] = useState<User | null>(null);
   const connected = useClientPresence(authUser?.id ?? null);
   const [creditBalance, setCreditBalance] = useState<number | null>(null);
@@ -750,6 +753,14 @@ const OrderPage = () => {
   };
 
   const payWithCredits = async () => {
+    const freshStatus = await fetchSystemSettings();
+    const operationOpen = freshStatus
+      ? isSystemOnline(freshStatus.mode, freshStatus.schedule)
+      : operationOnline;
+    if (!operationOpen && !isPortalAdmin(authUser)) {
+      setOperationClosed(true);
+      return;
+    }
     let source = billing;
     if (authUser && !profileReady) {
       const loaded = await loadClientBilling(authUser);
@@ -863,6 +874,11 @@ const OrderPage = () => {
           setIsSubmitting(false);
           return;
         }
+        if (code === 'OFFLINE') {
+          setOperationClosed(true);
+          setIsSubmitting(false);
+          return;
+        }
         const chargeLocally = functionMissing || code === 'NO_ACCOUNT' || code === 'NOT_FOUND' || code === 'SERVER' || !data;
         if (chargeLocally) {
           const orderNumber = `RP-${crypto.randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase()}`;
@@ -929,12 +945,22 @@ const OrderPage = () => {
       <div className="relative z-10 flex w-full flex-grow flex-col">
         <header className="sticky top-0 z-50 w-full border-b border-primary/25">
           <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-background/80 backdrop-blur-sm" />
-          <div className="relative mx-auto flex w-full max-w-[1600px] flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between lg:px-8">
-            <div className="flex shrink-0 items-center gap-6">
+          <div className="relative mx-auto flex w-full max-w-[1600px] flex-nowrap items-center gap-2 px-4 py-3 sm:gap-3 lg:px-8">
+            <div className="flex shrink-0 items-center gap-2 sm:gap-6 max-sm:[&_a>span:last-child]:hidden">
               <NavLogo />
               <SystemStatus />
             </div>
-            <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
+            <div className="flex min-w-0 flex-1 items-center justify-center px-1">
+              {operationReady && !operationOnline && isPortalAdmin(authUser) && (
+                <p
+                  className="inline-flex h-8 max-w-full min-w-0 items-center rounded-full border border-orange-400/60 bg-black/50 px-4 text-[11px] font-medium leading-none text-orange-200"
+                  title={t('offlineAdminAccess')}
+                >
+                  <span className="truncate">{t('offlineAdminAccess')}</span>
+                </p>
+              )}
+            </div>
+            <div className="flex shrink-0 flex-nowrap items-center justify-end gap-2">
               <div ref={languageMenuRef} className="relative shrink-0">
                 <button
                   type="button"
@@ -945,7 +971,7 @@ const OrderPage = () => {
                   className={languageOpen ? headerControlActive : headerControl}
                 >
                   <span className="w-6 uppercase tracking-wide">{language}</span>
-                  <span className="whitespace-nowrap">{language === 'en' ? 'English' : 'Slovenčina'}</span>
+                  <span className="hidden whitespace-nowrap sm:inline">{language === 'en' ? 'English' : 'Slovenčina'}</span>
                   <ChevronDown className={`h-4 w-4 transition-transform ${languageOpen ? 'rotate-180' : ''}`} />
                 </button>
                 {languageOpen && (
@@ -1517,6 +1543,30 @@ const OrderPage = () => {
           )}
         </div>
       </div>
+      {operationClosed && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/75 p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="operation-closed-title"
+            className="w-full max-w-md rounded-xl border-2 border-orange-500 bg-[#070d16] p-6 shadow-[0_0_32px_rgba(249,115,22,0.45)]"
+          >
+            <h2 id="operation-closed-title" className="text-xl font-bold text-orange-200">
+              {t('operationClosedTitle')}
+            </h2>
+            <p className="mt-3 text-sm leading-relaxed text-foreground">
+              {t('operationClosedBody')}
+            </p>
+            <button
+              type="button"
+              onClick={() => setOperationClosed(false)}
+              className="btn-primary mt-5 min-h-[44px] w-full text-sm font-bold"
+            >
+              {t('operationClosedAck')}
+            </button>
+          </div>
+        </div>
+      )}
       {topUpOpen && <CreditTopUpModal onClose={() => setTopUpOpen(false)} />}
       {loginOpen && (
         <div

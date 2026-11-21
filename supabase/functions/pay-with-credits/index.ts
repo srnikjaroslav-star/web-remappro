@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { isFunctionAdmin, operatingOpen } from "../_shared/operatingStatus.ts";
 import { dispatchTelegram, notifyCreatedOrder } from "../_shared/telegramOrder.ts";
 
 const corsHeaders = {
@@ -37,6 +38,10 @@ Deno.serve(async (req) => {
     const user = userData.user;
     if (userError || !user) {
       return json({ ok: false, code: "NOT_AUTHENTICATED" });
+    }
+
+    if (!isFunctionAdmin(user) && !await operatingOpen()) {
+      return json({ ok: false, code: "OFFLINE" });
     }
 
     const body = await req.json();
