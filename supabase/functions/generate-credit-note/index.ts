@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { jsPDF } from "https://esm.sh/jspdf@2.5.1";
+import { keepOrAssignDocumentNumber } from "../_shared/accountingNumber.ts";
 
 // CORS Headers - defined at the top, before everything else
 const corsHeaders = {
@@ -76,14 +77,8 @@ serve(async (req) => {
     });
 
     // Generate PDF - PDF Dokument: Nadpis musí byť "OPRAVNÝ DOKLAD / DOBROPIS"
-    // Reset číslovania: Prvá nová objednávka začína číslom 20260001
     const safeOrderNumber = orderNumber || orderId.slice(0, 8).toUpperCase();
-    
-    // Generate credit note number starting from 20260001
-    const numericPart = safeOrderNumber.match(/\d+/)?.[0] || '0001';
-    const baseNumber = parseInt(numericPart, 10);
-    const sequentialNumber = baseNumber > 0 ? baseNumber : 20260001;
-    const creditNoteNumber = `CN-${sequentialNumber}`;
+    const creditNoteNumber = await keepOrAssignDocumentNumber(orderId, "credit");
     
     const doc = new jsPDF();
     const invoiceTitle = "OPRAVNÝ DOKLAD / DOBROPIS";
@@ -178,10 +173,12 @@ serve(async (req) => {
       
       if (supabaseUrl && supabaseKey) {
         const supabase = createClient(supabaseUrl, supabaseKey);
+        const current = await supabase.from('orders').select('credit_note_number').eq('id', orderId).maybeSingle();
+        const storedNumber = String(current.data?.credit_note_number || '').trim();
         const { error: updateError } = await supabase
           .from('orders')
           .update({
-            credit_note_number: creditNoteNumber,
+            ...(current.error || storedNumber ? {} : { credit_note_number: creditNoteNumber }),
             credit_note_pdf: pdfUrl,
             refund_amount: finalTotal,
             refund_reason: refundReason || null,

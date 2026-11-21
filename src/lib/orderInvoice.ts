@@ -1,3 +1,4 @@
+import { documentCalendarYear, nextDocumentSerial, serialOfDocument, type DocumentKind } from '@/lib/accountingNumbers';
 import { supabase } from '@/lib/supabase';
 
 const INVOICE_BUCKET = 'tunes';
@@ -212,27 +213,12 @@ type IssuedDocument = {
   credit: string;
 };
 
-const SERIES_WIDTH = 4;
-
-const seriesPrefix = (kind: 'invoice' | 'credit', year: number) => {
-  const full = String(year);
-  return kind === 'invoice' ? full : `9${full.slice(1)}`;
-};
-
-const serialInYear = (value: string, prefix: string) => {
-  if (value.length !== prefix.length + SERIES_WIDTH || !value.startsWith(prefix)) return 0;
-  const tail = value.slice(prefix.length);
-  return /^\d{4}$/.test(tail) ? Number(tail) : 0;
-};
-
-const nextInSeries = (used: string[], prefix: string) => {
-  let highest = 0;
-  for (const value of used) {
-    const serial = serialInYear(value, prefix);
-    if (serial > highest) highest = serial;
+export class DuplicateDocumentNumber extends Error {
+  constructor(kind: DocumentKind) {
+    super(kind === 'invoice' ? 'Toto číslo faktúry už je použité.' : 'Toto číslo dobropisu už je použité.');
+    this.name = 'DuplicateDocumentNumber';
   }
-  return `${prefix}${String(highest + 1).padStart(SERIES_WIDTH, '0')}`;
-};
+}
 
 const loadIssuedDocuments = async () => {
   const documents: IssuedDocument[] = [];
@@ -254,18 +240,42 @@ const loadIssuedDocuments = async () => {
   return documents;
 };
 
-const numberTakenByOther = (documents: IssuedDocument[], kind: 'invoice' | 'credit', number: string, orderId: string) =>
+const numberTakenByOther = (documents: IssuedDocument[], kind: DocumentKind, number: string, orderId: string) =>
   documents.some((item) => item.id !== orderId && (kind === 'invoice' ? item.invoice : item.credit) === number);
 
-export const nextInvoiceNumber = async (issued = new Date()) => {
-  const documents = await loadIssuedDocuments();
-  return nextInSeries(documents.map((item) => item.invoice).filter(Boolean), seriesPrefix('invoice', issued.getFullYear()));
+const allocateFromDatabase = async (kind: DocumentKind, year: number) => {
+  const reserved = await supabase.rpc('next_accounting_number', { p_kind: kind, p_year: year });
+  if (reserved.error) {
+    if (/NUMBER_EXHAUSTED/i.test(reserved.error.message || '')) {
+      throw new Error('Číselný rad dokladov pre tento rok je vyčerpaný.');
+    }
+    console.error('[accounting-number] sequence rpc failed', reserved.error.message);
+    return '';
+  }
+  const number = typeof reserved.data === 'string' ? reserved.data : '';
+  return serialOfDocument(kind, year, number) > 0 ? number : '';
 };
 
-export const nextCreditNoteNumber = async (issued = new Date()) => {
+const allocateDocumentNumber = async (kind: DocumentKind, issued = new Date()) => {
+  const year = documentCalendarYear(issued);
+  const reserved = await allocateFromDatabase(kind, year);
+  if (reserved) return reserved;
   const documents = await loadIssuedDocuments();
-  return nextInSeries(documents.map((item) => item.credit).filter(Boolean), seriesPrefix('credit', issued.getFullYear()));
+  const used = documents.map((item) => (kind === 'invoice' ? item.invoice : item.credit)).filter(Boolean);
+  return nextDocumentSerial(used, kind, year);
 };
+
+let seriesQueue: Promise<void> = Promise.resolve();
+
+export const withDocumentSeries = <T>(task: () => Promise<T>): Promise<T> => {
+  const run = seriesQueue.then(task, task);
+  seriesQueue = run.then(() => undefined, () => undefined);
+  return run;
+};
+
+export const nextInvoiceNumber = async (issued = new Date()) => allocateDocumentNumber('invoice', issued);
+
+export const nextCreditNoteNumber = async (issued = new Date()) => allocateDocumentNumber('credit', issued);
 
 const writeInvoiceMark = (note: string, number: string, date: string, url: string) =>
   composeDocumentNote(note, { kind: 'invoice', number, date, url });
@@ -345,34 +355,49 @@ export const saveOrderInvoice = async (order: InvoiceTarget, file: File) => {
   if (file.size > 15 * 1024 * 1024) throw new Error('PDF môže mať najviac 15 MB.');
 
   const stored = await storeInvoiceFile(order.id, file);
-  const number = order.invoice_number?.trim() || await nextInvoiceNumber();
-  const issuedDocuments = await loadIssuedDocuments();
-  if (numberTakenByOther(issuedDocuments, 'invoice', number, order.id)) {
-    throw new Error('Toto číslo faktúry už je použité.');
-  }
-  const issued = new Date().toISOString().slice(0, 10);
-
   const current = await supabase.from('orders').select('note').eq('id', order.id).maybeSingle();
   if (current.error) throw new Error(current.error.message || 'Faktúru sa nepodarilo priradiť k objednávke');
+  const existing = readInvoiceMark(String(current.data?.note || '')).invoice_number?.trim() || '';
+  const number = existing || order.invoice_number?.trim() || await nextInvoiceNumber();
+  if (!existing) {
+    const issuedDocuments = await loadIssuedDocuments();
+    if (numberTakenByOther(issuedDocuments, 'invoice', number, order.id)) {
+      throw new DuplicateDocumentNumber('invoice');
+    }
+  }
+  const issued = new Date().toISOString().slice(0, 10);
+  const fresh = await supabase.from('orders').select('note').eq('id', order.id).maybeSingle();
+  if (fresh.error) throw new Error(fresh.error.message || 'Faktúru sa nepodarilo priradiť k objednávke');
+  const freshNote = String(fresh.data?.note || current.data?.note || '');
+  const already = readInvoiceMark(freshNote).invoice_number?.trim() || '';
+  const kept = already || number;
+  if (already && already !== number) {
+    return { invoice_number: already, invoice_url: readInvoiceMark(freshNote).invoice_url || stored };
+  }
+
   await writeOrderNote(
     order.id,
-    writeInvoiceMark(String(current.data?.note || ''), number, issued, stored),
+    writeInvoiceMark(freshNote, kept, issued, stored),
     'Faktúru sa nepodarilo priradiť k objednávke',
   );
 
-  return { invoice_number: number, invoice_url: stored };
+  return { invoice_number: kept, invoice_url: stored };
 };
 
 export const rememberCreditNote = async (orderId: string, number: string, date: string, url: string) => {
   const current = await supabase.from('orders').select('note').eq('id', orderId).maybeSingle();
   if (current.error) throw new Error(current.error.message || 'Dobropis sa nepodarilo priradiť k objednávke');
+  const note = String(current.data?.note || '');
+  const already = readCreditNoteMark(note).credit_note_number?.trim() || '';
+  if (already && already !== number) return readCreditNoteMark(note);
+  const kept = already || number;
   const written = await writeOrderNote(
     orderId,
-    writeCreditNoteMark(String(current.data?.note || ''), number, date, url),
+    writeCreditNoteMark(note, kept, date, url),
     'Dobropis sa nepodarilo zapísať k objednávke.',
   );
   const saved = readCreditNoteMark(written);
-  if (saved.credit_note_number !== number) {
+  if (saved.credit_note_number !== kept) {
     throw new Error('Poznámka objednávky po uložení dobropis neobsahuje.');
   }
   return saved;
@@ -386,15 +411,24 @@ export const saveOrderCreditNote = async (order: InvoiceTarget, file: File, cred
   if (!invoiceNumber) throw new Error('Dobropis vyžaduje pôvodnú faktúru.');
 
   const stored = await storeInvoiceFile(order.id, file, `invoices/${order.id}-dobropis.pdf`);
-  const number = creditNoteNumber?.trim() || await nextCreditNoteNumber();
-  const issuedDocuments = await loadIssuedDocuments();
-  if (numberTakenByOther(issuedDocuments, 'credit', number, order.id)) {
-    throw new Error('Toto číslo dobropisu už je použité.');
+  const current = await supabase.from('orders').select('note').eq('id', order.id).maybeSingle();
+  if (current.error) throw new Error(current.error.message || 'Dobropis sa nepodarilo priradiť k objednávke');
+  const existing = readCreditNoteMark(String(current.data?.note || '')).credit_note_number?.trim() || '';
+  const number = existing || creditNoteNumber?.trim() || await nextCreditNoteNumber();
+  if (!existing) {
+    const issuedDocuments = await loadIssuedDocuments();
+    if (numberTakenByOther(issuedDocuments, 'credit', number, order.id)) {
+      throw new DuplicateDocumentNumber('credit');
+    }
   }
   const issued = new Date().toISOString().slice(0, 10);
 
-  await rememberCreditNote(order.id, number, issued, stored);
-  return { credit_note_number: number, credit_note_pdf: stored, credit_note_date: issued };
+  const saved = await rememberCreditNote(order.id, number, issued, stored);
+  return {
+    credit_note_number: saved.credit_note_number || number,
+    credit_note_pdf: saved.credit_note_url || stored,
+    credit_note_date: saved.credit_note_date || issued,
+  };
 };
 
 const RESULT_MARK = '|||RESULT|||';

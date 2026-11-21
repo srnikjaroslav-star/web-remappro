@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useOnlineClients } from '@/lib/clientPresence';
 import { fetchBlobWithProgress, lightFileRef, loadOrderFile, orderFileLocation, packOrderFile, unpackOrderFile, uploadOrderFile } from '@/lib/ecuFile';
-import { deleteOrderFilesAndRow, exportInvoiceArchive, nextCreditNoteNumber, nextInvoiceNumber, previewInvoiceArchive, readCreditNoteMark, readInvoiceMark, rememberCreditNote, saveOrderCreditNote, saveOrderInvoice, type InvoiceArchiveCounts } from '@/lib/orderInvoice';
+import { deleteOrderFilesAndRow, DuplicateDocumentNumber, exportInvoiceArchive, nextCreditNoteNumber, nextInvoiceNumber, previewInvoiceArchive, readCreditNoteMark, readInvoiceMark, rememberCreditNote, saveOrderCreditNote, saveOrderInvoice, withDocumentSeries, type InvoiceArchiveCounts } from '@/lib/orderInvoice';
 import { supabase } from '@/lib/supabase';
 import { statusAfterResultDelivery } from '@/lib/orderStatus';
 import { Order, ActivityLog, SUPABASE_ANON_KEY, SUPABASE_URL } from '@/integrations/supabase/client';
@@ -365,44 +365,85 @@ const invoiceBuyerFor = async (order: Order) => {
   };
 };
 
-const issueCompletionInvoice = async (order: Order) => {
-  const invoiceNumber = order.invoice_number?.trim() || await nextInvoiceNumber();
-  const file = await generateInvoicePdf({
-    invoiceNumber,
-    issuedAt: new Date(),
-    buyer: await invoiceBuyerFor(order),
-    price: Math.abs(Number(order.total_price) || 0),
-  });
-  return saveOrderInvoice({
-    id: order.id,
-    order_number: order.order_number,
-    user_id: clientIdOf(order),
-    customer_name: order.customer_name,
-    customer_email: order.customer_email,
-    total_price: order.total_price,
-    invoice_number: invoiceNumber,
-  }, file);
-};
+const numberAlreadyUsed = (error: unknown) =>
+  error instanceof DuplicateDocumentNumber || (error instanceof Error && error.name === 'DuplicateDocumentNumber');
 
-const issueCreditNote = async (order: Order, invoiceNumber: string) => {
-  const creditNoteNumber = await nextCreditNoteNumber();
-  const file = await generateCreditNotePdf({
-    creditNoteNumber,
-    invoiceNumber: invoiceNumber.trim(),
-    issuedAt: new Date(),
-    buyer: await invoiceBuyerFor(order),
-    price: -Math.abs(Number(order.total_price) || 0),
-  });
-  return saveOrderCreditNote({
+const issueCompletionInvoice = (order: Order) => withDocumentSeries(async () => {
+  const buyer = await invoiceBuyerFor(order);
+  const price = Math.abs(Number(order.total_price) || 0);
+  const current = await supabase.from('orders').select('note').eq('id', order.id).maybeSingle();
+  const existing = order.invoice_number?.trim()
+    || readInvoiceMark(String(current.data?.note || '')).invoice_number?.trim()
+    || '';
+  const target = {
     id: order.id,
     order_number: order.order_number,
     user_id: clientIdOf(order),
     customer_name: order.customer_name,
     customer_email: order.customer_email,
     total_price: order.total_price,
-    invoice_number: invoiceNumber.trim(),
-  }, file, creditNoteNumber);
-};
+  };
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const invoiceNumber = existing || await nextInvoiceNumber();
+    const file = await generateInvoicePdf({ invoiceNumber, issuedAt: new Date(), buyer, price });
+    try {
+      const saved = await saveOrderInvoice({ ...target, invoice_number: invoiceNumber }, file);
+      if (saved.invoice_number === invoiceNumber) return saved;
+      const kept = await generateInvoicePdf({
+        invoiceNumber: saved.invoice_number,
+        issuedAt: new Date(),
+        buyer,
+        price,
+      });
+      return saveOrderInvoice({ ...target, invoice_number: saved.invoice_number }, kept);
+    } catch (error) {
+      if (existing || !numberAlreadyUsed(error) || attempt === 4) throw error;
+    }
+  }
+  throw new Error('Faktúru sa nepodarilo priradiť k objednávke');
+});
+
+const issueCreditNote = (order: Order, invoiceNumber: string) => withDocumentSeries(async () => {
+  const buyer = await invoiceBuyerFor(order);
+  const price = -Math.abs(Number(order.total_price) || 0);
+  const invoice = invoiceNumber.trim();
+  const current = await supabase.from('orders').select('note').eq('id', order.id).maybeSingle();
+  const existing = readCreditNoteMark(String(current.data?.note || '')).credit_note_number?.trim() || '';
+  const target = {
+    id: order.id,
+    order_number: order.order_number,
+    user_id: clientIdOf(order),
+    customer_name: order.customer_name,
+    customer_email: order.customer_email,
+    total_price: order.total_price,
+    invoice_number: invoice,
+  };
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const creditNoteNumber = existing || await nextCreditNoteNumber();
+    const file = await generateCreditNotePdf({
+      creditNoteNumber,
+      invoiceNumber: invoice,
+      issuedAt: new Date(),
+      buyer,
+      price,
+    });
+    try {
+      const saved = await saveOrderCreditNote(target, file, creditNoteNumber);
+      if (saved.credit_note_number === creditNoteNumber) return saved;
+      const kept = await generateCreditNotePdf({
+        creditNoteNumber: saved.credit_note_number,
+        invoiceNumber: invoice,
+        issuedAt: new Date(),
+        buyer,
+        price,
+      });
+      return saveOrderCreditNote(target, kept, saved.credit_note_number);
+    } catch (error) {
+      if (existing || !numberAlreadyUsed(error) || attempt === 4) throw error;
+    }
+  }
+  throw new Error('Dobropis sa nepodarilo zapísať k objednávke.');
+});
 
 const ManagementPortal = () => {
   const navigate = useNavigate();
@@ -2316,7 +2357,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                         onChange={(e) => handleFieldChange(detailOrder.id, 'checksum_crc', e.target.value)}
                         placeholder="CRC..."
                         maxLength={6}
-                        className="h-9 w-[92px] max-w-full rounded border border-primary/60 bg-[#070d16] px-3 py-2 font-mono text-xl leading-none text-cyan-400 shadow-[0_0_12px_rgba(0,242,255,0.18)] placeholder:text-primary/40 focus:border-primary focus:outline-none focus:shadow-[0_0_16px_rgba(0,242,255,0.35)]"
+                        className="h-9 !w-[4.75rem] !max-w-[4.75rem] shrink-0 rounded border border-primary/60 bg-[#070d16] px-3 py-2 font-mono text-xl leading-none text-cyan-400 shadow-[0_0_12px_rgba(0,242,255,0.18)] placeholder:text-primary/40 focus:border-primary focus:outline-none focus:shadow-[0_0_16px_rgba(0,242,255,0.35)]"
                       />
                     </section>
                   </div>

@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { jsPDF } from "https://esm.sh/jspdf@2.5.1";
+import { keepOrAssignDocumentNumber } from "../_shared/accountingNumber.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -82,22 +83,8 @@ serve(async (req) => {
     });
 
     // Generate PDF (simplified for now)
-    // Reset číslovania: Prvá nová objednávka začína číslom 20260001
     const safeOrderNumber = orderNumber || orderId.slice(0, 8).toUpperCase();
-    
-    // Generate invoice number starting from 20260001
-    let invoiceNumber: string;
-    if (isCreditNote) {
-      // For credit notes, use CN- prefix with order number
-      invoiceNumber = `CN-${safeOrderNumber}`;
-    } else {
-      // For invoices, generate sequential number starting from 20260001
-      // Extract numeric part from orderNumber or use orderId hash
-      const numericPart = safeOrderNumber.match(/\d+/)?.[0] || '0001';
-      const baseNumber = parseInt(numericPart, 10);
-      const sequentialNumber = baseNumber > 0 ? baseNumber : 20260001;
-      invoiceNumber = `INV-${sequentialNumber}`;
-    }
+    const invoiceNumber = await keepOrAssignDocumentNumber(orderId, isCreditNote ? "credit" : "invoice");
     
     const doc = new jsPDF();
     const invoiceTitle = isCreditNote ? "DOBROPIS / CREDIT NOTE" : "FAKTÚRA / INVOICE";
