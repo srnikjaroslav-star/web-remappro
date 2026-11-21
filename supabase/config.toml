@@ -44,10 +44,13 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.pay-with-credits]
-verify_jwt = true
+verify_jwt = false
 
 [functions.manage-clients]
 verify_jwt = true
 
 [functions.manage-services]
 verify_jwt = true
+
+[functions.notify-order]
+verify_jwt = false

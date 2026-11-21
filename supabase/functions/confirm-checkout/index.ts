@@ -1,5 +1,6 @@
 import Stripe from "https://esm.sh/stripe@17.7.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { dispatchTelegram, notifyOrderById } from "../_shared/telegramOrder.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -142,6 +143,14 @@ Deno.serve(async (req) => {
         details: insertError?.details || null,
         hint: insertError?.hint || null,
       }, 500);
+    }
+
+    if (created.id) {
+      try {
+        dispatchTelegram(notifyOrderById(supabase, String(created.id)));
+      } catch (telegramError) {
+        console.error("[confirm-checkout] telegram", telegramError);
+      }
     }
 
     return json({ order: created, created: true });

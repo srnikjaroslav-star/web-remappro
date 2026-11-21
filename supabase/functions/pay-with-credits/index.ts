@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { dispatchTelegram, notifyCreatedOrder } from "../_shared/telegramOrder.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -119,10 +120,23 @@ Deno.serve(async (req) => {
       }
     }
 
+    let telegramScheduled = false;
+    try {
+      dispatchTelegram(notifyCreatedOrder(admin, {
+        orderId: data?.order_id,
+        orderNumber,
+      }));
+      telegramScheduled = true;
+    } catch (telegramError) {
+      console.error("[pay-with-credits] telegram", telegramError);
+    }
+
     return json({
       ok: true,
       balance: Number(data?.balance),
       orderNumber: data?.order_number,
+      orderId: data?.order_id ?? null,
+      telegramScheduled,
     });
   } catch (error) {
     console.error("[pay-with-credits]", error);

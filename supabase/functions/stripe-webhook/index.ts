@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { dispatchTelegram, notifyOrderById } from "../_shared/telegramOrder.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
 const SENDER = "REMAPPRO <info@remappro.eu>";
@@ -326,6 +327,12 @@ serve(async (req) => {
       }
       
       console.log("ATOMIC: Order created successfully - ID:", confirmedOrderId, "Order#:", confirmedOrderNumber);
+
+      try {
+        dispatchTelegram(notifyOrderById(supabase, String(confirmedOrderId)));
+      } catch (telegramError) {
+        console.error("[stripe-webhook] telegram", telegramError);
+      }
 
       // Sequence: Update DB -> Admin Email -> Customer Email
 

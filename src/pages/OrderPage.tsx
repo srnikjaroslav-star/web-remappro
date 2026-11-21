@@ -733,6 +733,22 @@ const OrderPage = () => {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  const queueTelegramNotice = (orderId?: string | null, orderNumber?: string | null) => {
+    void (async () => {
+      try {
+        let id = String(orderId ?? '').trim();
+        if (!/^[0-9a-f-]{36}$/i.test(id) && orderNumber) {
+          const found = await supabase.from('orders').select('id').eq('order_number', orderNumber).maybeSingle();
+          id = String(found.data?.id ?? '').trim();
+        }
+        if (!/^[0-9a-f-]{36}$/i.test(id)) return;
+        await supabase.functions.invoke('notify-order', { body: { orderId: id } });
+      } catch {
+        // The order and the credit charge are already stored.
+      }
+    })();
+  };
+
   const payWithCredits = async () => {
     let source = billing;
     if (authUser && !profileReady) {
@@ -818,7 +834,14 @@ const OrderPage = () => {
         },
       });
 
-      let data = invoked.data as { ok?: boolean; code?: string; balance?: number; orderNumber?: string } | null;
+      let data = invoked.data as {
+        ok?: boolean;
+        code?: string;
+        balance?: number;
+        orderNumber?: string;
+        orderId?: string;
+        telegramScheduled?: boolean;
+      } | null;
       if (invoked.error && !data) {
         try {
           data = await (invoked.error as { context?: Response }).context?.json();
@@ -872,6 +895,7 @@ const OrderPage = () => {
           }
           setCreditBalance(nextBalance);
           resetOrderDraft();
+          queueTelegramNotice(inserted.data.id);
           toast.success(t('creditPaid', { order: orderNumber }));
           setIsSubmitting(false);
           return;
@@ -881,6 +905,7 @@ const OrderPage = () => {
         return;
       }
 
+      if (!data.telegramScheduled) queueTelegramNotice(data.orderId, data.orderNumber);
       setCreditBalance(Number(data.balance));
       resetOrderDraft();
       toast.success(t('creditPaid', { order: data.orderNumber }));
