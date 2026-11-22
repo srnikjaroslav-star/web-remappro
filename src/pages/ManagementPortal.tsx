@@ -91,6 +91,21 @@ const repeatWorkCompletion = (order: BillableOrder, storedFileUrl?: string) => {
   return order.result_file_url === 'stored' || Boolean(order.result_file_url && order.result_file_url !== 'stored');
 };
 
+const returnedCredit = (order: { status?: string | null; credit_note_number?: string | null }) =>
+  order.status === 'cancelled' || Boolean(order.credit_note_number?.trim());
+
+const CLOSED_ORDER_MESSAGE = 'Zrušená objednávka je uzavretá. Novú úpravu vytvorte ako novú objednávku.';
+
+const STATUS_LABEL: Record<string, string> = {
+  pending: 'Čakajúce',
+  processing: 'V Procese',
+  completed: 'Dokončené',
+  cancelled: 'Zrušené',
+  paid: 'Zaplatené',
+};
+
+const STATUS_SWITCH = ['pending', 'processing', 'completed', 'cancelled'] as const;
+
 const clientIdOf = (order: object | null | undefined) => {
   if (!order || !('user_id' in order)) return '';
   const id = String((order as { user_id?: string | null }).user_id || '').trim();
@@ -875,21 +890,28 @@ const ManagementPortal = () => {
     }
   };
 
+  const beginResultUpload = (orderId: string) => {
+    pendingUploadId.current = orderId;
+    setSelectedOrderId(orderId);
+    fileInputRef.current?.click();
+  };
+
   const handleStatusChange = async (orderId: string, newStatus: string) => {
-    console.log('Updating order status:', { orderId, newStatus });
-    
-    if (newStatus === 'cancelled') return;
-    
-    // For other statuses, proceed normally
+    const order = orders.find((item) => item.id === orderId);
+    if (!order || newStatus === 'cancelled' || returnedCredit(order) || order.status === newStatus) return;
     await executeStatusChange(orderId, newStatus);
   };
 
   const executeStatusChange = async (orderId: string, newStatus: string) => {
-    console.log('Executing status change:', { orderId, newStatus });
-    
-    // Find the order before update
     const order = orders.find(o => o.id === orderId);
-    const previousStatus = order?.status;
+    if (!order || returnedCredit(order) || newStatus === 'cancelled') return;
+    const live = await supabase.from('orders').select('status, credit_note_number').eq('id', orderId).maybeSingle();
+    if (!live.error && (live.data?.status === 'cancelled' || String(live.data?.credit_note_number || '').trim())) {
+      toast.error(CLOSED_ORDER_MESSAGE);
+      void fetchOrders(true);
+      return;
+    }
+    const previousStatus = order.status;
     const rebill = newStatus === 'completed'
       && previousStatus !== 'completed'
       && Boolean(order && repeatWorkCompletion(order));
@@ -1266,6 +1288,13 @@ const ManagementPortal = () => {
     
     // Strict Upload Lock: Check if invoice already exists
     const order = orders.find(o => o.id === orderId);
+    if (order && returnedCredit(order)) {
+      toast.error(CLOSED_ORDER_MESSAGE);
+      if (e.target) e.target.value = '';
+      pendingUploadId.current = null;
+      setSelectedOrderId(null);
+      return;
+    }
     const canSendFile = order?.status === 'pending' || order?.status === 'processing';
     if (order?.invoice_number && !canSendFile) {
       console.warn('[handleResultUpload] Invoice already sent for order:', orderId, 'Invoice:', order.invoice_number);
@@ -1289,8 +1318,12 @@ const ManagementPortal = () => {
 
     try {
       const currentOrder = orders.find(o => o.id === orderId);
-      if (currentOrder?.status === 'cancelled') {
-        toast.error('Cannot upload result file for cancelled order');
+      const existing = await supabase.from('orders').select('user_id, total_price, status, credit_note_number').eq('id', orderId).maybeSingle();
+      if (existing.error) throw existing.error;
+      const storedStatus = String(existing.data?.status || currentOrder?.status || '');
+      const closedOnServer = storedStatus === 'cancelled' || Boolean(String(existing.data?.credit_note_number || '').trim());
+      if (closedOnServer || (currentOrder && returnedCredit(currentOrder))) {
+        toast.error(CLOSED_ORDER_MESSAGE);
         return;
       }
 
@@ -1301,8 +1334,6 @@ const ManagementPortal = () => {
           setUploadProgress(Math.min(99, Math.round(ratio * 100)));
         },
       });
-      const existing = await supabase.from('orders').select('user_id, total_price, status').eq('id', orderId).maybeSingle();
-      if (existing.error) throw existing.error;
       const billable: BillableOrder = {
         id: orderId,
         user_id: existing.data?.user_id || clientIdOf(currentOrder),
@@ -1311,7 +1342,6 @@ const ManagementPortal = () => {
         result_file_url: currentOrder?.result_file_url,
         file_url: currentOrder?.file_url,
       };
-      const storedStatus = String(existing.data?.status || currentOrder?.status || '');
       const rebill = storedStatus !== 'completed' && repeatWorkCompletion(billable);
       const charge = rebill ? await chargeRepeatCompletion(billable) : { ok: true, charged: false, price: 0 };
       if (charge.charged) chargedUpload = { userId: clientIdOf(billable), price: charge.price, orderId };
@@ -1390,7 +1420,7 @@ const ManagementPortal = () => {
       setClientDownloadProgress((current) => ({ ...current, [order.id]: percent }));
     };
     setClientDownloadProgress((current) => ({ ...current, [order.id]: 0 }));
-    if (order.status === 'pending') {
+    if (order.status === 'pending' && !returnedCredit(order)) {
       void executeStatusChange(order.id, 'processing');
     }
     try {
@@ -1417,9 +1447,12 @@ const ManagementPortal = () => {
   };
 
   const triggerUpload = (orderId: string) => {
-    pendingUploadId.current = orderId;
-    setSelectedOrderId(orderId);
-    fileInputRef.current?.click();
+    const order = orders.find((item) => item.id === orderId);
+    if (!order || returnedCredit(order) || (order.status !== 'pending' && order.status !== 'processing')) {
+      if (order && returnedCredit(order)) toast.error(CLOSED_ORDER_MESSAGE);
+      return;
+    }
+    beginResultUpload(orderId);
   };
 
   const openInvoice = async (order: Order) => {
@@ -1899,7 +1932,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                                 if (doc.title === 'Stiahnuť dobropis') void openCreditNote(order);
                                 else void openInvoice(order);
                               }}
-                              className={`block whitespace-nowrap text-left font-mono font-bold leading-tight text-red-500 hover:text-red-400 ${doc.title === 'Stiahnuť dobropis' ? 'text-xs' : 'text-base'}`}
+                              className={`block whitespace-nowrap text-left font-mono font-bold leading-tight ${doc.title === 'Stiahnuť dobropis' ? 'text-xs text-red-500 hover:text-red-400' : 'text-base text-green-400 hover:text-green-300'}`}
                               title={doc.title}
                             >
                               {doc.number}
@@ -1958,24 +1991,53 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                         </p>
                       </td>
                       <td className={`border-r border-slate-800/60 p-0 text-center align-middle ${pinBg}`}>
-                        <select
-                          value={order.status}
-                          onMouseDown={(event) => event.stopPropagation()}
-                          onChange={(e) => handleStatusChange(order.id, e.target.value)}
-                          className={`status-cell-select block h-full min-h-8 w-full cursor-pointer appearance-none rounded-none border bg-[length:0.8rem] bg-[position:right_0.4rem_center] bg-no-repeat pl-2 pr-5 text-center font-bold outline-none ${STATUS_CELL_CLASS[order.status] || STATUS_CELL_CLASS.pending}`}
-                          style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='${encodeURIComponent(STATUS_TEXT_COLOR[order.status] || STATUS_TEXT_COLOR.pending)}' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")` }}
-                        >
-                          {order.status === 'cancelled' && (
-                            <option value="cancelled" disabled hidden>Zrušené</option>
-                          )}
-                          <option value="pending" style={{ color: STATUS_TEXT_COLOR.pending, backgroundColor: '#050505' }}>Čakajúce</option>
-                          <option value="processing" style={{ color: STATUS_TEXT_COLOR.processing, backgroundColor: '#050505' }}>V Procese</option>
-                          <option value="completed" style={{ color: STATUS_TEXT_COLOR.completed, backgroundColor: '#050505' }}>Dokončené</option>
-                        </select>
+                        {returnedCredit(order) ? (
+                          <span
+                            className={`flex h-full min-h-8 w-full items-center justify-center whitespace-nowrap px-1 text-center text-lg font-bold leading-none ${STATUS_CELL_CLASS.cancelled}`}
+                            title={CLOSED_ORDER_MESSAGE}
+                          >
+                            Zrušené
+                          </span>
+                        ) : (
+                          <div className="flex h-full min-h-8 w-full" onMouseDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
+                            {STATUS_SWITCH.map((status) => {
+                              const shown = order.status === 'paid' ? 'completed' : order.status;
+                              const active = status === shown;
+                              return (
+                                <button
+                                  key={status}
+                                  type="button"
+                                  aria-pressed={active}
+                                  title={STATUS_LABEL[status]}
+                                  onClick={() => {
+                                    if (active) return;
+                                    if (status === 'cancelled') {
+                                      setCancelConfirmOrder(order);
+                                      return;
+                                    }
+                                    void handleStatusChange(order.id, status);
+                                  }}
+                                  className={`flex h-full min-w-0 items-center justify-center overflow-hidden border font-bold outline-none ${STATUS_CELL_CLASS[status]} ${active ? 'flex-1 px-0.5 text-xs leading-none' : 'w-4 shrink-0'}`}
+                                >
+                                  {active ? STATUS_LABEL[status] : <span className="sr-only">{STATUS_LABEL[status]}</span>}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
                       </td>
                       <td className={`h-8 p-0 align-middle ${active ? picked : 'bg-[#070d16]'}`}>
                         <div className="flex h-full w-full flex-nowrap items-stretch gap-0 p-0">
-                          {order.file_url ? (
+                          {returnedCredit(order) ? (
+                            <button
+                              type="button"
+                              disabled
+                              className={`${actionCell} cursor-not-allowed bg-slate-800/40 text-slate-500 opacity-60`}
+                              title={CLOSED_ORDER_MESSAGE}
+                            >
+                              <Download className="h-5 w-5" />
+                            </button>
+                          ) : order.file_url ? (
                             <button
                               onClick={() => void handleClientFileDownload(order)}
                               disabled={clientDownloadProgress[order.id] !== undefined}
@@ -2010,28 +2072,30 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                               <Download className="h-5 w-5" />
                             </span>
                           )}
-                          {order.status === 'completed' ? (
+                          {order.status === 'completed' && !returnedCredit(order) ? (
                             <span className={`${actionCell} bg-emerald-400/10 text-emerald-400`} title="Hotový súbor je nahraný">
                               <CheckCircle className="h-5 w-5" />
                             </span>
                           ) : (
                             <button
                               onClick={() => triggerUpload(order.id)}
-                              disabled={uploadingId === order.id || (order.status !== 'pending' && order.status !== 'processing')}
+                              disabled={uploadingId === order.id || returnedCredit(order) || (order.status !== 'pending' && order.status !== 'processing')}
                               aria-valuemin={0}
                               aria-valuemax={100}
                               aria-valuenow={uploadingId === order.id ? uploadProgress ?? 0 : undefined}
                               className={`${actionCell} relative overflow-hidden ${
                                 uploadingId === order.id
                                   ? 'cursor-wait bg-slate-800/40 text-emerald-300'
-                                  : order.status !== 'pending' && order.status !== 'processing'
+                                  : returnedCredit(order) || (order.status !== 'pending' && order.status !== 'processing')
                                     ? 'cursor-not-allowed bg-slate-800/40 text-slate-500'
                                     : 'bg-emerald-400/10 text-emerald-400 hover:bg-emerald-400/20'
                               }`}
                               title={
                                 uploadingId === order.id
                                   ? `Odosielam ${uploadProgress ?? 0} %`
-                                  : order.status === 'pending' || order.status === 'processing'
+                                  : returnedCredit(order)
+                                    ? CLOSED_ORDER_MESSAGE
+                                    : order.status === 'pending' || order.status === 'processing'
                                     ? 'Nahrať hotový súbor'
                                     : 'Súbor sa dá odoslať vo stave Čakajúce alebo V procese'
                               }
@@ -2056,12 +2120,14 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                           </button>
                           <button
                             type="button"
+                            disabled={returnedCredit(order)}
                             onClick={(event) => {
                               event.stopPropagation();
+                              if (returnedCredit(order)) return;
                               setCancelConfirmOrder(order);
                             }}
-                            className={`${actionCell} bg-red-500/10 text-red-400 hover:bg-red-500/20`}
-                            title="Zrušiť objednávku"
+                            className={`${actionCell} ${returnedCredit(order) ? 'cursor-not-allowed bg-slate-800/40 text-slate-500 opacity-60' : 'bg-red-500/10 text-red-400 hover:bg-red-500/20'}`}
+                            title={returnedCredit(order) ? CLOSED_ORDER_MESSAGE : 'Zrušiť objednávku'}
                           >
                             <RotateCcw className="h-5 w-5" />
                           </button>
@@ -2254,14 +2320,14 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                         </div>
                         <div>
                           <p className="text-sm text-muted-foreground">Stav</p>
-                          <span className={`inline-flex items-center rounded-full px-3 py-1.5 text-sm font-semibold ${getStatusClass(detailOrder.status)}`}>
-                            {detailOrder.status === 'pending' ? 'Čakajúce' : detailOrder.status === 'processing' ? 'V Procese' : detailOrder.status === 'completed' ? 'Dokončené' : detailOrder.status === 'cancelled' ? 'Zrušené' : detailOrder.status === 'paid' ? 'Zaplatené' : detailOrder.status}
+                          <span className={`inline-flex items-center rounded-full px-3 py-1.5 text-sm font-semibold ${getStatusClass(returnedCredit(detailOrder) ? 'cancelled' : detailOrder.status)}`}>
+                            {returnedCredit(detailOrder) ? 'Zrušené' : detailOrder.status === 'pending' ? 'Čakajúce' : detailOrder.status === 'processing' ? 'V Procese' : detailOrder.status === 'completed' ? 'Dokončené' : detailOrder.status === 'cancelled' ? 'Zrušené' : detailOrder.status === 'paid' ? 'Zaplatené' : detailOrder.status}
                           </span>
                         </div>
                         <div>
                           <p className="text-sm text-muted-foreground">Celková cena</p>
                           <p className={`whitespace-nowrap text-xl font-bold tabular-nums ${
-                            detailOrder.status === 'cancelled'
+                            returnedCredit(detailOrder) || detailOrder.status === 'cancelled'
                               ? 'text-red-500'
                               : 'text-primary'
                           }`}>
