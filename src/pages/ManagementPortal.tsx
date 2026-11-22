@@ -104,7 +104,12 @@ const STATUS_LABEL: Record<string, string> = {
   paid: 'Zaplatené',
 };
 
-const STATUS_SWITCH = ['pending', 'processing', 'completed', 'cancelled'] as const;
+const NEXT_WORKING_STATUS: Record<string, string> = {
+  pending: 'processing',
+  processing: 'completed',
+  completed: 'pending',
+  paid: 'processing',
+};
 
 const clientIdOf = (order: object | null | undefined) => {
   if (!order || !('user_id' in order)) return '';
@@ -473,6 +478,7 @@ const ManagementPortal = () => {
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [clientDownloadProgress, setClientDownloadProgress] = useState<Record<string, number>>({});
+  const [preparedClientFiles, setPreparedClientFiles] = useState<Record<string, true>>({});
   const clientDownloadGen = useRef<Record<string, number>>({});
   const clientDownloadLock = useRef(new Set<string>());
   const [accountingOpen, setAccountingOpen] = useState(false);
@@ -1431,6 +1437,7 @@ const ManagementPortal = () => {
         `client-${order.order_number || order.id.slice(0, 8)}`,
         report,
       );
+      setPreparedClientFiles((current) => ({ ...current, [order.id]: true }));
     } catch (error) {
       console.error('Client download error:', error);
       toast.error('Chyba pri sťahovaní súboru');
@@ -1448,7 +1455,8 @@ const ManagementPortal = () => {
 
   const triggerUpload = (orderId: string) => {
     const order = orders.find((item) => item.id === orderId);
-    if (!order || returnedCredit(order) || (order.status !== 'pending' && order.status !== 'processing')) {
+    const fileReady = Boolean(preparedClientFiles[orderId]);
+    if (!order || returnedCredit(order) || !fileReady || (order.status !== 'pending' && order.status !== 'processing')) {
       if (order && returnedCredit(order)) toast.error(CLOSED_ORDER_MESSAGE);
       return;
     }
@@ -1902,6 +1910,8 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                     const flexCell = `overflow-hidden border-r border-slate-800/60 px-2 py-1 align-middle ${picked}`;
                     const pinBg = active ? 'bg-[#0b2430] shadow-[inset_0_0_18px_rgba(0,242,255,0.16)]' : 'bg-[#070d16]';
                     const actionCell = 'inline-flex h-full min-h-8 flex-1 basis-0 items-center justify-center rounded-none border border-current shadow-[0_0_12px_color-mix(in_srgb,currentColor_32%,transparent)] transition-colors duration-200 hover:shadow-[0_0_14px_color-mix(in_srgb,currentColor_45%,transparent)]';
+                    const fileReady = Boolean(preparedClientFiles[order.id]);
+                    const sendLocked = returnedCredit(order) || !fileReady || (order.status !== 'pending' && order.status !== 'processing');
                     const vehicle = [order.car_brand, order.car_model].map((part) => String(part ?? '').trim()).filter(Boolean).join(' ');
                     const documents: { number: string; href: string; title: string }[] = [];
                     if (order.invoice_number) {
@@ -1999,31 +2009,19 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                             Zrušené
                           </span>
                         ) : (
-                          <div className="flex h-full min-h-8 w-full" onMouseDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
-                            {STATUS_SWITCH.map((status) => {
-                              const shown = order.status === 'paid' ? 'completed' : order.status;
-                              const active = status === shown;
-                              return (
-                                <button
-                                  key={status}
-                                  type="button"
-                                  aria-pressed={active}
-                                  title={STATUS_LABEL[status]}
-                                  onClick={() => {
-                                    if (active) return;
-                                    if (status === 'cancelled') {
-                                      setCancelConfirmOrder(order);
-                                      return;
-                                    }
-                                    void handleStatusChange(order.id, status);
-                                  }}
-                                  className={`flex h-full min-w-0 items-center justify-center overflow-hidden border font-bold outline-none ${STATUS_CELL_CLASS[status]} ${active ? 'flex-1 px-0.5 text-xs leading-none' : 'w-4 shrink-0'}`}
-                                >
-                                  {active ? STATUS_LABEL[status] : <span className="sr-only">{STATUS_LABEL[status]}</span>}
-                                </button>
-                              );
-                            })}
-                          </div>
+                          <button
+                            type="button"
+                            onMouseDown={(event) => event.stopPropagation()}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              const nextStatus = NEXT_WORKING_STATUS[order.status] || 'processing';
+                              void handleStatusChange(order.id, nextStatus);
+                            }}
+                            title={`Prepnúť na ${STATUS_LABEL[NEXT_WORKING_STATUS[order.status] || 'processing']}`}
+                            className={`flex h-full min-h-8 w-full cursor-pointer items-center justify-center whitespace-nowrap px-1 text-center text-lg font-bold leading-none outline-none ${STATUS_CELL_CLASS[order.status] || STATUS_CELL_CLASS.pending}`}
+                          >
+                            {STATUS_LABEL[order.status] || order.status}
+                          </button>
                         )}
                       </td>
                       <td className={`h-8 p-0 align-middle ${active ? picked : 'bg-[#070d16]'}`}>
@@ -2079,15 +2077,15 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                           ) : (
                             <button
                               onClick={() => triggerUpload(order.id)}
-                              disabled={uploadingId === order.id || returnedCredit(order) || (order.status !== 'pending' && order.status !== 'processing')}
+                              disabled={uploadingId === order.id || sendLocked}
                               aria-valuemin={0}
                               aria-valuemax={100}
                               aria-valuenow={uploadingId === order.id ? uploadProgress ?? 0 : undefined}
                               className={`${actionCell} relative overflow-hidden ${
                                 uploadingId === order.id
                                   ? 'cursor-wait bg-slate-800/40 text-emerald-300'
-                                  : returnedCredit(order) || (order.status !== 'pending' && order.status !== 'processing')
-                                    ? 'cursor-not-allowed bg-slate-800/40 text-slate-500'
+                                  : sendLocked
+                                    ? 'cursor-not-allowed bg-slate-800/40 text-slate-500 opacity-60'
                                     : 'bg-emerald-400/10 text-emerald-400 hover:bg-emerald-400/20'
                               }`}
                               title={
@@ -2095,9 +2093,9 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                                   ? `Odosielam ${uploadProgress ?? 0} %`
                                   : returnedCredit(order)
                                     ? CLOSED_ORDER_MESSAGE
-                                    : order.status === 'pending' || order.status === 'processing'
-                                    ? 'Nahrať hotový súbor'
-                                    : 'Súbor sa dá odoslať vo stave Čakajúce alebo V procese'
+                                    : !fileReady
+                                    ? 'Najprv stiahni súbor zákazníka'
+                                    : 'Nahrať hotový súbor'
                               }
                             >
                               {uploadingId === order.id && (
