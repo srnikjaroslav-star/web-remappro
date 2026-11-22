@@ -2,6 +2,9 @@
 -- A credit payment does not issue an accounting document.
 -- Replacing a finished file cannot deduct the completion charge twice.
 
+alter table public.orders
+  add column if not exists stripe_session_id text;
+
 with ranked as (
   select
     id,
@@ -48,6 +51,10 @@ declare
   next_balance numeric(10, 2);
   new_order_id uuid;
   new_order_number text;
+  engine_value text;
+  stored_note text;
+  note_line text;
+  service_json jsonb;
 begin
   if coalesce(auth.role(), '') <> 'service_role' then
     raise exception 'FORBIDDEN';
@@ -84,38 +91,100 @@ begin
 
   new_order_number := 'RP-' || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 8));
 
-  insert into public.orders (
-    order_number,
-    customer_name,
-    customer_email,
-    car_brand,
-    car_model,
-    fuel_type,
-    year,
-    ecu_type,
-    service_type,
-    total_price,
-    status,
-    file_url,
-    legal_consent,
-    customer_note
-  ) values (
-    new_order_number,
-    nullif(btrim(p_customer_name), ''),
-    nullif(lower(btrim(p_customer_email)), ''),
-    nullif(btrim(p_car_brand), ''),
-    nullif(btrim(p_car_model), ''),
-    nullif(btrim(p_fuel_type), ''),
-    nullif(btrim(p_year), ''),
-    nullif(btrim(p_ecu_type), ''),
-    nullif(btrim(p_service_type), ''),
-    p_amount,
-    'pending',
-    nullif(btrim(p_file_url), ''),
-    coalesce(p_legal_consent, false),
-    nullif(p_customer_note, '')
-  )
-  returning id into new_order_id;
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'orders'
+      and column_name = 'vehicle_brand'
+  ) then
+    engine_value := null;
+    stored_note := '';
+    if nullif(p_customer_note, '') is not null then
+      for note_line in
+        select btrim(item)
+        from unnest(string_to_array(p_customer_note, E'\n')) as item
+      loop
+        if engine_value is null and note_line ~* '^Motor:\s*\S' then
+          engine_value := nullif(btrim(regexp_replace(note_line, '^Motor:\s*', '', 'i')), '');
+        elsif note_line <> '' and note_line !~* '^RP-[A-Z0-9]+$' then
+          stored_note := case
+            when stored_note = '' then note_line
+            else stored_note || E'\n' || note_line
+          end;
+        end if;
+      end loop;
+    end if;
+    stored_note := new_order_number || case when stored_note = '' then '' else E'\n' || stored_note end;
+
+    if left(btrim(coalesce(p_service_type, '')), 1) = '[' then
+      service_json := p_service_type::jsonb;
+    else
+      service_json := '[]'::jsonb;
+    end if;
+
+    insert into public.orders (
+      user_id,
+      vehicle_brand,
+      vehicle_model,
+      vehicle_year,
+      engine,
+      ecu,
+      fuel,
+      services,
+      total_price,
+      status,
+      file_url,
+      note
+    ) values (
+      p_user_id,
+      nullif(btrim(p_car_brand), ''),
+      nullif(btrim(p_car_model), ''),
+      nullif(btrim(p_year), ''),
+      engine_value,
+      nullif(btrim(p_ecu_type), ''),
+      nullif(btrim(p_fuel_type), ''),
+      service_json::json,
+      p_amount,
+      'pending',
+      nullif(btrim(p_file_url), ''),
+      stored_note
+    )
+    returning id into new_order_id;
+  else
+    insert into public.orders (
+      order_number,
+      customer_name,
+      customer_email,
+      car_brand,
+      car_model,
+      fuel_type,
+      year,
+      ecu_type,
+      service_type,
+      total_price,
+      status,
+      file_url,
+      legal_consent,
+      customer_note
+    ) values (
+      new_order_number,
+      nullif(btrim(p_customer_name), ''),
+      nullif(lower(btrim(p_customer_email)), ''),
+      nullif(btrim(p_car_brand), ''),
+      nullif(btrim(p_car_model), ''),
+      nullif(btrim(p_fuel_type), ''),
+      nullif(btrim(p_year), ''),
+      nullif(btrim(p_ecu_type), ''),
+      nullif(btrim(p_service_type), ''),
+      p_amount,
+      'pending',
+      nullif(btrim(p_file_url), ''),
+      coalesce(p_legal_consent, false),
+      nullif(p_customer_note, '')
+    )
+    returning id into new_order_id;
+  end if;
 
   insert into public.credit_transactions (user_id, amount, order_id)
   values (p_user_id, -p_amount, new_order_id);

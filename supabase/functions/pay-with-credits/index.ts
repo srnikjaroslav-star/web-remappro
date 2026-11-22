@@ -117,11 +117,11 @@ Deno.serve(async (req) => {
         || "SK";
     }
     const orderNumber = String(data?.order_number ?? "");
-    if (orderNumber) {
-      const saved = await admin.from("orders").update({ language, user_id: user.id }).eq("order_number", orderNumber);
+    const orderId = String(data?.order_id ?? "");
+    if (orderId) {
+      const saved = await admin.from("orders").update({ language, user_id: user.id }).eq("id", orderId);
       if (saved.error) {
-        await admin.from("orders").update({ user_id: user.id }).eq("order_number", orderNumber);
-        await admin.from("orders").update({ language }).eq("order_number", orderNumber);
+        await admin.from("orders").update({ user_id: user.id }).eq("id", orderId);
       }
     }
 

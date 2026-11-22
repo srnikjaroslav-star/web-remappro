@@ -33,6 +33,8 @@ import { loadBillingByUserId, loadClientBilling, orderDisplayName, refundOrderCr
 import { downloadOrderCreditNote, downloadOrderInvoice } from '@/lib/accountingDocument';
 import { generateCreditNotePdf, generateInvoicePdf } from '@/utils/invoiceGenerator';
 import { loadServiceCatalog, lookupServiceName } from '@/lib/serviceCatalog';
+import { formatCreditUnits } from '@/lib/creditUnits';
+import { useLanguage } from '@/i18n/LanguageContext';
 import ClientCredits from '@/components/ClientCredits';
 import AdminServices from '@/components/AdminServices';
 import OpeningHours from '@/components/OpeningHours';
@@ -448,6 +450,7 @@ const issueCreditNote = (order: Order, invoiceNumber: string) => withDocumentSer
 
 const ManagementPortal = () => {
   const navigate = useNavigate();
+  const { language } = useLanguage();
   const [orders, setOrders] = useState<Order[]>(() => adminSnapshot?.orders ?? []);
   const [loading, setLoading] = useState(() => !adminSnapshot);
   const [searchTerm, setSearchTerm] = useState('');
@@ -934,7 +937,7 @@ const ManagementPortal = () => {
       };
       toast.success(
         chargedPrice > 0
-          ? `Stav zmenený na: ${statusLabels[newStatus] || newStatus}. Z kreditu bolo strhnutých ${chargedPrice.toFixed(2)} €.`
+          ? `Stav zmenený na: ${statusLabels[newStatus] || newStatus}. Z kreditu bolo strhnutých ${formatCreditUnits(chargedPrice, language)}.`
           : `Stav zmenený na: ${statusLabels[newStatus] || newStatus}`,
       );
       if (newStatus !== previousStatus && order && (newStatus === 'processing' || newStatus === 'completed')) {
@@ -1322,7 +1325,7 @@ const ManagementPortal = () => {
       setDetailOrder(current => current?.id === orderId ? { ...current, status: nextStatus, result_file_url: 'stored' } : current);
       toast.success(
         charge.charged
-          ? `Stav zmenený na: Dokončené. Z kreditu bolo strhnutých ${charge.price.toFixed(2)} €.`
+          ? `Stav zmenený na: Dokončené. Z kreditu bolo strhnutých ${formatCreditUnits(charge.price, language)}.`
           : 'Stav zmenený na: Dokončené',
       );
       if (currentOrder && nextStatus === 'completed') notifyStatusChange(currentOrder, 'completed');
@@ -1564,8 +1567,6 @@ const ManagementPortal = () => {
     cancelled: '!border-red-400/70 !bg-red-500/25 shadow-[0_0_18px_rgba(248,113,113,0.55)] hover:!border-red-400 hover:!bg-red-500/35 hover:shadow-[0_0_22px_rgba(248,113,113,0.7)]',
   };
 
-  const ordersRow = 'grid w-full min-w-[640px] grid-cols-[minmax(0,1.02fr)_minmax(0,1.62fr)_6rem_minmax(0,1.48fr)_minmax(0,1.91fr)_7.5rem_9.5rem_312px]';
-
   const STATUS_CELL_CLASS: Record<string, string> = {
     pending: 'border-yellow-400/80 bg-yellow-500/10 text-yellow-400 shadow-[0_0_12px_rgba(250,204,21,0.28)]',
     processing: 'border-cyan-300/80 bg-cyan-500/10 text-cyan-300 shadow-[0_0_12px_rgba(34,211,238,0.28)]',
@@ -1750,14 +1751,14 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
         <div className="mb-3 grid w-full grid-cols-6 gap-2">
           <div className="min-w-0 rounded-none border-t-4 border-t-white bg-[#0f172a] px-2.5 py-2 shadow-[inset_0_0_28px_rgba(255,255,255,0.2)]">
             <p className="truncate text-xs font-extrabold uppercase tracking-wide text-white">Celkové tržby</p>
-            <p className="mt-1 truncate text-2xl font-black leading-none text-cyan-400">
-              {(financialStats?.grossRevenue ?? 0).toFixed(2)} €
+            <p className="mt-1 whitespace-nowrap text-lg font-black leading-none tabular-nums text-cyan-400">
+              {formatCreditUnits(financialStats?.grossRevenue ?? 0, language)}
             </p>
           </div>
           <div className="min-w-0 rounded-none border-t-4 border-t-[#8B5CF6] bg-[#0f172a] px-2.5 py-2 shadow-[inset_0_0_28px_rgba(139,92,246,0.2)]">
             <p className="truncate text-xs font-extrabold uppercase tracking-wide text-white">Dnešné tržby</p>
-            <p className="mt-1 truncate text-2xl font-black leading-none text-sky-400">
-              {(financialStats?.todayRevenue ?? 0).toFixed(2)} €
+            <p className="mt-1 whitespace-nowrap text-lg font-black leading-none tabular-nums text-sky-400">
+              {formatCreditUnits(financialStats?.todayRevenue ?? 0, language)}
             </p>
           </div>
           <div className="min-w-0 rounded-none border-t-4 border-t-[#eab308] bg-[#0f172a] px-2.5 py-2 shadow-[inset_0_0_28px_rgba(234,179,8,0.16)]">
@@ -1825,37 +1826,47 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
             </button>
           </div>
           <div className="max-h-[calc(100vh-23.25rem)] overflow-auto">
-            <div role="table" className="w-full min-w-0 text-base">
-              <div role="rowgroup" className="sticky top-0 z-50">
-                <div role="row" className={`${ordersRow} border-b border-primary/30 bg-[#0a192f] shadow-md`}>
-                  <div role="columnheader" className="min-w-0 overflow-hidden border-r border-slate-500 p-2.5 text-left text-sm font-bold uppercase tracking-wide text-white">ID / Doklad</div>
-                  <div role="columnheader" className="min-w-0 overflow-hidden border-r border-slate-500 p-2.5 text-left text-sm font-bold uppercase tracking-wide text-white">Vozidlo</div>
-                  <div role="columnheader" className="min-w-0 overflow-hidden border-r border-slate-500 p-2.5 text-center text-sm font-bold uppercase tracking-wide text-white">CRC</div>
-                  <div role="columnheader" className="min-w-0 overflow-hidden border-r border-slate-500 p-2.5 text-left text-sm font-bold uppercase tracking-wide text-white">Dátum</div>
-                  <div role="columnheader" className="min-w-0 overflow-hidden border-r border-slate-500 p-2.5 text-left text-sm font-bold uppercase tracking-wide text-white">Zákazník</div>
-                  <div role="columnheader" className="sticky right-[calc(312px+9.5rem)] z-30 border-r border-slate-500 bg-[#0a192f] p-4 text-center text-sm font-bold uppercase tracking-wide text-white">Cena</div>
-                  <div role="columnheader" className="sticky right-[312px] z-30 border-r border-slate-500 bg-[#0a192f] p-2.5 text-center text-sm font-bold uppercase tracking-wide text-white">Stav</div>
-                  <div role="columnheader" className="sticky right-0 z-30 border-r border-slate-500 bg-[#0a192f] p-2.5 text-center text-sm font-bold uppercase tracking-wide text-white">Akcie</div>
-                </div>
-              </div>
-              <div role="rowgroup">
+            <table className="w-full min-w-[95.25rem] table-fixed border-separate border-spacing-0 text-base">
+              <colgroup>
+                <col style={{ width: '10.2%' }} />
+                <col style={{ width: '22.4%' }} />
+                <col style={{ width: '7%' }} />
+                <col style={{ width: '11%' }} />
+                <col style={{ width: '17.9%' }} />
+                <col style={{ width: '11.8%' }} />
+                <col style={{ width: '8.7%' }} />
+                <col style={{ width: '11%' }} />
+              </colgroup>
+              <thead className="sticky top-0 z-20">
+                <tr className="bg-[#0a192f] shadow-md">
+                  <th className="overflow-hidden border-b border-r border-primary/30 border-r-slate-500 bg-[#0a192f] px-2 py-2.5 text-left text-sm font-bold uppercase tracking-wide text-white">ID / Doklad</th>
+                  <th className="overflow-hidden border-b border-r border-primary/30 border-r-slate-500 bg-[#0a192f] px-2 py-2.5 text-left text-sm font-bold uppercase tracking-wide text-white">Vozidlo</th>
+                  <th className="overflow-hidden border-b border-r border-primary/30 border-r-slate-500 bg-[#0a192f] px-1.5 py-2.5 text-center text-sm font-bold uppercase tracking-wide text-white">CRC</th>
+                  <th className="overflow-hidden whitespace-nowrap border-b border-r border-primary/30 border-r-slate-500 bg-[#0a192f] px-2 py-2.5 text-left text-sm font-bold uppercase tracking-wide text-white">Dátum</th>
+                  <th className="overflow-hidden border-b border-r border-primary/30 border-r-slate-500 bg-[#0a192f] px-2 py-2.5 text-left text-sm font-bold uppercase tracking-wide text-white">Zákazník</th>
+                  <th className="overflow-hidden whitespace-nowrap border-b border-r border-primary/30 border-r-slate-500 bg-[#0a192f] px-2 py-2.5 text-center text-sm font-bold uppercase tracking-wide text-white">Cena</th>
+                  <th className="overflow-hidden border-b border-r border-primary/30 border-r-slate-500 bg-[#0a192f] px-2 py-2.5 text-center text-sm font-bold uppercase tracking-wide text-white">Stav</th>
+                  <th className="overflow-hidden border-b border-primary/30 bg-[#0a192f] px-1 py-2.5 text-center text-sm font-bold uppercase tracking-wide text-white">Akcie</th>
+                </tr>
+              </thead>
+              <tbody>
                 {loading ? (
-                <div role="row" className={ordersRow}>
-                      <div role="cell" className="col-span-8 py-12 text-center text-muted-foreground">
-                        Načítavam objednávky...
-                      </div>
-                    </div>
-                  ) : filteredOrders.length === 0 ? (
-                    <div role="row" className={ordersRow}>
-                      <div role="cell" className="col-span-8 py-12 text-center text-muted-foreground">
-                        Žiadne objednávky
-                      </div>
-                    </div>
+                  <tr>
+                    <td colSpan={8} className="py-12 text-center text-muted-foreground">
+                      Načítavam objednávky...
+                    </td>
+                  </tr>
+                ) : filteredOrders.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="py-12 text-center text-muted-foreground">
+                      Žiadne objednávky
+                    </td>
+                  </tr>
                 ) : (
                   filteredOrders.map((order) => {
                     const active = activeRowId === order.id;
                     const picked = active ? 'bg-[#0b2430] shadow-[inset_0_0_18px_rgba(0,242,255,0.16)]' : '';
-                    const flexCell = `flex h-full min-w-0 items-center overflow-hidden border-r border-slate-800/60 px-4 py-1 ${picked}`;
+                    const flexCell = `overflow-hidden border-r border-slate-800/60 px-2 py-1 align-middle ${picked}`;
                     const pinBg = active ? 'bg-[#0b2430] shadow-[inset_0_0_18px_rgba(0,242,255,0.16)]' : 'bg-[#070d16]';
                     const actionCell = 'inline-flex h-full min-h-8 flex-1 basis-0 items-center justify-center rounded-none border border-current shadow-[0_0_12px_color-mix(in_srgb,currentColor_32%,transparent)] transition-colors duration-200 hover:shadow-[0_0_14px_color-mix(in_srgb,currentColor_45%,transparent)]';
                     const vehicle = [order.car_brand, order.car_model].map((part) => String(part ?? '').trim()).filter(Boolean).join(' ');
@@ -1867,13 +1878,12 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                       documents.push({ number: order.credit_note_number, href: order.credit_note_pdf || '#', title: 'Stiahnuť dobropis' });
                     }
                     return (
-                    <div
-                      role="row"
+                    <tr
                       key={order.id}
                       onClick={() => setActiveRowId(order.id)}
-                      className={`${ordersRow} cursor-pointer items-stretch border-b border-slate-800/60`}
+                      className="cursor-pointer border-b border-slate-800/60"
                     >
-                      <div role="cell" className={`flex h-full min-w-0 flex-col justify-center overflow-visible border-r border-slate-800/60 px-4 py-1 ${picked}`}>
+                      <td className={`overflow-hidden border-r border-slate-800/60 px-2 py-1 align-middle ${picked}`}>
                         <div className="flex flex-col items-start gap-0.5 overflow-visible">
                           {!order.invoice_number && (
                             <span className="block whitespace-nowrap font-mono text-lg font-bold leading-none text-cyan-300">
@@ -1909,11 +1919,11 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                             </button>
                           )}
                         </div>
-                      </div>
-                      <div role="cell" className={flexCell}>
+                      </td>
+                      <td className={flexCell}>
                         <p className="truncate text-base font-bold leading-none text-cyan-400" title={vehicle || '—'}>{vehicle || '—'}</p>
-                      </div>
-                      <div role="cell" className={`${flexCell} px-1.5`}>
+                      </td>
+                      <td className={`overflow-hidden border-r border-slate-800/60 px-1 py-1 text-center align-middle ${picked}`}>
                         {order.checksum_crc?.trim() ? (
                           <span
                             className="flex h-6 w-full min-w-0 items-center justify-center truncate rounded border border-primary/60 bg-[#0a192f] px-1.5 text-base font-bold leading-none text-cyan-400"
@@ -1926,33 +1936,33 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                             —
                           </span>
                         )}
-                      </div>
-                      <div role="cell" className={flexCell}>
-                        <p className="truncate text-base font-medium leading-none text-white" title={formatLocalDateTime(order.created_at)}>
+                      </td>
+                      <td className={`${flexCell} whitespace-nowrap`}>
+                        <p className="whitespace-nowrap text-base font-medium leading-none text-white" title={formatLocalDateTime(order.created_at)}>
                           {formatLocalDateTime(order.created_at)}
                         </p>
-                      </div>
-                      <div role="cell" className={flexCell}>
-                        <div className="flex min-w-0 items-baseline gap-x-0.5">
+                      </td>
+                      <td className={flexCell}>
+                        <div className="flex min-w-0 items-baseline gap-x-2">
                           <p className="min-w-0 truncate whitespace-nowrap text-lg font-bold leading-none text-cyan-400" title={order.customer_name}>{order.customer_name}</p>
                           <p className="min-w-0 truncate whitespace-nowrap text-xs leading-none text-white" title={order.customer_email}>{order.customer_email}</p>
                         </div>
-                      </div>
-                      <div role="cell" className={`sticky right-[calc(312px+9.5rem)] z-20 flex h-full items-center justify-center border-r border-slate-800/60 px-4 py-1 text-center ${pinBg}`}>
-                        <p className={`flex items-center justify-center text-xl font-bold leading-none ${
+                      </td>
+                      <td className={`overflow-hidden whitespace-nowrap border-r border-slate-800/60 px-1 py-1 text-center align-middle ${pinBg}`}>
+                        <p className={`whitespace-nowrap text-xl font-bold leading-none tabular-nums ${
                           order.status === 'cancelled' 
                             ? 'text-red-500' 
                             : 'text-primary'
                         }`}>
-                          {getDisplayAmount(order).toFixed(2)}€
+                          {formatCreditUnits(getDisplayAmount(order), language)}
                         </p>
-                      </div>
-                      <div role="cell" className={`sticky right-[312px] z-20 min-h-8 border-r border-slate-800/60 p-0 text-center ${pinBg}`}>
+                      </td>
+                      <td className={`border-r border-slate-800/60 p-0 text-center align-middle ${pinBg}`}>
                         <select
                           value={order.status}
                           onMouseDown={(event) => event.stopPropagation()}
                           onChange={(e) => handleStatusChange(order.id, e.target.value)}
-                          className={`status-cell-select block h-full min-h-8 w-full cursor-pointer appearance-none rounded-none border bg-[length:0.8rem] bg-[position:right_0.4rem_center] bg-no-repeat px-4 text-center font-bold outline-none ${STATUS_CELL_CLASS[order.status] || STATUS_CELL_CLASS.pending}`}
+                          className={`status-cell-select block h-full min-h-8 w-full cursor-pointer appearance-none rounded-none border bg-[length:0.8rem] bg-[position:right_0.4rem_center] bg-no-repeat pl-2 pr-5 text-center font-bold outline-none ${STATUS_CELL_CLASS[order.status] || STATUS_CELL_CLASS.pending}`}
                           style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='${encodeURIComponent(STATUS_TEXT_COLOR[order.status] || STATUS_TEXT_COLOR.pending)}' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")` }}
                         >
                           {order.status === 'cancelled' && (
@@ -1962,8 +1972,8 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                           <option value="processing" style={{ color: STATUS_TEXT_COLOR.processing, backgroundColor: '#050505' }}>V Procese</option>
                           <option value="completed" style={{ color: STATUS_TEXT_COLOR.completed, backgroundColor: '#050505' }}>Dokončené</option>
                         </select>
-                      </div>
-                      <div role="cell" className="sticky right-0 z-30 h-full min-h-8 border-r border-slate-800/60 bg-[#070d16] p-0">
+                      </td>
+                      <td className={`h-8 p-0 align-middle ${active ? picked : 'bg-[#070d16]'}`}>
                         <div className="flex h-full w-full flex-nowrap items-stretch gap-0 p-0">
                           {order.file_url ? (
                             <button
@@ -2070,13 +2080,13 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                             </button>
                           )}
                         </div>
-                      </div>
-                    </div>
+                      </td>
+                    </tr>
                     );
                   })
                 )}
-              </div>
-            </div>
+              </tbody>
+            </table>
           </div>
         </div>
         </>
@@ -2250,12 +2260,12 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                         </div>
                         <div>
                           <p className="text-sm text-muted-foreground">Celková cena</p>
-                          <p className={`text-xl font-bold ${
+                          <p className={`whitespace-nowrap text-xl font-bold tabular-nums ${
                             detailOrder.status === 'cancelled'
                               ? 'text-red-500'
                               : 'text-primary'
                           }`}>
-                            {getDisplayAmount(detailOrder).toFixed(2)}€
+                            {formatCreditUnits(getDisplayAmount(detailOrder), language)}
                           </p>
                         </div>
                         <div className="col-span-2">

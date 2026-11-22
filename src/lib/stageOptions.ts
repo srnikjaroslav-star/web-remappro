@@ -1,3 +1,4 @@
+import { formatCreditUnits } from '@/lib/creditUnits';
 import type { CatalogService } from '@/lib/serviceCatalog';
 
 export type StageOption = {
@@ -46,5 +47,5 @@ export const isLegacyStage1 = (service: { name: string; category: string }) =>
 export const stageGroupSelection = (group: StageGroup, selectedIds: string[]) =>
   group.options.find((option) => selectedIds.includes(option.id))?.id ?? '';
 
-export const formatCredits = (price: number) =>
-  `${price.toLocaleString('sk-SK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} CR`;
+export const formatCredits = (price: number, language: 'sk' | 'en' = 'sk') =>
+  formatCreditUnits(price, language);

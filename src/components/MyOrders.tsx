@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Download, FileText, Search, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLanguage } from '@/i18n/LanguageContext';
+import { formatCreditUnits } from '@/lib/creditUnits';
 import type { TranslationKey } from '@/i18n/translations';
 import { SERVICES } from '@/data/services';
 import { loadServiceCatalog, lookupServiceName } from '@/lib/serviceCatalog';
@@ -155,11 +156,6 @@ const telegramSupportUrl = (order: ClientOrder) => {
   return `tg://resolve?domain=${TELEGRAM_SUPPORT_USERNAME}&text=${encodeURIComponent(text)}`;
 };
 
-const money = (value: number | string | null) => {
-  const amount = Number(value ?? 0);
-  return `${amount.toLocaleString('sk-SK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
-};
-
 const matchesFocus = (order: ClientOrder, focus: string) => {
   const key = focus.trim().toLowerCase();
   if (!key) return false;
@@ -171,7 +167,7 @@ const matchesFocus = (order: ClientOrder, focus: string) => {
 const ordersCache = new Map<string, ClientOrder[]>();
 
 const MyOrders = ({ email, focusOrder = '' }: { email: string; focusOrder?: string }) => {
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
   const cachedOrders = ordersCache.get(email);
   const [orders, setOrders] = useState<ClientOrder[]>(cachedOrders ?? []);
   const [loading, setLoading] = useState(cachedOrders === undefined);
@@ -436,7 +432,7 @@ const MyOrders = ({ email, focusOrder = '' }: { email: string; focusOrder?: stri
                     {services && <p className="mt-1.5 text-xs leading-snug text-primary/80">{services}</p>}
                   </td>
                   <td className={`${cell} whitespace-nowrap text-center`}>
-                    <p className="text-xl font-bold leading-none text-primary">{money(order.total_price)}</p>
+                    <p className="whitespace-nowrap text-xl font-bold leading-none text-primary">{formatCreditUnits(Number(order.total_price ?? 0), language)}</p>
                   </td>
                   <td className={`${cell} whitespace-nowrap`}>
                     <div className="flex items-center justify-between gap-3">

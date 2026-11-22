@@ -12,8 +12,8 @@ import SystemStatus, { fetchSystemSettings, isSystemOnline, useSystemOnline } fr
 import { useLanguage } from '@/i18n/LanguageContext';
 import { saveProfileLanguage, syncAccountLanguage } from '@/lib/clientLanguage';
 import type { TranslationKey } from '@/i18n/translations';
+import { formatCreditUnits } from '@/lib/creditUnits';
 import {
-  formatServicePrice,
   groupCatalog,
   loadServiceCatalog,
   peekServiceCatalog,
@@ -1034,10 +1034,10 @@ const OrderPage = () => {
                   <button
                     type="button"
                     onClick={showCreditBalance}
-                    className="shrink-0 text-lg font-black leading-none tabular-nums neon-text"
+                    className="shrink-0 whitespace-nowrap text-sm font-black leading-none tabular-nums neon-text sm:text-base"
                     aria-label={t('creditBalance')}
                   >
-                    {creditBalance === null ? '—' : `${formatServicePrice(creditBalance)}€`}
+                    {creditBalance === null ? '—' : formatCreditUnits(creditBalance, language)}
                   </button>
                   <button
                     type="button"
@@ -1372,9 +1372,9 @@ const OrderPage = () => {
 
             <aside className="sticky top-16 z-20 flex max-h-[calc(100dvh-8.25rem)] min-h-0 min-w-0 flex-col self-start lg:col-span-4">
               <div className="order-panel flex min-h-0 w-full flex-1 flex-col border-t-2 border-t-primary">
-                <div className="flex shrink-0 items-center justify-between border-b border-primary/15 px-4 py-3">
-                  <h2 className="text-xl font-semibold uppercase tracking-[0.16em] text-primary">{t('servicesCheckout')}</h2>
-                  <p className="shrink-0 text-3xl font-bold leading-none tabular-nums neon-text">{totalPrice}€</p>
+                <div className="flex shrink-0 items-center justify-between gap-3 border-b border-primary/15 px-4 py-3">
+                  <h2 className="text-lg font-semibold uppercase leading-tight tracking-[0.12em] text-primary">{t('servicesCheckout')}</h2>
+                  <p className="shrink-0 whitespace-nowrap text-xl font-bold leading-none tabular-nums neon-text">{formatCreditUnits(totalPrice, language)}</p>
                 </div>
 
                 <div className="order-counters shrink-0 px-3 pt-3">
@@ -1447,8 +1447,8 @@ const OrderPage = () => {
                                     <span className="block truncate text-[11px] leading-tight text-muted-foreground">{service.description}</span>
                                   )}
                                 </span>
-                                <span className="shrink-0 text-sm font-semibold tabular-nums text-primary">
-                                  {formatServicePrice(service.price)}€
+                                <span className="shrink-0 whitespace-nowrap text-sm font-semibold tabular-nums text-primary">
+                                  {formatCreditUnits(service.price, language)}
                                 </span>
                               </button>
                             );
@@ -1511,7 +1511,7 @@ const OrderPage = () => {
                   <div className="flex items-end justify-between gap-3">
                     <div>
                       <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">{t('totalPrice')}</p>
-                      <p className="text-3xl font-bold tabular-nums leading-none neon-text">{totalPrice}€</p>
+                      <p className="whitespace-nowrap text-2xl font-bold tabular-nums leading-none neon-text">{formatCreditUnits(totalPrice, language)}</p>
                     </div>
                     <p className="mb-1 flex items-center gap-1 text-[11px] text-amber-200/90">
                       <AlertTriangle className="h-3.5 w-3.5" />

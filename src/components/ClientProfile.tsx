@@ -3,7 +3,7 @@ import { ArrowLeft, Coins, KeyRound, Loader2, UserRound } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLanguage } from '@/i18n/LanguageContext';
 import type { ClientBilling } from '@/lib/clientProfile';
-import { formatServicePrice } from '@/lib/serviceCatalog';
+import { formatCreditUnits } from '@/lib/creditUnits';
 import { supabase } from '@/lib/supabase';
 
 type ClientProfileProps = {
@@ -33,7 +33,7 @@ const ClientProfile = ({
   authEmail,
   onBack,
 }: ClientProfileProps) => {
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
   const [currentPassword, setCurrentPassword] = useState('');
   const [nextPassword, setNextPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -248,8 +248,8 @@ const ClientProfile = ({
               <Coins className="h-4 w-4 text-primary" />
               <h2 className="text-base font-semibold uppercase leading-5 tracking-[0.16em] text-primary">{t('creditBalance')}</h2>
             </div>
-            <p className="text-4xl font-black tabular-nums leading-none neon-text">
-              {creditBalance === null ? '—' : `${formatServicePrice(creditBalance)}€`}
+            <p className="whitespace-nowrap text-3xl font-black tabular-nums leading-none neon-text sm:text-4xl">
+              {creditBalance === null ? '—' : formatCreditUnits(creditBalance, language)}
             </p>
             <p className="mt-3 text-xs leading-relaxed text-muted-foreground">{t('profileCreditsHint')}</p>
           </section>

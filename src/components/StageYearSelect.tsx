@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown } from 'lucide-react';
-import { formatCredits, type StageOption } from '@/lib/stageOptions';
+import { useLanguage } from '@/i18n/LanguageContext';
+import { formatCreditUnits } from '@/lib/creditUnits';
+import { type StageOption } from '@/lib/stageOptions';
 
 type StageYearSelectProps = {
   label: string;
@@ -11,6 +13,7 @@ type StageYearSelectProps = {
 };
 
 const StageYearSelect = ({ label, value, options, onChange }: StageYearSelectProps) => {
+  const { language } = useLanguage();
   const [open, setOpen] = useState(false);
   const [menu, setMenu] = useState({ top: 0, left: 0, width: 0 });
   const rootRef = useRef<HTMLDivElement>(null);
@@ -73,7 +76,7 @@ const StageYearSelect = ({ label, value, options, onChange }: StageYearSelectPro
     const top = spaceBelow < menuHeight && rect.top > spaceBelow
       ? Math.max(8, rect.top - menuHeight - 4)
       : rect.bottom + 4;
-    setMenu({ top, left: rect.left, width: rect.width });
+    setMenu({ top, left: rect.left, width: Math.max(rect.width, 280) });
     setOpen(true);
   };
 
@@ -94,7 +97,7 @@ const StageYearSelect = ({ label, value, options, onChange }: StageYearSelectPro
           chosen ? 'text-foreground' : 'text-muted-foreground'
         }`}
       >
-        <span className="truncate">{chosen ? `${chosen.years} – ${formatCredits(chosen.price)}` : '—'}</span>
+        <span className="truncate whitespace-nowrap">{chosen ? `${chosen.years} – ${formatCreditUnits(chosen.price, language)}` : '—'}</span>
         <ChevronDown className="h-3.5 w-3.5 shrink-0 text-primary" />
       </button>
       {open && createPortal(
@@ -125,11 +128,11 @@ const StageYearSelect = ({ label, value, options, onChange }: StageYearSelectPro
                   role="option"
                   aria-selected={active}
                   onClick={() => choose(option.id)}
-                  className={`block w-full px-2 py-1.5 text-left text-xs text-foreground hover:bg-primary/10 ${
+                  className={`block w-full whitespace-nowrap px-2 py-1.5 text-left text-xs text-foreground hover:bg-primary/10 ${
                     active ? 'bg-primary/10' : ''
                   }`}
                 >
-                  {`${option.years} – ${formatCredits(option.price)}`}
+                  {`${option.years} – ${formatCreditUnits(option.price, language)}`}
                 </button>
               </li>
             );

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { CreditCard, Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLanguage } from '@/i18n/LanguageContext';
+import { formatCreditUnits } from '@/lib/creditUnits';
 import { formatServicePrice } from '@/lib/serviceCatalog';
 import { supabase } from '@/lib/supabase';
 
@@ -18,7 +19,7 @@ const parseAmount = (raw: string) => {
 };
 
 const CreditTopUpModal = ({ onClose }: CreditTopUpModalProps) => {
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
   const [amountInput, setAmountInput] = useState('');
   const [paying, setPaying] = useState(false);
   const amount = parseAmount(amountInput);
@@ -139,7 +140,11 @@ const CreditTopUpModal = ({ onClose }: CreditTopUpModalProps) => {
         <div className="mt-4 border-t border-primary/20 pt-4">
           <div className="mb-3 flex items-center justify-between gap-3">
             <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary/80">{t('topUpChosen')}</span>
-            <span className="text-lg font-bold tabular-nums leading-none neon-text">{formatServicePrice(amount ?? 0)}€</span>
+            <span className="whitespace-nowrap text-lg font-bold tabular-nums leading-none neon-text">{formatServicePrice(amount ?? 0)}€</span>
+          </div>
+          <div className="mb-3 space-y-1 text-right text-xs leading-none text-muted-foreground">
+            <p className="whitespace-nowrap">{t('topUpRate')}</p>
+            <p className="whitespace-nowrap font-semibold text-primary">{t('topUpReceive', { amount: formatCreditUnits(amount ?? 0, language) })}</p>
           </div>
           <button
             type="button"

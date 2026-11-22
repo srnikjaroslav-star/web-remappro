@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 import { Check, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { catalogCategories, loadServiceCatalog, notifyServiceCatalogChanged, peekServiceCatalog, subscribeServiceCatalog, type CatalogService } from '@/lib/serviceCatalog';
+import { formatCreditUnits } from '@/lib/creditUnits';
+import { useLanguage } from '@/i18n/LanguageContext';
 import { supabase } from '@/lib/supabase';
 
 type Draft = {
@@ -20,9 +22,6 @@ const emptyDraft = (): Draft => ({
   category: catalogCategories[0],
   price: '',
 });
-
-const credits = (price: number) =>
-  `${price.toLocaleString('sk-SK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} CR`;
 
 const categoryTone: Record<string, { text: string; color: string }> = {
   'Emission Control': { text: 'text-cyan-400', color: '#22d3ee' },
@@ -42,6 +41,7 @@ const readPrice = (value: string) => {
 const fieldClass = 'h-11 w-full rounded-md border border-primary/70 bg-[#0a192f] px-3 text-sm text-foreground shadow-[0_0_16px_rgba(0,242,255,0.28)] focus:border-primary focus:outline-none focus:shadow-[0_0_16px_rgba(0,242,255,0.45)]';
 
 const AdminServices = () => {
+  const { language } = useLanguage();
   const knownCatalog = peekServiceCatalog();
   const [services, setServices] = useState<CatalogService[]>(knownCatalog ?? []);
   const [loading, setLoading] = useState(!knownCatalog);
@@ -339,7 +339,7 @@ const AdminServices = () => {
               <tr className="border-b border-primary/30 bg-[#0a192f] shadow-md">
                 <th className="sticky top-0 z-20 w-full min-w-[18rem] whitespace-nowrap border-r border-slate-500 bg-[#0a192f] p-2.5 text-left align-middle text-sm font-bold uppercase tracking-wide text-white">Služba</th>
                 <th className="sticky top-0 z-20 whitespace-nowrap border-r border-slate-500 bg-[#0a192f] p-2.5 text-left align-middle text-sm font-bold uppercase tracking-wide text-white">Kategória</th>
-                <th className="sticky top-0 z-20 min-w-[8.5rem] whitespace-nowrap border-r border-slate-500 bg-[#0a192f] p-4 text-center align-middle text-sm font-bold uppercase tracking-wide text-white">Kredity</th>
+                <th className="sticky top-0 z-20 min-w-[13rem] whitespace-nowrap border-r border-slate-500 bg-[#0a192f] p-4 text-center align-middle text-sm font-bold uppercase tracking-wide text-white">Kredity</th>
                 <th className="sticky top-0 right-0 z-30 min-w-[16.690625rem] whitespace-nowrap border-r border-slate-500 bg-[#0a192f] p-2.5 text-center align-middle text-sm font-bold uppercase tracking-wide text-white">Akcie</th>
               </tr>
             </thead>
@@ -363,7 +363,7 @@ const AdminServices = () => {
                       <span className={`whitespace-nowrap ${categoryTextClass(service.category)}`}>{service.category}</span>
                     </td>
                     <td className={`${cell} text-center`}>
-                      <p className="text-xl font-bold leading-none text-primary">{credits(service.price)}</p>
+                      <p className="whitespace-nowrap text-xl font-bold leading-none text-primary">{formatCreditUnits(service.price, language)}</p>
                     </td>
                     <td className="sticky right-0 z-10 border-r border-slate-800/60 bg-[#070d16] px-0 py-0 align-middle">
                       <div className="flex h-8 w-full">

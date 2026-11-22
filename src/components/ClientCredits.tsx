@@ -5,6 +5,8 @@ import { toast } from 'sonner';
 import ConnectionDot from '@/components/ConnectionDot';
 import { fetchSystemStatusFromDB } from '@/components/SystemStatus';
 import { adjustClientCredits, loadClientBilling, loadCreditClients, loadPortalActivityByClient, readCreditBalance, type PortalActivity } from '@/lib/clientProfile';
+import { formatCreditUnits } from '@/lib/creditUnits';
+import { useLanguage } from '@/i18n/LanguageContext';
 import { clientRecordName, companyFromMetadata, joinProfileName } from '@/lib/profileName';
 import { supabase } from '@/lib/supabase';
 
@@ -15,9 +17,6 @@ type ClientAccount = {
   company?: string;
   balance: number;
 };
-
-const money = (value: number) =>
-  `${value.toLocaleString('sk-SK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 
 const formatActivity = (value: string | null) => {
   if (!value) return '—';
@@ -32,7 +31,7 @@ const formatActivity = (value: string | null) => {
   });
 };
 
-const sheetGrid = 'grid w-full grid-cols-[minmax(220px,max-content)_minmax(180px,1fr)_6.5rem_11.5rem_max-content_20.25rem] text-base';
+const sheetGrid = 'grid w-full grid-cols-[minmax(220px,max-content)_minmax(180px,1fr)_minmax(12.5rem,max-content)_11.5rem_max-content_20.25rem] text-base';
 const nameCell = 'flex min-w-[220px] items-center whitespace-nowrap border-r border-slate-500 px-3 py-2 text-left';
 const emailCell = 'flex min-w-max items-center whitespace-nowrap border-r border-slate-500 px-3 py-2 text-left';
 const balanceCell = 'flex shrink-0 items-center whitespace-nowrap border-r border-slate-500 py-2 pl-3 pr-2';
@@ -90,6 +89,7 @@ const withSignedInClient = (rows: ClientAccount[], self: ClientAccount | null) =
 };
 
 const ClientCredits = ({ onlineIds, reloadKey = 0 }: ClientCreditsProps) => {
+  const { language } = useLanguage();
   const [clients, setClients] = useState<ClientAccount[]>(clientsCache?.clients ?? []);
   const [loading, setLoading] = useState(!clientsCache);
   const [query, setQuery] = useState('');
@@ -273,7 +273,7 @@ const ClientCredits = ({ onlineIds, reloadKey = 0 }: ClientCreditsProps) => {
               <p className="text-sm font-semibold leading-none text-cyan-400">{clientRecordName(pendingClient) || '—'}</p>
               <p className="mt-1.5 text-sm font-medium leading-none text-white">{pendingClient.email || '—'}</p>
               <p className="mt-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Zostatok <span className="ml-2 text-base font-bold normal-case tracking-normal text-primary">{money(pendingClient.balance)}</span>
+                Zostatok <span className="ml-2 whitespace-nowrap text-base font-bold normal-case tracking-normal text-primary">{formatCreditUnits(pendingClient.balance, language)}</span>
               </p>
             </div>
             <label className="block">
@@ -368,7 +368,7 @@ const ClientCredits = ({ onlineIds, reloadKey = 0 }: ClientCreditsProps) => {
                     <span className="text-base font-medium leading-none text-white">{client.email || '—'}</span>
                   </td>
                   <td className={`${balanceCell} ${rowBg}${picked} justify-end text-right`}>
-                    <span className="text-base font-bold leading-none tabular-nums text-primary">{money(client.balance)}</span>
+                    <span className="whitespace-nowrap text-base font-bold leading-none tabular-nums text-primary">{formatCreditUnits(client.balance, language)}</span>
                   </td>
                   <td className={`${visitsCell} ${rowBg}${picked}`}>
                     <span className="text-base font-bold leading-none tabular-nums text-white">{activity[client.id]?.visits ?? 0}</span>
