@@ -16,13 +16,22 @@ type ClientProfileProps = {
   onBack: () => void;
 };
 
-const fieldLabel = 'mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground';
+const fieldLabel = 'mb-1 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground';
 const fieldInput =
-  'input-field w-full !rounded-lg !border !border-primary/60 !bg-secondary !px-3 !py-2 text-sm text-foreground shadow-[0_0_14px_rgba(0,242,255,0.28)] transition-shadow placeholder:text-muted-foreground hover:!border-primary hover:shadow-[0_0_16px_rgba(0,242,255,0.42)] focus:!border focus:!border-primary focus:!bg-primary/10 focus:shadow-[0_0_18px_rgba(0,242,255,0.5)] focus:outline-none';
-const profilePanel =
-  'order-panel !rounded-lg !border-primary/60 p-4 shadow-[0_0_24px_rgba(0,242,255,0.22),inset_0_0_0_1px_rgba(0,242,255,0.14)] md:p-5';
-const profileActionButton =
-  'flex min-h-[46px] items-center justify-center gap-2 rounded-lg border border-primary/50 bg-primary/20 px-5 py-2 text-sm font-semibold text-primary shadow-[0_0_16px_rgba(0,242,255,0.35)] transition-colors hover:border-primary hover:bg-primary/30 hover:shadow-[0_0_22px_rgba(0,242,255,0.55)] disabled:cursor-not-allowed disabled:opacity-60';
+  'input-field w-full !h-8 !rounded-md !border !border-cyan-300/70 !bg-black/50 !px-2.5 !py-0 text-sm !leading-6 text-foreground shadow-[0_0_12px_rgba(0,242,255,0.22)] transition-shadow placeholder:text-muted-foreground hover:!border-primary hover:shadow-[0_0_16px_rgba(0,242,255,0.4)] focus:!border focus:!border-primary focus:!bg-primary/10 focus:shadow-[0_0_18px_rgba(0,242,255,0.55)] focus:outline-none';
+const sectionTitle = 'text-base font-semibold uppercase leading-5 tracking-[0.16em] text-primary';
+const detailsPanel =
+  'rounded-lg border border-cyan-300/80 bg-[linear-gradient(155deg,rgba(0,242,255,0.22),rgba(4,14,22,0.94)_42%)] p-2.5 shadow-[0_0_24px_rgba(0,242,255,0.28),inset_0_0_0_1px_rgba(0,242,255,0.28)]';
+const billingPanel =
+  'rounded-lg border border-sky-400/80 bg-[linear-gradient(155deg,rgba(56,189,248,0.2),rgba(5,12,28,0.94)_44%)] p-2.5 shadow-[0_0_24px_rgba(56,189,248,0.24),inset_0_0_0_1px_rgba(125,211,252,0.28)]';
+const creditPanel =
+  'rounded-lg border-2 border-primary bg-[linear-gradient(100deg,rgba(0,242,255,0.34),rgba(0,242,255,0.08)_38%,rgba(3,8,14,0.96))] px-3 py-2.5 shadow-[0_0_32px_rgba(0,242,255,0.5),inset_0_0_18px_rgba(0,242,255,0.12)]';
+const passwordPanel =
+  'rounded-lg border border-cyan-200/75 bg-[linear-gradient(180deg,rgba(0,242,255,0.14),rgba(4,10,16,0.96))] p-2.5 shadow-[0_0_22px_rgba(0,242,255,0.24),inset_0_0_0_1px_rgba(0,242,255,0.2)]';
+const saveButton =
+  'flex h-8 items-center justify-center gap-2 rounded-md border border-primary bg-primary px-4 text-sm font-semibold text-slate-950 shadow-[0_0_18px_rgba(0,242,255,0.55)] transition-colors hover:bg-cyan-200 hover:shadow-[0_0_24px_rgba(0,242,255,0.75)] disabled:cursor-not-allowed disabled:opacity-60';
+const passwordButton =
+  'flex h-8 items-center justify-center gap-2 rounded-md border border-cyan-200 bg-cyan-400/10 px-4 text-sm font-semibold text-cyan-100 shadow-[0_0_16px_rgba(103,232,249,0.35)] transition-colors hover:border-primary hover:bg-primary/20 hover:text-primary hover:shadow-[0_0_22px_rgba(0,242,255,0.55)] disabled:cursor-not-allowed disabled:opacity-60';
 
 const ClientProfile = ({
   billing,
@@ -97,30 +106,44 @@ const ClientProfile = ({
   };
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="mx-auto w-full max-w-[1120px] space-y-2">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight md:text-3xl">{t('myProfile')}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{t('profileSubtitle')}</p>
+          <p className="mt-0.5 text-sm text-muted-foreground">{t('profileSubtitle')}</p>
         </div>
         <button
           type="button"
           onClick={onBack}
-          className="inline-flex h-10 w-auto shrink-0 items-center justify-center gap-1.5 self-end rounded-md border border-primary/70 bg-primary/15 px-3 text-sm font-bold text-primary shadow-[0_0_16px_rgba(0,242,255,0.4)] transition-colors hover:bg-primary/25 sm:self-start"
+          className="inline-flex h-9 w-auto shrink-0 items-center justify-center gap-1.5 self-end rounded-md border border-primary/70 bg-primary/15 px-3 text-sm font-bold text-primary shadow-[0_0_16px_rgba(0,242,255,0.4)] transition-colors hover:bg-primary/25 sm:self-start"
         >
           <ArrowLeft className="h-4 w-4" />
           {t('backToNewOrder')}
         </button>
       </div>
 
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.45fr)_minmax(18rem,0.8fr)]">
-        <form onSubmit={saveDetails} className={profilePanel}>
-          <div className="mb-4 flex items-center gap-2">
-            <UserRound className="h-4 w-4 text-primary" />
-            <h2 className="text-base font-semibold uppercase leading-5 tracking-[0.16em] text-primary">{t('profileTitle')}</h2>
+      <section className={creditPanel}>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <Coins className="h-4 w-4 text-primary" />
+              <h2 className={sectionTitle}>{t('creditBalance')}</h2>
+            </div>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{t('profileCreditsHint')}</p>
           </div>
+          <p className="whitespace-nowrap text-3xl font-black tabular-nums leading-none neon-text sm:text-4xl">
+            {creditBalance === null ? '—' : formatCreditUnits(creditBalance, language)}
+          </p>
+        </div>
+      </section>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <form onSubmit={saveDetails} className="space-y-2">
+        <section className={detailsPanel}>
+          <div className="mb-1.5 flex items-center gap-2">
+            <UserRound className="h-4 w-4 text-primary" />
+            <h2 className={sectionTitle}>{t('profileTitle')}</h2>
+          </div>
+          <div className="grid grid-cols-1 items-end gap-x-2 gap-y-1.5 sm:grid-cols-[minmax(0,13rem)_minmax(0,13rem)] sm:justify-start">
             <label className="block">
               <span className={fieldLabel}>{t('signUpFirstName')}</span>
               <input
@@ -141,7 +164,9 @@ const ClientProfile = ({
                 className={fieldInput}
               />
             </label>
-            <label className="block sm:col-span-2">
+          </div>
+          <div className="mt-1.5 grid grid-cols-1 items-end gap-x-2 gap-y-1.5 sm:grid-cols-[minmax(0,16rem)_minmax(0,11.5rem)_minmax(0,16rem)] sm:justify-start">
+            <label className="block">
               <span className={fieldLabel}>{t('profileCompany')}</span>
               <input
                 type="text"
@@ -149,17 +174,6 @@ const ClientProfile = ({
                 onChange={(event) => setField('company', event.target.value)}
                 autoComplete="organization"
                 placeholder={t('profileCompanyPlaceholder')}
-                className={fieldInput}
-              />
-            </label>
-            <label className="block">
-              <span className={fieldLabel}>{t('email')}</span>
-              <input
-                type="email"
-                value={billing.email}
-                onChange={(event) => setField('email', event.target.value)}
-                autoComplete="email"
-                required
                 className={fieldInput}
               />
             </label>
@@ -174,13 +188,26 @@ const ClientProfile = ({
                 className={fieldInput}
               />
             </label>
+            <label className="block">
+              <span className={fieldLabel}>{t('email')}</span>
+              <input
+                type="email"
+                value={billing.email}
+                onChange={(event) => setField('email', event.target.value)}
+                autoComplete="email"
+                required
+                className={fieldInput}
+              />
+            </label>
           </div>
+        </section>
 
-          <div className="mb-3 mt-5 flex items-center gap-2">
-            <h2 className="text-base font-semibold uppercase leading-5 tracking-[0.16em] text-primary">{t('profileBilling')}</h2>
+        <section className={billingPanel}>
+          <div className="mb-1.5 flex items-center gap-2">
+            <h2 className={sectionTitle}>{t('profileBilling')}</h2>
           </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <label className="block sm:col-span-2">
+          <div className="grid grid-cols-1 items-end gap-x-2 gap-y-1.5 sm:grid-cols-[minmax(0,22rem)_minmax(0,12rem)_7.25rem] sm:justify-start">
+            <label className="block">
               <span className={fieldLabel}>{t('profileStreet')}</span>
               <input
                 type="text"
@@ -210,6 +237,8 @@ const ClientProfile = ({
                 className={fieldInput}
               />
             </label>
+          </div>
+          <div className="mt-1.5 grid grid-cols-1 items-end gap-x-2 gap-y-1.5 sm:grid-cols-[minmax(0,13rem)_minmax(0,13rem)] sm:justify-start">
             <label className="block">
               <span className={fieldLabel}>{t('profileVat')}</span>
               <input
@@ -232,79 +261,68 @@ const ClientProfile = ({
               />
             </label>
           </div>
+        </section>
 
+        <button
+          type="submit"
+          disabled={saving}
+          className={saveButton}
+        >
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : t('profileSave')}
+        </button>
+      </form>
+
+      <form onSubmit={changePassword} className={passwordPanel}>
+        <div className="mb-1.5 flex items-center gap-2">
+          <KeyRound className="h-4 w-4 text-primary" />
+          <h2 className={sectionTitle}>{t('profilePasswordTitle')}</h2>
+        </div>
+        <div className="grid grid-cols-1 items-end gap-x-2 gap-y-1.5 lg:grid-cols-[minmax(0,13rem)_minmax(0,13rem)_minmax(0,13rem)_auto] lg:justify-start">
+          <label className="block">
+            <span className={fieldLabel}>{t('profilePasswordCurrent')}</span>
+            <input
+              type="password"
+              value={currentPassword}
+              onChange={(event) => setCurrentPassword(event.target.value)}
+              autoComplete="current-password"
+              required
+              className={fieldInput}
+            />
+          </label>
+          <label className="block">
+            <span className={fieldLabel}>{t('resetPasswordNew')}</span>
+            <input
+              type="password"
+              value={nextPassword}
+              onChange={(event) => setNextPassword(event.target.value)}
+              autoComplete="new-password"
+              required
+              minLength={6}
+              className={fieldInput}
+            />
+          </label>
+          <label className="block">
+            <span className={fieldLabel}>{t('resetPasswordConfirm')}</span>
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(event) => setConfirmPassword(event.target.value)}
+              autoComplete="new-password"
+              required
+              minLength={6}
+              className={fieldInput}
+            />
+          </label>
           <button
             type="submit"
-            disabled={saving}
-            className={`${profileActionButton} mt-5 w-full sm:w-auto`}
+            disabled={passwordBusy}
+            className={passwordButton}
           >
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : t('profileSave')}
+            {passwordBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : t('profilePasswordSave')}
           </button>
-        </form>
-
-        <div className="space-y-4">
-          <section className={profilePanel}>
-            <div className="mb-3 flex items-center gap-2">
-              <Coins className="h-4 w-4 text-primary" />
-              <h2 className="text-base font-semibold uppercase leading-5 tracking-[0.16em] text-primary">{t('creditBalance')}</h2>
-            </div>
-            <p className="whitespace-nowrap text-3xl font-black tabular-nums leading-none neon-text sm:text-4xl">
-              {creditBalance === null ? '—' : formatCreditUnits(creditBalance, language)}
-            </p>
-            <p className="mt-3 text-xs leading-relaxed text-muted-foreground">{t('profileCreditsHint')}</p>
-          </section>
-
-          <form onSubmit={changePassword} className={profilePanel}>
-            <div className="mb-4 flex items-center gap-2">
-              <KeyRound className="h-4 w-4 text-primary" />
-              <h2 className="text-base font-semibold uppercase leading-5 tracking-[0.16em] text-primary">{t('profilePasswordTitle')}</h2>
-            </div>
-            <label className="mb-3 block">
-              <span className={fieldLabel}>{t('profilePasswordCurrent')}</span>
-              <input
-                type="password"
-                value={currentPassword}
-                onChange={(event) => setCurrentPassword(event.target.value)}
-                autoComplete="current-password"
-                required
-                className={fieldInput}
-              />
-            </label>
-            <label className="mb-3 block">
-              <span className={fieldLabel}>{t('resetPasswordNew')}</span>
-              <input
-                type="password"
-                value={nextPassword}
-                onChange={(event) => setNextPassword(event.target.value)}
-                autoComplete="new-password"
-                required
-                minLength={6}
-                className={fieldInput}
-              />
-            </label>
-            <label className="mb-4 block">
-              <span className={fieldLabel}>{t('resetPasswordConfirm')}</span>
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
-                autoComplete="new-password"
-                required
-                minLength={6}
-                className={fieldInput}
-              />
-            </label>
-            {passwordError && <p className="mb-3 text-xs text-red-400">{passwordError}</p>}
-            <button
-              type="submit"
-              disabled={passwordBusy}
-              className={`${profileActionButton} w-full`}
-            >
-              {passwordBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : t('profilePasswordSave')}
-            </button>
-          </form>
         </div>
-      </div>
+        {passwordError && <p className="mt-1.5 text-xs text-red-400">{passwordError}</p>}
+      </form>
     </div>
   );
 };
