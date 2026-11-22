@@ -3,8 +3,9 @@ import { createPortal } from 'react-dom';
 import { Search } from 'lucide-react';
 import { toast } from 'sonner';
 import ConnectionDot from '@/components/ConnectionDot';
-import { loadClientBilling, loadPortalActivityByClient, readCreditBalance, saveCreditBalance, type PortalActivity } from '@/lib/clientProfile';
-import { clientRecordName, joinProfileName } from '@/lib/profileName';
+import { fetchSystemStatusFromDB } from '@/components/SystemStatus';
+import { adjustClientCredits, loadClientBilling, loadCreditClients, loadPortalActivityByClient, readCreditBalance, type PortalActivity } from '@/lib/clientProfile';
+import { clientRecordName, companyFromMetadata, joinProfileName } from '@/lib/profileName';
 import { supabase } from '@/lib/supabase';
 
 type ClientAccount = {
@@ -14,8 +15,6 @@ type ClientAccount = {
   company?: string;
   balance: number;
 };
-
-const text = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
 
 const money = (value: number) =>
   `${value.toLocaleString('sk-SK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
@@ -59,6 +58,37 @@ const amountField = 'h-11 w-full rounded-md border border-primary/70 bg-[#0a192f
 type ClientsCache = { clients: ClientAccount[]; activity: Record<string, PortalActivity> };
 let clientsCache: ClientsCache | null = null;
 
+const loadSignedInClient = async (): Promise<ClientAccount | null> => {
+  try {
+    const { data, error } = await supabase.auth.getUser();
+    const user = data.user;
+    if (error || !user) return null;
+    const meta = user.user_metadata ?? {};
+    const [billing, balance] = await Promise.all([
+      loadClientBilling(user),
+      readCreditBalance(user.id),
+    ]);
+    const metaName = joinProfileName(
+      typeof meta.first_name === 'string' ? meta.first_name : '',
+      typeof meta.last_name === 'string' ? meta.last_name : '',
+    );
+    return {
+      id: user.id,
+      email: billing?.email || user.email || '',
+      name: joinProfileName(billing?.firstName, billing?.lastName) || metaName,
+      company: billing?.company || companyFromMetadata(meta),
+      balance: Number.isFinite(balance) ? balance : 0,
+    };
+  } catch {
+    return null;
+  }
+};
+
+const withSignedInClient = (rows: ClientAccount[], self: ClientAccount | null) => {
+  if (!self || rows.some((client) => client.id === self.id)) return rows;
+  return [self, ...rows];
+};
+
 const ClientCredits = ({ onlineIds, reloadKey = 0 }: ClientCreditsProps) => {
   const [clients, setClients] = useState<ClientAccount[]>(clientsCache?.clients ?? []);
   const [loading, setLoading] = useState(!clientsCache);
@@ -72,38 +102,49 @@ const ClientCredits = ({ onlineIds, reloadKey = 0 }: ClientCreditsProps) => {
 
   const loadClients = async (silent = false) => {
     if (!silent && !clientsCache) setLoading(true);
-    const { data: authData, error: authError } = await supabase.auth.getUser();
-    const user = authData.user;
-    if (authError || !user) {
-      toast.error('Klientov sa nepodarilo načítať.');
-      if (!clientsCache) setClients([]);
+    try {
+      const [listed, statusMode] = await Promise.all([
+        loadCreditClients().catch(() => ({ ok: false as const, code: 'SERVER', clients: [] as ClientAccount[] })),
+        fetchSystemStatusFromDB().catch(() => 'auto' as const),
+      ]);
+      let rows: ClientAccount[] = listed.ok ? listed.clients : [];
+      if (!listed.ok || statusMode === 'offline' || rows.length === 0) {
+        rows = withSignedInClient(rows, await loadSignedInClient());
+      }
+      if (rows.length === 0) {
+        if (!clientsCache) {
+          toast.error(!listed.ok && listed.code === 'FORBIDDEN'
+            ? 'Na zobrazenie klientov nemáte oprávnenie.'
+            : 'Klientov sa nepodarilo načítať.');
+          setClients([]);
+        }
+        setLoading(false);
+        return;
+      }
+
+      const stats = await loadPortalActivityByClient(rows.map((client) => ({
+        id: client.id,
+        email: client.email,
+      })));
+      const nextActivity = Object.fromEntries(stats);
+      clientsCache = { clients: rows, activity: nextActivity };
+      setClients(rows);
+      setActivity(nextActivity);
+    } catch {
+      const self = await loadSignedInClient().catch(() => null);
+      const rows = withSignedInClient(clientsCache?.clients ?? [], self);
+      if (rows.length === 0) {
+        if (!clientsCache) {
+          toast.error('Klientov sa nepodarilo načítať.');
+          setClients([]);
+        }
+      } else {
+        clientsCache = { clients: rows, activity: clientsCache?.activity ?? {} };
+        setClients(rows);
+      }
+    } finally {
       setLoading(false);
-      return;
     }
-
-    const meta = user.user_metadata ?? {};
-    const [billing, balance, stats] = await Promise.all([
-      loadClientBilling(user),
-      readCreditBalance(user.id),
-      loadPortalActivityByClient([{ id: user.id, email: user.email || '' }]),
-    ]);
-    const metaName = joinProfileName(
-      typeof meta.first_name === 'string' ? meta.first_name : '',
-      typeof meta.last_name === 'string' ? meta.last_name : '',
-    );
-
-    const rows = [{
-      id: user.id,
-      email: billing?.email || user.email || '',
-      name: joinProfileName(billing?.firstName, billing?.lastName) || metaName,
-      company: billing?.company || text(meta.company) || text(meta.company_name),
-      balance: Number.isFinite(balance) ? balance : 0,
-    }];
-    const nextActivity = Object.fromEntries(stats);
-    clientsCache = { clients: rows, activity: nextActivity };
-    setClients(rows);
-    setActivity(nextActivity);
-    setLoading(false);
   };
 
   useEffect(() => {
@@ -172,18 +213,34 @@ const ClientCredits = ({ onlineIds, reloadKey = 0 }: ClientCreditsProps) => {
       return;
     }
     setAdjustingId(pendingClient.id);
-    const saved = await saveCreditBalance(pendingClient.id, nextBalance);
-    const balance = saved ? await readCreditBalance(pendingClient.id) : nextBalance;
+    const saved = await adjustClientCredits(pendingClient.id, pending.direction, value);
     setAdjustingId(null);
+    if (!saved.ok) {
+      if (saved.code === 'INSUFFICIENT_CREDITS') {
+        toast.error('Na účte nie je dosť kreditov na odrátanie.');
+      } else if (saved.code === 'FORBIDDEN') {
+        toast.error('Na úpravu kreditov tohto klienta nemáte oprávnenie.');
+      } else {
+        toast.error('Kredity sa nepodarilo upraviť.');
+      }
+      return;
+    }
+    const balance = saved.balance;
     setClients((current) => current.map((item) => (
       item.id === pendingClient.id ? { ...item, balance } : item
     )));
+    if (clientsCache) {
+      clientsCache = {
+        ...clientsCache,
+        clients: clientsCache.clients.map((item) => (
+          item.id === pendingClient.id ? { ...item, balance } : item
+        )),
+      };
+    }
     setPending(null);
     setAmount('');
-    if (saved) {
-      toast.success(pending.direction === 'add' ? 'Kredity boli pripísané.' : 'Kredity boli odrátané.');
-      await loadClients(true);
-    }
+    toast.success(pending.direction === 'add' ? 'Kredity boli pripísané.' : 'Kredity boli odrátané.');
+    await loadClients(true);
   };
 
   const confirmLabel = pending?.direction === 'subtract' ? 'Odrátať' : 'Pripísať';

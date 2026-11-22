@@ -95,3 +95,37 @@ export const keepOrAssignDocumentNumber = async (orderId: string, kind: Document
   }
   return formatNumber(kind, year, 1);
 };
+
+export const documentIssueAllowed = async (
+  orderId: string,
+  kind: DocumentKind,
+): Promise<"ok" | "missing" | "too_early" | "exists"> => {
+  const admin = adminClient();
+  if (!admin || !orderId) return "missing";
+  const full = await admin
+    .from("orders")
+    .select("status, note, invoice_number, credit_note_number")
+    .eq("id", orderId)
+    .maybeSingle();
+  const row = full.error
+    ? await admin.from("orders").select("status, note").eq("id", orderId).maybeSingle()
+    : full;
+  if (row.error || !row.data) return "missing";
+  const data = row.data as {
+    status?: string | null;
+    note?: string | null;
+    invoice_number?: string | null;
+    credit_note_number?: string | null;
+  };
+  const note = String(data.note || "");
+  const invoice = String(data.invoice_number || "").trim() || markedNumber(note, "invoice");
+  const credit = String(data.credit_note_number || "").trim() || markedNumber(note, "credit");
+  if (kind === "invoice") {
+    if (invoice) return "exists";
+    if (String(data.status || "") !== "completed") return "too_early";
+    return "ok";
+  }
+  if (credit) return "exists";
+  if (!invoice) return "too_early";
+  return "ok";
+};

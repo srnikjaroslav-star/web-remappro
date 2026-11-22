@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { documentIssueAllowed } from "../_shared/accountingNumber.ts";
+import { requireStaffCaller } from "../_shared/staffCaller.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -34,6 +36,9 @@ serve(async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
+  const denied = await requireStaffCaller(req, corsHeaders);
+  if (denied) return denied;
+
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -46,6 +51,23 @@ serve(async (req) => {
       creditNoteNumber: data.creditNoteNumber,
       totalAmount: data.totalAmount,
     });
+
+    const issueGate = await documentIssueAllowed(data.orderId, "credit");
+    if (issueGate === "exists") {
+      return new Response(JSON.stringify({ success: true, alreadyIssued: true }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (issueGate !== "ok") {
+      return new Response(JSON.stringify({
+        success: false,
+        error: issueGate === "missing" ? "Order was not found" : "Credit note requires a completed invoice",
+      }), {
+        status: issueGate === "missing" ? 404 : 409,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     // VALIDATION: Amount MUST be negative
     if (data.totalAmount >= 0) {

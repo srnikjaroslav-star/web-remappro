@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { isFunctionAdmin } from "../_shared/operatingStatus.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,7 +13,17 @@ const json = (body: unknown, status = 200) =>
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 
-const adminEmail = () => (Deno.env.get("ADMIN_EMAIL") || "info@remappro.eu").trim().toLowerCase();
+const callerIsAdmin = (user: { email?: string | null; app_metadata?: Record<string, unknown> | null; user_metadata?: Record<string, unknown> | null }) => {
+  if (isFunctionAdmin(user)) return true;
+  const configured = (Deno.env.get("ADMIN_EMAIL") || "").trim().toLowerCase();
+  const email = String(user.email ?? "").trim().toLowerCase();
+  return Boolean(configured) && email === configured;
+};
+
+const orderIdOf = (value: unknown) => {
+  const orderId = String(value ?? "").trim();
+  return /^[0-9a-f-]{36}$/i.test(orderId) ? orderId : null;
+};
 
 const realLabel = (value: unknown) => {
   const text = String(value ?? "").trim();
@@ -39,7 +50,7 @@ Deno.serve(async (req) => {
     });
     const { data: userData, error: userError } = await userClient.auth.getUser();
     const caller = userData.user;
-    if (userError || !caller?.email || caller.email.toLowerCase() !== adminEmail()) {
+    if (userError || !caller || !callerIsAdmin(caller)) {
       return json({ ok: false, code: "FORBIDDEN" });
     }
 
@@ -103,7 +114,15 @@ Deno.serve(async (req) => {
       return json({ ok: true, clients });
     }
 
-    if (body.action === "adjust") {
+    const ledgerCode = (message: string) => {
+      if (message.includes("INSUFFICIENT_CREDITS")) return "INSUFFICIENT_CREDITS";
+      if (message.includes("NO_ACCOUNT")) return "NO_ACCOUNT";
+      if (message.includes("INVALID_ORDER")) return "INVALID_ORDER";
+      if (message.includes("INVALID_AMOUNT")) return "INVALID_AMOUNT";
+      return "SERVER";
+    };
+
+    if (body.action === "adjust" || body.action === "charge" || body.action === "restore") {
       const userId = String(body.userId ?? "");
       if (!/^[0-9a-f-]{36}$/i.test(userId)) {
         return json({ ok: false, code: "INVALID_AMOUNT" });
@@ -112,112 +131,74 @@ Deno.serve(async (req) => {
       if (!Number.isFinite(amount) || amount <= 0 || amount > 100000) {
         return json({ ok: false, code: "INVALID_AMOUNT" });
       }
-      const direction = body.direction === "subtract" ? "subtract" : body.direction === "add" ? "add" : "";
-      if (!direction) return json({ ok: false, code: "INVALID_AMOUNT" });
+      const orderId = orderIdOf(body.orderId);
+      let delta = 0;
+      let note = "";
+      if (body.action === "adjust") {
+        const direction = body.direction === "subtract" ? "subtract" : body.direction === "add" ? "add" : "";
+        if (!direction) return json({ ok: false, code: "INVALID_AMOUNT" });
+        delta = direction === "subtract" ? -amount : amount;
+        note = direction === "add" ? "Ručné pripísanie" : "Ručné odrátanie";
+      } else if (body.action === "charge") {
+        if (!orderId) return json({ ok: false, code: "INVALID_ORDER" });
+        const { data, error } = await admin.rpc("charge_completion_once", {
+          p_user_id: userId,
+          p_amount: amount,
+          p_order_id: orderId,
+        });
+        if (error) {
+          const code = ledgerCode(error.message ?? "");
+          return json({ ok: false, code }, code === "SERVER" ? 500 : 200);
+        }
+        return json({
+          ok: true,
+          balance: Number(data?.balance),
+          charged: data?.charged === true,
+          userId,
+        });
+      } else {
+        if (!orderId) return json({ ok: false, code: "INVALID_ORDER" });
+        delta = amount;
+        note = "Vrátenie po neúspešnom dokončení";
+      }
 
-      const delta = direction === "subtract" ? -amount : amount;
-      const note = direction === "add" ? "Ručné pripísanie" : "Ručné odrátanie";
       const { data, error } = await admin.rpc("adjust_client_credits", {
         p_user_id: userId,
         p_delta: delta,
         p_note: note,
+        p_order_id: orderId,
       });
       if (error) {
-        const message = error.message ?? "";
-        const code = message.includes("INSUFFICIENT_CREDITS") ? "INSUFFICIENT_CREDITS" : "SERVER";
+        const code = ledgerCode(error.message ?? "");
         return json({ ok: false, code }, code === "SERVER" ? 500 : 200);
       }
-      return json({ ok: true, balance: Number(data?.balance) });
+      return json({ ok: true, balance: Number(data?.balance), userId });
     }
 
-    if (body.action === "cancel-order") {
-      const orderId = String(body.orderId ?? "");
-      if (!/^[0-9a-f-]{36}$/i.test(orderId)) {
-        return json({ ok: false, code: "INVALID_ORDER" });
-      }
+    if (body.action === "refund-order" || body.action === "cancel-order") {
+      const orderId = orderIdOf(body.orderId);
+      if (!orderId) return json({ ok: false, code: "INVALID_ORDER" });
 
-      const { data: order, error: orderError } = await admin
-        .from("orders")
-        .select("id, status")
-        .eq("id", orderId)
-        .maybeSingle();
-      if (orderError || !order) {
-        return json({ ok: false, code: "NOT_FOUND", message: orderError?.message ?? "Order not found" });
-      }
-
-      const { data: transactions, error: transactionError } = await admin
-        .from("credit_transactions")
-        .select("user_id, amount")
-        .eq("order_id", orderId);
-      if (transactionError) {
-        return json({ ok: false, code: "SERVER", message: transactionError.message }, 500);
-      }
-
-      const rows = transactions ?? [];
-      let net = Math.round(rows.reduce((sum, row) => sum + Number(row.amount), 0) * 100) / 100;
-      let refundUserId = String(rows.find((row) => row.user_id)?.user_id ?? "");
-
-      if (rows.length === 0 && order.status !== "cancelled") {
-        const { data: invoiceRows, error: invoiceError } = await admin
-          .from("invoices")
-          .select("user_id, amount, payment_method")
-          .eq("order_id", orderId);
-        if (invoiceError) {
-          return json({ ok: false, code: "SERVER", message: invoiceError.message }, 500);
-        }
-        const creditInvoices = (invoiceRows ?? []).filter((row) => row.payment_method === "credits" && row.user_id);
-        const invoiceTotal = Math.round(
-          creditInvoices.reduce((sum, row) => sum + Number(row.amount), 0) * 100,
-        ) / 100;
-        if (invoiceTotal > 0) {
-          net = -invoiceTotal;
-          refundUserId = String(creditInvoices[0].user_id);
-        }
-      }
-
-      let refunded = 0;
-
-      if (net < 0) {
-        const userId = refundUserId;
-        if (!/^[0-9a-f-]{36}$/i.test(userId)) {
-          return json({ ok: false, code: "NO_ACCOUNT", message: "Credit payment has no client account." });
-        }
-        refunded = Math.round(-net * 100) / 100;
-
-        const { data: account, error: accountError } = await admin
-          .from("credit_accounts")
-          .select("balance")
-          .eq("user_id", userId)
+      let orderStatus = "";
+      if (body.action === "cancel-order") {
+        const { data: order, error: orderError } = await admin
+          .from("orders")
+          .select("id, status")
+          .eq("id", orderId)
           .maybeSingle();
-        if (accountError || !account) {
-          return json({ ok: false, code: "NO_ACCOUNT", message: accountError?.message ?? "Credit account not found" });
+        if (orderError || !order) {
+          return json({ ok: false, code: "NOT_FOUND", message: orderError?.message ?? "Order not found" });
         }
-
-        const nextBalance = Math.round((Number(account.balance) + refunded) * 100) / 100;
-        const { error: balanceError } = await admin
-          .from("credit_accounts")
-          .update({ balance: nextBalance, updated_at: new Date().toISOString() })
-          .eq("user_id", userId);
-        if (balanceError) {
-          return json({ ok: false, code: "SERVER", message: balanceError.message }, 500);
-        }
-
-        const { error: insertError } = await admin.from("credit_transactions").insert({
-          user_id: userId,
-          amount: refunded,
-          order_id: orderId,
-          note: "Vrátenie za zrušenú objednávku",
-        });
-        if (insertError) {
-          await admin
-            .from("credit_accounts")
-            .update({ balance: Number(account.balance), updated_at: new Date().toISOString() })
-            .eq("user_id", userId);
-          return json({ ok: false, code: "SERVER", message: insertError.message }, 500);
-        }
+        orderStatus = String(order.status ?? "");
       }
 
-      if (order.status !== "cancelled") {
+      const { data, error } = await admin.rpc("refund_order_credits", { p_order_id: orderId });
+      if (error) {
+        const code = ledgerCode(error.message ?? "");
+        return json({ ok: false, code, message: error.message }, code === "SERVER" ? 500 : 200);
+      }
+
+      if (body.action === "cancel-order" && orderStatus !== "cancelled") {
         const { error: updateError } = await admin
           .from("orders")
           .update({ status: "cancelled" })
@@ -227,7 +208,12 @@ Deno.serve(async (req) => {
         }
       }
 
-      return json({ ok: true, refunded });
+      return json({
+        ok: true,
+        refunded: Number(data?.refunded) || 0,
+        balance: data?.balance === null || data?.balance === undefined ? null : Number(data.balance),
+        userId: data?.user_id ?? null,
+      });
     }
 
     return json({ ok: false, code: "INVALID_AMOUNT" });

@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { requireStaffCaller } from "../_shared/staffCaller.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
 const SENDER = "REMAPPRO <info@remappro.eu>";
@@ -45,6 +46,9 @@ const handler = async (req: Request): Promise<Response> => {
       }
     );
   }
+
+  const denied = await requireStaffCaller(req, corsHeaders);
+  if (denied) return denied;
 
   try {
     const {

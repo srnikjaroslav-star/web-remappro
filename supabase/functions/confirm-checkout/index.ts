@@ -1,5 +1,6 @@
 import Stripe from "https://esm.sh/stripe@17.7.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { applyCreditTopUpSession, isCreditTopUpSession } from "../_shared/creditTopup.ts";
 import { dispatchTelegram, notifyOrderById } from "../_shared/telegramOrder.ts";
 
 const corsHeaders = {
@@ -50,6 +51,14 @@ Deno.serve(async (req) => {
     }
 
     const supabase = createClient(supabaseUrl, serviceKey);
+
+    if (isCreditTopUpSession(session)) {
+      const applied = await applyCreditTopUpSession(supabase, session);
+      if (!applied.ok) {
+        return json({ error: "Credit top-up was not applied", code: applied.code }, applied.code === "SERVER" ? 500 : 409);
+      }
+      return json({ credited: applied.credited, balance: applied.balance, order: null, created: false });
+    }
 
     const { data: existing, error: existingError } = await supabase
       .from("orders")

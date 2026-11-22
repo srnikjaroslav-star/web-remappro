@@ -29,7 +29,7 @@ import { Order, ActivityLog, SUPABASE_ANON_KEY, SUPABASE_URL } from '@/integrati
 import { toast } from 'sonner';
 import { SERVICES } from '@/data/services';
 import { mailLanguageForClient } from '@/lib/clientLanguage';
-import { loadBillingByUserId, loadClientBilling, orderDisplayName, readCreditBalance, restoreClientCredits, saveCreditBalance, settleClientCredits } from '@/lib/clientProfile';
+import { loadBillingByUserId, loadClientBilling, orderDisplayName, refundOrderCredits, restoreClientCredits, settleClientCredits } from '@/lib/clientProfile';
 import { downloadOrderCreditNote, downloadOrderInvoice } from '@/lib/accountingDocument';
 import { generateCreditNotePdf, generateInvoicePdf } from '@/utils/invoiceGenerator';
 import { loadServiceCatalog, lookupServiceName } from '@/lib/serviceCatalog';
@@ -74,6 +74,7 @@ const todayOrderRevenue = (rows: RevenueOrder[], now = new Date()) => (
 );
 
 type BillableOrder = {
+  id?: string;
   user_id?: string | null;
   total_price?: number | string | null;
   invoice_number?: string | null;
@@ -97,8 +98,8 @@ const clientIdOf = (order: object | null | undefined) => {
 const chargeRepeatCompletion = async (order: BillableOrder) => {
   const price = Math.round(Math.abs(Number(order.total_price) || 0) * 100) / 100;
   if (price <= 0) return { ok: true, charged: false, price: 0 };
-  const settled = await settleClientCredits(clientIdOf(order), price);
-  if (settled.ok) return { ok: true, charged: true, price };
+  const settled = await settleClientCredits(clientIdOf(order), price, String(order.id || ''));
+  if (settled.ok) return { ok: true, charged: settled.charged, price };
   toast.error(
     settled.code === 'insufficient'
       ? 'Na kredite klienta nie je dosť prostriedkov. Dokončenie bolo zastavené.'
@@ -751,6 +752,8 @@ const ManagementPortal = () => {
     const clientUserId = clientIdOf(order);
     let language = await mailLanguageForClient(order.id, clientUserId);
     const session = await supabase.auth.getSession();
+    const accessToken = session.data.session?.access_token;
+    if (!accessToken) throw new Error('Not authorized');
     if (clientUserId && session.data.session?.user?.id === clientUserId) {
       try {
         const stored = localStorage.getItem('remappro-language');
@@ -780,7 +783,7 @@ const ManagementPortal = () => {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+            Authorization: `Bearer ${accessToken}`,
             apikey: SUPABASE_ANON_KEY,
             ...(language ? { 'x-client-language': language } : {}),
           },
@@ -942,7 +945,7 @@ const ManagementPortal = () => {
     } catch (error: any) {
       console.error('Update error:', error);
       if (chargedPrice > 0 && clientIdOf(order)) {
-        const restored = await restoreClientCredits(clientIdOf(order), chargedPrice);
+        const restored = await restoreClientCredits(clientIdOf(order), chargedPrice, order?.id || '');
         if (!restored) toast.error('Stav sa nepodarilo uložiť a strhnuté kredity sa nepodarilo vrátiť.');
       }
       toast.error(`Chyba pri aktualizácii statusu: ${error.message || 'Neznáma chyba'}`);
@@ -1027,17 +1030,25 @@ const ManagementPortal = () => {
     }
 
     if (alreadyCancelled) {
+      const creditRefund = await refundOrderCredits(order.id);
       setCancelConfirmOrder(null);
+      if (!creditRefund.ok) {
+        toast.error('Objednávka je zrušená, ale kredity sa nepodarilo vrátiť.');
+        return;
+      }
       if (creditSaved) {
-        toast.success('Dobropis bol vystavený.');
+        toast.success(creditRefund.refunded > 0
+          ? 'Dobropis bol vystavený a kredity boli vrátené klientovi.'
+          : 'Dobropis bol vystavený.');
         notifyStatusChange(order, 'cancelled', creditSaved.credit_note_number);
-      } else if (!invoiceNumber || existingCredit.credit_note_number) toast.info('Objednávka je už zrušená.');
+      } else if (creditRefund.refunded > 0) {
+        toast.success('Kredity boli vrátené klientovi.');
+      } else if (!invoiceNumber || existingCredit.credit_note_number) {
+        toast.info('Objednávka je už zrušená.');
+      }
       void fetchOrders(true);
       return;
     }
-    const price = Math.round(Math.abs(Number(current.data.total_price) || 0) * 100) / 100;
-    const userId = String(current.data.user_id || '');
-    const shouldRefund = price > 0 && /^[0-9a-f-]{36}$/i.test(userId);
 
     const { data: updated, error: updateError } = await supabase
       .from('orders')
@@ -1066,12 +1077,7 @@ const ManagementPortal = () => {
       }
     }
 
-    let refunded = !shouldRefund;
-    if (shouldRefund) {
-      const balance = await readCreditBalance(userId);
-      const next = Math.round((balance + price) * 100) / 100;
-      refunded = await saveCreditBalance(userId, next);
-    }
+    const creditRefund = await refundOrderCredits(order.id);
 
     markOrderCancelled(order.id);
     setCancelConfirmOrder(null);
@@ -1079,16 +1085,17 @@ const ManagementPortal = () => {
 
     void fetchOrders(true);
     notifyStatusChange(order, 'cancelled', creditSaved?.credit_note_number);
-    if (shouldRefund && !refunded) {
+    if (!creditRefund.ok) {
       toast.error('Objednávka je zrušená, ale kredity sa nepodarilo vrátiť.');
       return;
     }
+    const returned = creditRefund.refunded > 0;
     toast.success(
       creditSaved
-        ? (shouldRefund
+        ? (returned
           ? 'Objednávka bola zrušená, kredity boli vrátené a bol vystavený dobropis.'
           : 'Objednávka bola zrušená a bol vystavený dobropis.')
-        : (shouldRefund
+        : (returned
           ? 'Objednávka bola zrušená a kredity boli vrátené klientovi.'
           : 'Objednávka bola zrušená.'),
     );
@@ -1272,7 +1279,7 @@ const ManagementPortal = () => {
     uploadLock.current = orderId;
     setUploadingId(orderId);
     setUploadProgress(0);
-    let chargedUpload: { userId: string; price: number } | null = null;
+    let chargedUpload: { userId: string; price: number; orderId: string } | null = null;
     let savedOrder: Order | null = null;
 
     if (e.target) e.target.value = '';
@@ -1291,18 +1298,20 @@ const ManagementPortal = () => {
           setUploadProgress(Math.min(99, Math.round(ratio * 100)));
         },
       });
-      const existing = await supabase.from('orders').select('user_id, total_price').eq('id', orderId).maybeSingle();
+      const existing = await supabase.from('orders').select('user_id, total_price, status').eq('id', orderId).maybeSingle();
       if (existing.error) throw existing.error;
       const billable: BillableOrder = {
+        id: orderId,
         user_id: existing.data?.user_id || clientIdOf(currentOrder),
         total_price: existing.data?.total_price ?? currentOrder?.total_price,
         invoice_number: currentOrder?.invoice_number,
         result_file_url: currentOrder?.result_file_url,
         file_url: currentOrder?.file_url,
       };
-      const rebill = repeatWorkCompletion(billable);
+      const storedStatus = String(existing.data?.status || currentOrder?.status || '');
+      const rebill = storedStatus !== 'completed' && repeatWorkCompletion(billable);
       const charge = rebill ? await chargeRepeatCompletion(billable) : { ok: true, charged: false, price: 0 };
-      if (charge.charged) chargedUpload = { userId: clientIdOf(billable), price: charge.price };
+      if (charge.charged) chargedUpload = { userId: clientIdOf(billable), price: charge.price, orderId };
       if (!charge.ok || uploadGeneration.current !== generation) return;
       const nextStatus = statusAfterResultDelivery(currentOrder?.status ?? 'pending');
       await saveOrderResult(orderId, storedResult, nextStatus);
@@ -1327,7 +1336,7 @@ const ManagementPortal = () => {
       const detail = error instanceof Error ? error.message.replace(/\s+/g, ' ').trim().slice(0, 180) : '';
       toast.error(detail ? `Hotový súbor sa nepodarilo uložiť. ${detail}` : 'Hotový súbor sa nepodarilo uložiť');
       if (chargedUpload?.userId) {
-        const restored = await restoreClientCredits(chargedUpload.userId, chargedUpload.price);
+        const restored = await restoreClientCredits(chargedUpload.userId, chargedUpload.price, chargedUpload.orderId);
         if (!restored) toast.error('Súbor sa nepodarilo uložiť a strhnuté kredity sa nepodarilo vrátiť.');
       }
     } finally {

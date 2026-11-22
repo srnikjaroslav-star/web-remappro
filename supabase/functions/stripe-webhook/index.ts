@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { applyCreditTopUpSession, isCreditTopUpSession } from "../_shared/creditTopup.ts";
 import { dispatchTelegram, notifyOrderById } from "../_shared/telegramOrder.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
@@ -28,11 +29,26 @@ serve(async (req) => {
     const body = await req.text();
     console.log("Received body length:", body.length);
 
-    // Verify webhook signature if secret is configured
+    // Reject unsigned events. A missing secret must not accept a forged checkout.
     const STRIPE_WEBHOOK_SECRET = Deno.env.get("STRIPE_WEBHOOK_SECRET");
     const signature = req.headers.get("stripe-signature");
     
     let event;
+
+    if (!STRIPE_WEBHOOK_SECRET) {
+      console.error("STRIPE_WEBHOOK_SECRET is not configured");
+      return new Response(JSON.stringify({ error: "Webhook secret is not configured" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (!signature) {
+      return new Response(JSON.stringify({ error: "Missing signature" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     
     if (STRIPE_WEBHOOK_SECRET && signature) {
       // Use Stripe signature verification
@@ -213,6 +229,24 @@ serve(async (req) => {
       const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
       const supabase = createClient(supabaseUrl, supabaseKey);
 
+      if (isCreditTopUpSession(session)) {
+        const applied = await applyCreditTopUpSession(supabase, session);
+        if (!applied.ok && applied.code === "SERVER") {
+          return new Response(JSON.stringify({ error: "Failed to apply credits" }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        return new Response(JSON.stringify({
+          received: true,
+          credit_topup: true,
+          credited: applied.ok ? applied.credited : false,
+        }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
       const { data: existingOrder } = await supabase
         .from("orders")
         .select("id, order_number")
@@ -281,6 +315,25 @@ serve(async (req) => {
         .single();
       
       if (insertError || !newOrder) {
+        if (insertError?.code === "23505") {
+          const { data: raced } = await supabase
+            .from("orders")
+            .select("id, order_number")
+            .eq("stripe_session_id", sessionId)
+            .maybeSingle();
+          if (raced?.order_number) {
+            console.log("Order already stored after concurrent insert:", sessionId, raced.order_number);
+            return new Response(JSON.stringify({
+              received: true,
+              order_number: raced.order_number,
+              duplicate: true,
+            }), {
+              status: 200,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+        }
+
         console.error("=== CRITICAL DB ERROR - Failed to create order ===");
         console.error("Insert error:", JSON.stringify({
           error: insertError?.message,
@@ -550,11 +603,10 @@ serve(async (req) => {
       });
     }
     
-    // Always return 200 to prevent Stripe from retrying
     return new Response(
-      JSON.stringify({ received: true, error: error?.message || "Unknown error" }),
+      JSON.stringify({ received: false, error: error?.message || "Unknown error" }),
       {
-        status: 200,
+        status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       }
     );

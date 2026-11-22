@@ -20,18 +20,24 @@ enabled = true
 file_size_limit = "500MiB"
 
 [functions.order-ready]
-verify_jwt = false
+verify_jwt = true
 
 [functions.order-confirmation]
-verify_jwt = false
+verify_jwt = true
 
 [functions.status-email]
-verify_jwt = false
+verify_jwt = true
 
 [functions.completion-email]
-verify_jwt = false
+verify_jwt = true
 
 [functions.create-checkout]
+verify_jwt = false
+
+[functions.create-credit-checkout]
+verify_jwt = false
+
+[functions.confirm-credit-topup]
 verify_jwt = false
 
 [functions.stripe-webhook]
@@ -41,7 +47,13 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.generate-invoice]
-verify_jwt = false
+verify_jwt = true
+
+[functions.generate-credit-note]
+verify_jwt = true
+
+[functions.issue-credit-note]
+verify_jwt = true
 
 [functions.pay-with-credits]
 verify_jwt = false

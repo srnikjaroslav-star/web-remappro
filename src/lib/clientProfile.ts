@@ -87,14 +87,6 @@ const packAddress = (billing: ClientBilling, creditBalance?: number, previous?: 
   return PACKED_ADDRESS + JSON.stringify(packed);
 };
 
-const readPackedCredit = async (userId: string) => {
-  const profile = await supabase.from('client_profiles').select('address').eq('id', userId).maybeSingle();
-  if (profile.error || !profile.data) return undefined;
-  const packed = unpackAddress(text((profile.data as { address?: unknown }).address));
-  const value = Number(packed?.creditBalance);
-  return Number.isFinite(value) ? value : undefined;
-};
-
 const unpackAddress = (value: string): PackedProfile | null => {
   if (!value.startsWith(PACKED_ADDRESS)) return null;
   try {
@@ -165,25 +157,22 @@ export const saveClientBilling = async (
   return { ok: false as const };
 };
 
-const readExactCreditBalance = async (id: string) => (await readPackedCredit(id)) ?? 0;
+const USER_ID = /^[0-9a-f-]{36}$/i;
 
-const writeExactCreditBalance = async (id: string, balance: number) => {
-  const next = Math.round(balance * 100) / 100;
-  if (!id || !Number.isFinite(next) || next < 0) return false;
-
-  const profile = await supabase.from('client_profiles').select(COMPACT_COLUMNS).eq('id', id).maybeSingle();
-  if (profile.error) return false;
-  const row = (profile.data ?? null) as Record<string, unknown> | null;
-  const billing = row ? compactToBilling(row, '') : emptyBilling();
-  const previousProfile = unpackAddress(text(row?.address));
-  const saved = await supabase.from('client_profiles').upsert({
-    id,
-    company_name: text(row?.company_name),
-    ico: text(row?.ico),
-    dic: text(row?.dic),
-    address: packAddress(billing, next, previousProfile),
-  }, { onConflict: 'id' });
-  return !saved.error;
+type CreditLedgerResult = {
+  ok?: boolean;
+  code?: string;
+  balance?: number | null;
+  refunded?: number;
+  charged?: boolean;
+  userId?: string | null;
+  clients?: Array<{
+    id?: string;
+    email?: string;
+    name?: string;
+    company?: string;
+    balance?: number;
+  }>;
 };
 
 const creditWrites = new Map<string, Promise<unknown>>();
@@ -195,43 +184,137 @@ const enqueueCreditWrite = <T>(id: string, job: () => Promise<T>) => {
   return run;
 };
 
+const moneyAmount = (amount: number) => {
+  const value = Math.round(Number(amount) * 100) / 100;
+  return Number.isFinite(value) ? value : null;
+};
+
+const invokeCreditLedger = async (body: Record<string, unknown>) => {
+  const invoked = await supabase.functions.invoke('manage-clients', { body });
+  let data = invoked.data as CreditLedgerResult | null;
+  if (invoked.error && !data) {
+    try {
+      data = await (invoked.error as { context?: Response }).context?.json();
+    } catch {
+      data = null;
+    }
+  }
+  if (!data?.ok) return { ok: false as const, code: data?.code || 'SERVER' };
+  return { ok: true as const, data };
+};
+
+export type CreditClientAccount = {
+  id: string;
+  email: string;
+  name: string;
+  company: string;
+  balance: number;
+};
+
+export const loadCreditClients = async () => {
+  const result = await invokeCreditLedger({ action: 'list' });
+  if (!result.ok) return { ok: false as const, code: result.code, clients: [] as CreditClientAccount[] };
+  const clients = (result.data.clients || []).flatMap((client) => {
+    const id = text(client.id);
+    if (!USER_ID.test(id)) return [];
+    const balance = Number(client.balance);
+    return [{
+      id,
+      email: text(client.email),
+      name: text(client.name),
+      company: text(client.company),
+      balance: Number.isFinite(balance) ? balance : 0,
+    }];
+  });
+  return { ok: true as const, clients };
+};
+
 export const readCreditBalance = async (userId: string) => {
-  const id = await currentUserId(userId);
-  return readExactCreditBalance(id);
-};
-
-export const saveCreditBalance = async (userId: string, balance: number) => {
-  const id = await currentUserId(userId);
-  if (!id || !Number.isFinite(balance) || balance < 0) return false;
-  return writeExactCreditBalance(id, balance);
-};
-
-export const settleClientCredits = (userId: string, amount: number) => {
   const id = userId.trim();
-  const price = Math.round(Number(amount) * 100) / 100;
-  if (!/^[0-9a-f-]{36}$/i.test(id) || !Number.isFinite(price) || price <= 0) {
+  if (!USER_ID.test(id)) return 0;
+  const row = await supabase.from('credit_accounts').select('balance').eq('user_id', id).maybeSingle();
+  if (row.error || !row.data) return 0;
+  const balance = Number(row.data.balance);
+  return Number.isFinite(balance) ? balance : 0;
+};
+
+export const adjustClientCredits = async (
+  userId: string,
+  direction: 'add' | 'subtract',
+  amount: number,
+) => {
+  const id = userId.trim();
+  const value = moneyAmount(amount);
+  if (!USER_ID.test(id) || value === null || value <= 0) {
+    return { ok: false as const, code: 'INVALID_AMOUNT' as const };
+  }
+  const result = await invokeCreditLedger({
+    action: 'adjust',
+    userId: id,
+    direction,
+    amount: value,
+  });
+  if (!result.ok) return { ok: false as const, code: result.code };
+  const balance = Number(result.data.balance);
+  return { ok: true as const, balance: Number.isFinite(balance) ? balance : 0 };
+};
+
+export const settleClientCredits = (userId: string, amount: number, orderId = '') => {
+  const id = userId.trim();
+  const price = moneyAmount(amount);
+  const order = orderId.trim();
+  if (!USER_ID.test(id) || price === null || price <= 0 || !USER_ID.test(order)) {
     return Promise.resolve({ ok: false as const, code: 'missing' as const });
   }
   return enqueueCreditWrite(id, async () => {
-    const balance = await readExactCreditBalance(id);
-    if (!Number.isFinite(balance) || balance < price) {
-      return { ok: false as const, code: 'insufficient' as const };
+    const result = await invokeCreditLedger({
+      action: 'charge',
+      userId: id,
+      amount: price,
+      orderId: order,
+    });
+    if (!result.ok) {
+      return {
+        ok: false as const,
+        code: result.code === 'INSUFFICIENT_CREDITS' ? 'insufficient' as const : 'failed' as const,
+      };
     }
-    const saved = await writeExactCreditBalance(id, balance - price);
-    return saved
-      ? { ok: true as const, balance: Math.round((balance - price) * 100) / 100 }
-      : { ok: false as const, code: 'failed' as const };
+    const balance = Number(result.data.balance);
+    return {
+      ok: true as const,
+      charged: result.data.charged !== false,
+      balance: Number.isFinite(balance) ? balance : 0,
+    };
   });
 };
 
-export const restoreClientCredits = (userId: string, amount: number) => {
+export const restoreClientCredits = (userId: string, amount: number, orderId = '') => {
   const id = userId.trim();
-  const price = Math.round(Number(amount) * 100) / 100;
-  if (!/^[0-9a-f-]{36}$/i.test(id) || !Number.isFinite(price) || price <= 0) return Promise.resolve(false);
+  const price = moneyAmount(amount);
+  const order = orderId.trim();
+  if (!USER_ID.test(id) || price === null || price <= 0 || !USER_ID.test(order)) return Promise.resolve(false);
   return enqueueCreditWrite(id, async () => {
-    const balance = await readExactCreditBalance(id);
-    return writeExactCreditBalance(id, balance + price);
+    const result = await invokeCreditLedger({
+      action: 'restore',
+      userId: id,
+      amount: price,
+      orderId: order,
+    });
+    return result.ok;
   });
+};
+
+export const refundOrderCredits = async (orderId: string) => {
+  const order = orderId.trim();
+  if (!USER_ID.test(order)) return { ok: false as const, code: 'INVALID_ORDER' as const, refunded: 0 };
+  const result = await invokeCreditLedger({ action: 'refund-order', orderId: order });
+  if (!result.ok) return { ok: false as const, code: result.code, refunded: 0 };
+  const refunded = Number(result.data.refunded);
+  return {
+    ok: true as const,
+    refunded: Number.isFinite(refunded) ? refunded : 0,
+    userId: text(result.data.userId),
+  };
 };
 
 const activityFromPacked = (packed: PackedProfile | null): PortalActivity => ({

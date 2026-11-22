@@ -20,9 +20,8 @@ import {
   subscribeServiceCatalog,
   type CatalogService,
 } from '@/lib/serviceCatalog';
-import { emptyBilling, loadClientBilling, orderDisplayName, readCreditBalance, releasePortalVisit, saveClientBilling, saveCreditBalance, trackPortalAuth, type ClientBilling } from '@/lib/clientProfile';
+import { emptyBilling, loadClientBilling, orderDisplayName, readCreditBalance, releasePortalVisit, saveClientBilling, trackPortalAuth, type ClientBilling } from '@/lib/clientProfile';
 import { uploadOrderFile } from '@/lib/ecuFile';
-import { INITIAL_ORDER_STATUS } from '@/lib/orderStatus';
 import {
   isLegacyStage1,
   isStageDropdownService,
@@ -169,6 +168,7 @@ const OrderPage = () => {
   const showOrders = portalView === 'orders' || Boolean(linkedOrder);
   const [authReady, setAuthReady] = useState(false);
   const orderLinkPrompted = useRef(false);
+  const creditTopUpInflight = useRef<string | null>(null);
   const setPortalView = (view: PortalView) => {
     const next = portalPath(view);
     if (location.pathname !== next || (view !== 'orders' && location.search)) navigate(next);
@@ -393,6 +393,50 @@ const OrderPage = () => {
     }, 700);
     return () => window.clearTimeout(handle);
   }, [authUser?.id, billing, profileReady]);
+
+  useEffect(() => {
+    if (!authReady || !authUser) return;
+    const params = new URLSearchParams(location.search);
+    const sessionId = (params.get('credit_session') || '').trim();
+    if (!sessionId.startsWith('cs_')) return;
+    if (creditTopUpInflight.current === sessionId) return;
+    creditTopUpInflight.current = sessionId;
+    let active = true;
+    void (async () => {
+      try {
+        const invoked = await supabase.functions.invoke('confirm-credit-topup', {
+          body: { sessionId },
+        });
+        let data = invoked.data as { ok?: boolean; balance?: number; code?: string } | null;
+        if (invoked.error && !data) {
+          try {
+            data = await (invoked.error as { context?: Response }).context?.json();
+          } catch {
+            data = null;
+          }
+        }
+        if (!active) return;
+        if (data?.ok && Number.isFinite(Number(data.balance))) {
+          setCreditBalance(Number(data.balance));
+          toast.success(t('topUpSuccess'));
+        } else {
+          toast.error(t('topUpFailed'));
+        }
+      } catch {
+        if (active) toast.error(t('topUpFailed'));
+      } finally {
+        if (!active) return;
+        const next = new URLSearchParams(location.search);
+        next.delete('credit_session');
+        const search = next.toString();
+        navigate({ pathname: location.pathname, search: search ? `?${search}` : '' }, { replace: true });
+      }
+    })();
+    return () => {
+      active = false;
+      if (creditTopUpInflight.current === sessionId) creditTopUpInflight.current = null;
+    };
+  }, [authReady, authUser?.id, location.pathname, location.search, navigate]);
 
   useEffect(() => {
     if (!authUser) {
@@ -862,7 +906,6 @@ const OrderPage = () => {
       }
       const error = invoked.error;
       const code = data?.code;
-      const functionMissing = /not found|failed to send|failed to fetch/i.test(String(error && 'message' in error ? error.message : ''));
       if (error || !data?.ok) {
         if (code === 'INSUFFICIENT_CREDITS') {
           openCreditTopUp();
@@ -876,43 +919,6 @@ const OrderPage = () => {
         }
         if (code === 'OFFLINE') {
           setOperationClosed(true);
-          setIsSubmitting(false);
-          return;
-        }
-        const chargeLocally = functionMissing || code === 'NO_ACCOUNT' || code === 'NOT_FOUND' || code === 'SERVER' || !data;
-        if (chargeLocally) {
-          const orderNumber = `RP-${crypto.randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase()}`;
-          const inserted = await supabase.from('orders').insert({
-            user_id: authUser.id,
-            total_price: totalPrice,
-            status: INITIAL_ORDER_STATUS,
-            file_url: storedFile,
-            services,
-            note: [orderNumber, composedNote].filter(Boolean).join('\n'),
-            vehicle_brand: vehicle.brand.trim(),
-            vehicle_model: vehicle.model.trim(),
-            vehicle_year: Number(vehicle.year) || null,
-            engine: vehicle.engine.trim(),
-            ecu: vehicle.ecuType.trim(),
-            fuel: vehicle.fuelType,
-          }).select('id').maybeSingle();
-          if (!inserted.data?.id) {
-            toast.error(t('creditPayFailed'));
-            setIsSubmitting(false);
-            return;
-          }
-          const nextBalance = Math.round((available - totalPrice) * 100) / 100;
-          const charged = inserted.data?.id ? await saveCreditBalance(authUser.id, nextBalance) : false;
-          if (!inserted.data?.id || !charged) {
-            if (inserted.data?.id) await supabase.from('orders').delete().eq('id', inserted.data.id);
-            toast.error(t('creditPayFailed'));
-            setIsSubmitting(false);
-            return;
-          }
-          setCreditBalance(nextBalance);
-          resetOrderDraft();
-          queueTelegramNotice(inserted.data.id);
-          toast.success(t('creditPaid', { order: orderNumber }));
           setIsSubmitting(false);
           return;
         }

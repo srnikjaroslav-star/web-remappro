@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { CreditCard, X } from 'lucide-react';
+import { CreditCard, Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { formatServicePrice } from '@/lib/serviceCatalog';
+import { supabase } from '@/lib/supabase';
 
 const PRESETS = [50, 100, 200] as const;
 
@@ -19,6 +20,7 @@ const parseAmount = (raw: string) => {
 const CreditTopUpModal = ({ onClose }: CreditTopUpModalProps) => {
   const { t } = useLanguage();
   const [amountInput, setAmountInput] = useState('');
+  const [paying, setPaying] = useState(false);
   const amount = parseAmount(amountInput);
 
   useEffect(() => {
@@ -29,12 +31,49 @@ const CreditTopUpModal = ({ onClose }: CreditTopUpModalProps) => {
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const payByCard = () => {
+  const payByCard = async () => {
+    if (paying) return;
     if (amount === null) {
       toast.error(t('topUpInvalid'));
       return;
     }
-    toast.message(t('topUpPayLater'));
+    if (amount < 0.5) {
+      toast.error(t('topUpMinimum'));
+      return;
+    }
+    setPaying(true);
+    try {
+      const invoked = await supabase.functions.invoke('create-credit-checkout', {
+        body: { amount },
+      });
+      let data = invoked.data as { ok?: boolean; url?: string; code?: string } | null;
+      if (invoked.error && !data) {
+        try {
+          data = await (invoked.error as { context?: Response }).context?.json();
+        } catch {
+          data = null;
+        }
+      }
+      if (data?.code === 'NOT_AUTHENTICATED') {
+        toast.error(t('creditAuthRequired'));
+        setPaying(false);
+        return;
+      }
+      if (data?.code === 'INVALID_AMOUNT') {
+        toast.error(t('topUpInvalid'));
+        setPaying(false);
+        return;
+      }
+      if (!data?.url) {
+        toast.error(t('topUpFailed'));
+        setPaying(false);
+        return;
+      }
+      window.location.href = data.url;
+    } catch {
+      toast.error(t('topUpFailed'));
+      setPaying(false);
+    }
   };
 
   return (
@@ -105,10 +144,11 @@ const CreditTopUpModal = ({ onClose }: CreditTopUpModalProps) => {
           <button
             type="button"
             onClick={payByCard}
-            className="btn-primary flex min-h-[44px] w-full items-center justify-center gap-2 rounded-none border border-primary/80 bg-primary/10 text-sm font-bold uppercase tracking-wide text-primary shadow-[0_0_14px_rgba(0,242,255,0.32)] hover:translate-y-0 hover:bg-primary/16 hover:shadow-[0_0_16px_rgba(0,242,255,0.42)]"
+            disabled={paying}
+            className="btn-primary flex min-h-[44px] w-full items-center justify-center gap-2 rounded-none border border-primary/80 bg-primary/10 text-sm font-bold uppercase tracking-wide text-primary shadow-[0_0_14px_rgba(0,242,255,0.32)] hover:translate-y-0 hover:bg-primary/16 hover:shadow-[0_0_16px_rgba(0,242,255,0.42)] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <CreditCard className="h-4 w-4" />
-            <span className="text-sm font-bold uppercase tracking-wide">{t('payCard')}</span>
+            {paying ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
+            <span className="text-sm font-bold uppercase tracking-wide">{paying ? t('payCreditsLoading') : t('payCard')}</span>
           </button>
         </div>
       </div>

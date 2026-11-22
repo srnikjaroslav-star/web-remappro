@@ -1,7 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { jsPDF } from "https://esm.sh/jspdf@2.5.1";
-import { keepOrAssignDocumentNumber } from "../_shared/accountingNumber.ts";
+import { documentIssueAllowed, keepOrAssignDocumentNumber } from "../_shared/accountingNumber.ts";
+import { requireStaffCaller } from "../_shared/staffCaller.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -30,6 +31,9 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
+
+  const denied = await requireStaffCaller(req, corsHeaders);
+  if (denied) return denied;
 
   console.log("Generate invoice function called");
   console.log("Request method:", req.method);
@@ -84,6 +88,22 @@ serve(async (req) => {
 
     // Generate PDF (simplified for now)
     const safeOrderNumber = orderNumber || orderId.slice(0, 8).toUpperCase();
+    const issueGate = await documentIssueAllowed(orderId, isCreditNote ? "credit" : "invoice");
+    if (issueGate === "exists") {
+      return new Response(JSON.stringify({ success: true, alreadyIssued: true }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (issueGate !== "ok") {
+      return new Response(JSON.stringify({
+        success: false,
+        error: issueGate === "missing" ? "Order was not found" : "Document is not due yet",
+      }), {
+        status: issueGate === "missing" ? 404 : 409,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     const invoiceNumber = await keepOrAssignDocumentNumber(orderId, isCreditNote ? "credit" : "invoice");
     
     const doc = new jsPDF();

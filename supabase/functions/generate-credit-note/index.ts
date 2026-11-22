@@ -1,7 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { jsPDF } from "https://esm.sh/jspdf@2.5.1";
-import { keepOrAssignDocumentNumber } from "../_shared/accountingNumber.ts";
+import { documentIssueAllowed, keepOrAssignDocumentNumber } from "../_shared/accountingNumber.ts";
+import { requireStaffCaller } from "../_shared/staffCaller.ts";
 
 // CORS Headers - defined at the top, before everything else
 const corsHeaders = {
@@ -30,6 +31,9 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
+
+  const denied = await requireStaffCaller(req, corsHeaders);
+  if (denied) return denied;
 
   // Totálna ochrana: Celý vnútrajšok Deno.serve musí byť v try-catch
   try {
@@ -78,6 +82,22 @@ serve(async (req) => {
 
     // Generate PDF - PDF Dokument: Nadpis musí byť "OPRAVNÝ DOKLAD / DOBROPIS"
     const safeOrderNumber = orderNumber || orderId.slice(0, 8).toUpperCase();
+    const issueGate = await documentIssueAllowed(orderId, "credit");
+    if (issueGate === "exists") {
+      return new Response(JSON.stringify({ success: true, alreadyIssued: true }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (issueGate !== "ok") {
+      return new Response(JSON.stringify({
+        success: false,
+        error: issueGate === "missing" ? "Order was not found" : "Credit note requires a completed invoice",
+      }), {
+        status: issueGate === "missing" ? 404 : 409,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     const creditNoteNumber = await keepOrAssignDocumentNumber(orderId, "credit");
     
     const doc = new jsPDF();
