@@ -10,6 +10,8 @@ const PRESETS = [50, 100, 200] as const;
 
 type CreditTopUpModalProps = {
   onClose: () => void;
+  orderTotal?: number;
+  creditBalance?: number | null;
 };
 
 const parseAmount = (raw: string) => {
@@ -18,9 +20,17 @@ const parseAmount = (raw: string) => {
   return Math.round(value * 100) / 100;
 };
 
-const CreditTopUpModal = ({ onClose }: CreditTopUpModalProps) => {
+const suggestedTopUpInput = (orderTotal?: number, creditBalance?: number | null) => {
+  if (typeof orderTotal !== 'number' || typeof creditBalance !== 'number') return '';
+  if (!Number.isFinite(orderTotal) || !Number.isFinite(creditBalance)) return '';
+  const missingCents = Math.round(orderTotal * 100) - Math.round(creditBalance * 100);
+  if (missingCents <= 0) return '';
+  return String(Math.ceil(missingCents / 100));
+};
+
+const CreditTopUpModal = ({ onClose, orderTotal, creditBalance }: CreditTopUpModalProps) => {
   const { language, t } = useLanguage();
-  const [amountInput, setAmountInput] = useState('');
+  const [amountInput, setAmountInput] = useState(() => suggestedTopUpInput(orderTotal, creditBalance));
   const [paying, setPaying] = useState(false);
   const amount = parseAmount(amountInput);
 
