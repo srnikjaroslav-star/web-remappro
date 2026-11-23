@@ -612,22 +612,23 @@ const MyOrders = ({ email, focusOrder = '' }: { email: string; focusOrder?: stri
                           event.stopPropagation();
                           void downloadResult(order);
                         }}
-                        className={`${action} relative overflow-hidden border border-primary/40 bg-primary/10 text-primary hover:bg-primary/20 ${downloadProgress[order.id] !== undefined ? 'cursor-wait' : ''}`}
+                        className={`${action} relative overflow-hidden whitespace-nowrap border border-primary/40 bg-primary/10 text-primary hover:bg-primary/20 ${downloadProgress[order.id] !== undefined ? 'cursor-wait' : ''}`}
                       >
-                        {downloadProgress[order.id] !== undefined && (
-                          <span
-                            className="absolute inset-y-0 left-0 bg-primary/30 transition-[width] duration-150"
-                            style={{ width: `${downloadProgress[order.id]}%` }}
-                          />
-                        )}
-                        <span className="relative inline-flex items-center gap-2 tabular-nums">
-                          {downloadProgress[order.id] !== undefined ? `${downloadProgress[order.id]}%` : (
-                            <>
-                              <Download className="h-4 w-4" />
-                              {t('downloadFile')}
-                            </>
-                          )}
+                        <span className={`inline-flex items-center gap-2 ${downloadProgress[order.id] !== undefined ? 'invisible' : ''}`}>
+                          <Download className="h-4 w-4" />
+                          {t('downloadFile')}
                         </span>
+                        {downloadProgress[order.id] !== undefined && (
+                          <>
+                            <span
+                              className="pointer-events-none absolute inset-y-0 left-0 max-w-full bg-primary/30 transition-[width] duration-150"
+                              style={{ width: `${downloadProgress[order.id]}%` }}
+                            />
+                            <span className="pointer-events-none absolute inset-0 flex items-center justify-center tabular-nums">
+                              {downloadProgress[order.id]}%
+                            </span>
+                          </>
+                        )}
                       </button>
                     ) : (
                       <span className="text-xs text-slate-500">
