@@ -35,26 +35,29 @@ const DAY_LABELS: Record<DayKey, string> = {
   sun: 'Nedeľa',
 };
 
-const MODES: { id: SystemStatusMode; label: string; active: string; idle: string }[] = [
-  {
-    id: 'auto',
-    label: 'Auto (Schedule)',
-    active: 'border-primary/70 bg-primary/20 text-primary shadow-[0_0_16px_rgba(0,242,255,0.4)]',
-    idle: 'border-primary/35 bg-transparent text-primary/80 hover:bg-primary/15',
+const MODE_GLOW = {
+  auto: {
+    active: 'border-[#00e5ff] bg-[#00e5ff]/20 text-[#67e8f9] shadow-[0_0_20px_rgba(0,229,255,0.62),inset_0_0_14px_rgba(0,229,255,0.32)]',
+    idle: 'border-[#22d3ee]/60 bg-[#22d3ee]/12 text-[#67e8f9] shadow-[0_0_12px_rgba(34,211,238,0.28)] hover:bg-[#22d3ee]/18',
   },
-  {
-    id: 'online',
-    label: 'Force ONLINE',
-    active: 'border-green-500/70 bg-green-500/20 text-green-400 shadow-[0_0_16px_rgba(34,197,94,0.4)]',
-    idle: 'border-green-500/35 bg-transparent text-green-400/80 hover:bg-green-500/15',
+  online: {
+    active: 'border-emerald-400 bg-emerald-500/20 text-emerald-300 shadow-[0_0_20px_rgba(52,211,153,0.62),inset_0_0_14px_rgba(52,211,153,0.32)]',
+    idle: 'border-emerald-400/60 bg-emerald-500/12 text-emerald-300 shadow-[0_0_12px_rgba(52,211,153,0.28)] hover:bg-emerald-500/18',
   },
-  {
-    id: 'offline',
-    label: 'Force OFFLINE',
-    active: 'border-red-500/70 bg-red-500/20 text-red-400 shadow-[0_0_16px_rgba(239,68,68,0.4)]',
-    idle: 'border-red-500/35 bg-transparent text-red-400/80 hover:bg-red-500/15',
+  offline: {
+    active: 'border-red-400 bg-red-500/20 text-red-300 shadow-[0_0_20px_rgba(248,113,113,0.62),inset_0_0_14px_rgba(248,113,113,0.32)]',
+    idle: 'border-red-400/60 bg-red-500/12 text-red-300 shadow-[0_0_12px_rgba(248,113,113,0.28)] hover:bg-red-500/18',
   },
+} as const;
+
+const MODES: { id: SystemStatusMode; label: string; tone: keyof typeof MODE_GLOW }[] = [
+  { id: 'auto', label: 'Auto (Schedule)', tone: 'auto' },
+  { id: 'online', label: 'Force ONLINE', tone: 'online' },
+  { id: 'offline', label: 'Force OFFLINE', tone: 'offline' },
 ];
+
+const panelClass = 'rounded-xl border border-[#22d3ee]/75 bg-background/40 shadow-[0_0_28px_rgba(0,229,255,0.32),inset_0_0_18px_rgba(34,211,238,0.08)] backdrop-blur-xl';
+const neonRule = 'border-[#22d3ee]/55';
 
 const HOURS = Array.from({ length: 24 }, (_, index) => String(index).padStart(2, '0'));
 const MINUTES = Array.from({ length: 60 }, (_, index) => String(index).padStart(2, '0'));
@@ -231,6 +234,7 @@ const OpeningHours = () => {
   const [loading, setLoading] = useState(!hoursCache);
   const [saving, setSaving] = useState(false);
   const [modeBusy, setModeBusy] = useState(false);
+  const [selectedDay, setSelectedDay] = useState<DayKey | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -282,10 +286,15 @@ const OpeningHours = () => {
     return day.open === (weekend ? weekendOpen : true) && day.from === '08:00' && day.to === '20:00';
   });
 
-  const presetClass = (active: boolean) => `h-[38px] shrink-0 rounded-full border px-4 text-sm font-medium transition-colors ${
+  const weekdayPresetClass = (active: boolean) => `h-[38px] shrink-0 rounded-full border px-4 text-sm font-medium transition-colors ${
     active
-      ? 'border-primary/70 bg-primary/20 text-primary shadow-[0_0_16px_rgba(0,242,255,0.4)]'
-      : 'border-primary/45 bg-[#070d16] text-primary/90 hover:border-primary hover:bg-primary/15 hover:text-primary hover:shadow-[0_0_16px_rgba(0,242,255,0.35)]'
+      ? 'border-[#22d3ee] bg-[#22d3ee]/20 text-[#67e8f9] shadow-[0_0_16px_rgba(34,211,238,0.5)]'
+      : 'border-[#22d3ee]/55 bg-[#071820] text-[#67e8f9]/90 hover:border-[#22d3ee] hover:bg-[#22d3ee]/15 hover:text-[#67e8f9]'
+  }`;
+  const everydayPresetClass = (active: boolean) => `h-[38px] shrink-0 rounded-full border px-4 text-sm font-medium transition-colors ${
+    active
+      ? 'border-amber-300 bg-amber-400/20 text-amber-200 shadow-[0_0_16px_rgba(251,191,36,0.5)]'
+      : 'border-amber-300/55 bg-[#1a1408] text-amber-200/90 hover:border-amber-300 hover:bg-amber-400/15 hover:text-amber-100'
   }`;
 
   const saveHours = async () => {
@@ -311,7 +320,7 @@ const OpeningHours = () => {
 
   return (
     <div className="space-y-3">
-      <div className="rounded-xl border border-primary/20 bg-background/40 p-4 shadow-[0_0_30px_rgba(59,130,246,0.15)] backdrop-blur-xl">
+      <div className={`${panelClass} p-4`}>
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="h-11">
             <h2 className="text-2xl font-bold uppercase leading-none tracking-[0.16em] text-primary">Režim prevádzky</h2>
@@ -326,7 +335,7 @@ const OpeningHours = () => {
                 type="button"
                 disabled={modeBusy || loading}
                 onClick={() => chooseMode(mode.id)}
-                className={`h-[42px] shrink-0 rounded-lg border px-4 text-sm font-medium transition-colors disabled:opacity-60 ${active ? mode.active : mode.idle}`}
+                className={`h-[42px] shrink-0 rounded-lg border px-4 text-sm font-medium transition-colors disabled:opacity-60 ${active ? MODE_GLOW[mode.tone].active : MODE_GLOW[mode.tone].idle}`}
               >
                 {mode.label}
               </button>
@@ -335,52 +344,51 @@ const OpeningHours = () => {
         </div>
       </div>
 
-      <div className="h-fit w-full shrink-0 rounded-xl border border-primary/20 bg-background/40 shadow-[0_0_30px_rgba(59,130,246,0.15)] backdrop-blur-xl">
-        <div className="flex flex-wrap items-center justify-end gap-2 border-b border-primary/30 bg-[#0a192f] px-4 py-2.5">
+      <div className={`h-fit w-full shrink-0 ${panelClass}`}>
+        <div className={`flex flex-wrap items-center justify-end gap-2 border-b-2 ${neonRule} bg-[#0a192f] px-4 py-2.5`}>
           <p className="mr-auto text-sm font-bold uppercase tracking-wide text-white">Otváracie hodiny</p>
-          <button type="button" aria-pressed={matchesPreset(false)} onClick={() => setDraft(weekday(true))} className={presetClass(matchesPreset(false))}>
+          <button type="button" aria-pressed={matchesPreset(false)} onClick={() => setDraft(weekday(true))} className={weekdayPresetClass(matchesPreset(false))}>
             Po–Pi 08:00–20:00
           </button>
-          <button type="button" aria-pressed={matchesPreset(true)} onClick={() => setDraft(defaultSchedule())} className={presetClass(matchesPreset(true))}>
+          <button type="button" aria-pressed={matchesPreset(true)} onClick={() => setDraft(defaultSchedule())} className={everydayPresetClass(matchesPreset(true))}>
             Každý deň 08:00–20:00
           </button>
-          <button type="button" onClick={saveHours} disabled={saving || loading} className="inline-flex h-11 items-center rounded-md border border-primary/70 bg-primary/15 px-4 text-sm font-bold uppercase tracking-wide text-primary shadow-[0_0_16px_rgba(0,242,255,0.28)] transition-colors hover:bg-primary/25 disabled:opacity-60">
+          <button type="button" onClick={saveHours} disabled={saving || loading} className="inline-flex h-11 items-center rounded-md border border-emerald-400 bg-emerald-500/20 px-4 text-sm font-bold uppercase tracking-wide text-emerald-300 shadow-[0_0_18px_rgba(52,211,153,0.55),inset_0_0_12px_rgba(52,211,153,0.28)] transition-colors hover:bg-emerald-500/28 disabled:opacity-60">
             {saving ? 'Ukladám...' : 'Uložiť hodiny'}
           </button>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-base">
             <thead>
-              <tr className="border-b border-primary/30 bg-[#0a192f]">
-                <th className="w-full whitespace-nowrap border-r border-slate-500 p-2.5 text-left text-sm font-bold uppercase tracking-wide text-white">Deň</th>
-                <th className="whitespace-nowrap border-r border-slate-500 p-2.5 text-center text-sm font-bold uppercase tracking-wide text-white">Prevádzka</th>
-                <th className="whitespace-nowrap border-r border-slate-500 p-2.5 text-center text-sm font-bold uppercase tracking-wide text-white">Od</th>
-                <th className="whitespace-nowrap border-r border-slate-500 p-2.5 text-center text-sm font-bold uppercase tracking-wide text-white">Do</th>
+              <tr className={`border-b-2 ${neonRule} bg-[#0a192f]`}>
+                <th className={`w-full whitespace-nowrap border-r ${neonRule} p-2.5 text-left text-sm font-bold uppercase tracking-wide text-white`}>Deň</th>
+                <th className={`whitespace-nowrap border-r ${neonRule} p-2.5 text-center text-sm font-bold uppercase tracking-wide text-white`}>Prevádzka</th>
+                <th className={`whitespace-nowrap border-r ${neonRule} p-2.5 text-center text-sm font-bold uppercase tracking-wide text-white`}>Od</th>
+                <th className={`whitespace-nowrap border-r ${neonRule} p-2.5 text-center text-sm font-bold uppercase tracking-wide text-white`}>Do</th>
               </tr>
             </thead>
             <tbody>
               {DAY_KEYS.map((key) => {
                 const day = draft[key];
-                const cell = 'border-r border-slate-800/60 px-4 py-2 align-middle';
+                const marked = selectedDay === key;
+                const cell = `border-r ${neonRule} px-4 py-2 align-middle ${marked ? 'bg-[#083044] shadow-[inset_0_0_16px_rgba(0,229,255,0.16)]' : ''}`;
                 return (
-                  <tr key={key} className="border-b border-slate-800/60">
-                    <td className={`border-b border-b-slate-800/60 border-r border-r-slate-500 px-4 py-2 align-middle ${dayTone[key]}`}>
+                  <tr key={key} onClick={() => setSelectedDay(key)} className={`cursor-pointer border-b ${neonRule}`}>
+                    <td className={`border-b ${neonRule} border-r px-4 py-2 align-middle ${marked ? 'bg-[#083044] text-[#67e8f9] shadow-[inset_3px_0_0_#00e5ff,inset_0_0_16px_rgba(0,229,255,0.18)]' : dayTone[key]}`}>
                       <p className="text-lg font-bold leading-none">{DAY_LABELS[key]}</p>
                     </td>
-                    <td className={`${cell} bg-[#101828] text-center`}>
+                    <td className={`${cell} ${marked ? '' : 'bg-[#101828]'} text-center`}>
                       <button
                         type="button"
                         onClick={() => updateDay(key, { open: !day.open })}
                         className={`inline-flex h-10 min-w-[8.5rem] items-center justify-center rounded-md border px-3 text-sm font-bold uppercase ${
-                          day.open
-                            ? 'border-primary/70 bg-primary/15 text-primary'
-                            : 'border-slate-600 bg-transparent text-muted-foreground'
+                          day.open ? MODE_GLOW.online.active : MODE_GLOW.offline.active
                         }`}
                       >
                         {day.open ? 'Otvorené' : 'Zatvorené'}
                       </button>
                     </td>
-                    <td className={`${cell} bg-[#0e1c28] text-center`}>
+                    <td className={`${cell} ${marked ? '' : 'bg-[#0e1c28]'} text-center`}>
                       <TimeField
                         value={day.from}
                         disabled={!day.open}
@@ -388,7 +396,7 @@ const OpeningHours = () => {
                         onChange={(from) => updateDay(key, { from })}
                       />
                     </td>
-                    <td className={`${cell} bg-[#0c1822] text-center`}>
+                    <td className={`${cell} ${marked ? '' : 'bg-[#0c1822]'} text-center`}>
                       <TimeField
                         value={day.to}
                         disabled={!day.open}
