@@ -104,13 +104,6 @@ const STATUS_LABEL: Record<string, string> = {
   paid: 'Zaplatené',
 };
 
-const NEXT_WORKING_STATUS: Record<string, string> = {
-  pending: 'processing',
-  processing: 'completed',
-  completed: 'pending',
-  paid: 'processing',
-};
-
 const clientIdOf = (order: object | null | undefined) => {
   if (!order || !('user_id' in order)) return '';
   const id = String((order as { user_id?: string | null }).user_id || '').trim();
@@ -563,7 +556,6 @@ const ManagementPortal = () => {
   }, [section]);
   const onlineIds = useOnlineClients(!isCheckingAuth);
   const [cancelConfirmOrder, setCancelConfirmOrder] = useState<Order | null>(null);
-  const [statusRevertOrder, setStatusRevertOrder] = useState<Order | null>(null);
   const [cancellingOrder, setCancellingOrder] = useState(false);
   const [deleteConfirmOrder, setDeleteConfirmOrder] = useState<Order | null>(null);
   const [deletingOrder, setDeletingOrder] = useState(false);
@@ -938,12 +930,6 @@ const ManagementPortal = () => {
     pendingUploadId.current = orderId;
     setSelectedOrderId(orderId);
     fileInputRef.current?.click();
-  };
-
-  const handleStatusChange = async (orderId: string, newStatus: string) => {
-    const order = orders.find((item) => item.id === orderId);
-    if (!order || newStatus === 'cancelled' || returnedCredit(order) || order.status === newStatus) return;
-    await executeStatusChange(orderId, newStatus);
   };
 
   const executeStatusChange = async (orderId: string, newStatus: string) => {
@@ -2110,23 +2096,11 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                             Zrušené
                           </span>
                         ) : (
-                          <button
-                            type="button"
-                            onMouseDown={(event) => event.stopPropagation()}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              const nextStatus = NEXT_WORKING_STATUS[order.status] || 'processing';
-                              if (order.status === 'completed' && nextStatus === 'pending') {
-                                setStatusRevertOrder(order);
-                                return;
-                              }
-                              void handleStatusChange(order.id, nextStatus);
-                            }}
-                            title={`Prepnúť na ${STATUS_LABEL[NEXT_WORKING_STATUS[order.status] || 'processing']}`}
-                            className={`flex h-full min-h-8 w-full cursor-pointer items-center justify-center whitespace-nowrap px-1 text-center text-lg font-bold leading-none outline-none ${STATUS_CELL_CLASS[order.status] || STATUS_CELL_CLASS.pending}`}
+                          <span
+                            className={`flex h-full min-h-8 w-full items-center justify-center whitespace-nowrap px-1 text-center text-lg font-bold leading-none ${STATUS_CELL_CLASS[order.status] || STATUS_CELL_CLASS.pending}`}
                           >
                             {STATUS_LABEL[order.status] || order.status}
-                          </button>
+                          </span>
                         )}
                       </td>
                       <td className={`h-8 p-0 align-middle ${active ? picked : 'bg-[#070d16]'}`}>
@@ -2728,38 +2702,6 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
               className="rounded-none border border-red-500/80 bg-red-500/10 text-red-400 shadow-[0_0_14px_rgba(239,68,68,0.32)] hover:border-red-400 hover:bg-red-500/16 hover:text-red-400 hover:shadow-[0_0_16px_rgba(239,68,68,0.42)]"
             >
               Áno, zmazať
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog
-        open={statusRevertOrder !== null}
-        onOpenChange={(open) => {
-          if (!open) setStatusRevertOrder(null);
-        }}
-      >
-        <AlertDialogContent className="border border-primary/70 bg-[#0a192f] shadow-[0_0_32px_rgba(0,242,255,0.35)] sm:max-w-[560px]">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-xl font-black tracking-wide text-primary">POTVRDENIE</AlertDialogTitle>
-            <AlertDialogDescription className="text-base leading-6 text-white">
-              Naozaj chcete vrátiť dokončenú objednávku {statusRevertOrder?.order_number || statusRevertOrder?.id.slice(0, 8).toUpperCase()} do stavu Čakajúce?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="rounded-none border-slate-400/70 bg-white/5 text-white shadow-[0_0_12px_rgba(148,163,184,0.28)] hover:bg-white/10 hover:text-white hover:shadow-[0_0_16px_rgba(148,163,184,0.36)]">
-              Nie
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={(event) => {
-                event.preventDefault();
-                const order = statusRevertOrder;
-                setStatusRevertOrder(null);
-                if (order) void handleStatusChange(order.id, 'pending');
-              }}
-              className="rounded-none border border-primary/70 bg-primary/15 text-primary shadow-[0_0_14px_rgba(0,242,255,0.32)] hover:bg-primary/25 hover:text-primary"
-            >
-              Áno, vrátiť na Čakajúce
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
