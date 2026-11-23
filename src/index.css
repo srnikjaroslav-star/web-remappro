@@ -468,6 +468,142 @@
     color: #ef4444;
   }
 
+  .my-orders-status-face {
+    border: 1px solid rgba(34, 211, 238, 0.65);
+    background-color: rgba(14, 116, 144, 0.24);
+    color: #67e8f9;
+    box-shadow: 0 0 16px rgba(34, 211, 238, 0.22);
+  }
+
+  .my-orders-status-face[data-status='all'] {
+    border-color: rgba(34, 211, 238, 0.65);
+    background-color: rgba(14, 116, 144, 0.24);
+    color: #67e8f9;
+    box-shadow: 0 0 16px rgba(34, 211, 238, 0.22);
+  }
+
+  .my-orders-status-face[data-status='pending'] {
+    border-color: rgba(251, 191, 36, 0.72);
+    background-color: rgba(120, 53, 15, 0.36);
+    color: #fcd34d;
+    box-shadow: 0 0 16px rgba(251, 191, 36, 0.24);
+  }
+
+  .my-orders-status-face[data-status='processing'] {
+    border-color: rgba(56, 189, 248, 0.72);
+    background-color: rgba(12, 74, 110, 0.38);
+    color: #7dd3fc;
+    box-shadow: 0 0 16px rgba(56, 189, 248, 0.24);
+  }
+
+  .my-orders-status-face[data-status='completed'] {
+    border-color: rgba(52, 211, 153, 0.72);
+    background-color: rgba(6, 78, 59, 0.42);
+    color: #6ee7b7;
+    box-shadow: 0 0 16px rgba(52, 211, 153, 0.24);
+  }
+
+  .my-orders-status-face[data-status='cancelled'] {
+    border-color: rgba(251, 113, 133, 0.75);
+    background-color: rgba(127, 29, 29, 0.42);
+    color: #fda4af;
+    box-shadow: 0 0 16px rgba(251, 113, 133, 0.25);
+  }
+
+  .my-orders-status-face[data-status='all']:hover,
+  .my-orders-status-face[data-status='all']:focus-visible {
+    box-shadow: 0 0 20px rgba(34, 211, 238, 0.34);
+  }
+
+  .my-orders-status-face[data-status='pending']:hover,
+  .my-orders-status-face[data-status='pending']:focus-visible {
+    box-shadow: 0 0 20px rgba(251, 191, 36, 0.36);
+  }
+
+  .my-orders-status-face[data-status='processing']:hover,
+  .my-orders-status-face[data-status='processing']:focus-visible {
+    box-shadow: 0 0 20px rgba(56, 189, 248, 0.36);
+  }
+
+  .my-orders-status-face[data-status='completed']:hover,
+  .my-orders-status-face[data-status='completed']:focus-visible {
+    box-shadow: 0 0 20px rgba(52, 211, 153, 0.36);
+  }
+
+  .my-orders-status-face[data-status='cancelled']:hover,
+  .my-orders-status-face[data-status='cancelled']:focus-visible {
+    box-shadow: 0 0 20px rgba(251, 113, 133, 0.36);
+  }
+
+  .my-orders-status-menu {
+    border: 1px solid rgba(34, 211, 238, 0.35);
+    background: #06101a;
+    box-shadow: 0 16px 36px rgba(0, 0, 0, 0.85);
+    padding-right: 6px;
+    padding-left: 6px;
+  }
+
+  .my-orders-status-menu [role='option'] {
+    border-radius: 8px;
+    background: transparent;
+    outline: none;
+  }
+
+  .my-orders-status-menu [data-status='all'] {
+    color: #f8fafc;
+  }
+
+  .my-orders-status-menu [data-status='pending'] {
+    color: #fbbf24;
+  }
+
+  .my-orders-status-menu [data-status='processing'] {
+    color: #38bdf8;
+  }
+
+  .my-orders-status-menu [data-status='completed'] {
+    color: #34d399;
+  }
+
+  .my-orders-status-menu [data-status='cancelled'] {
+    color: #f87171;
+  }
+
+  .my-orders-status-menu [data-status='all']:hover,
+  .my-orders-status-menu [data-status='all']:focus,
+  .my-orders-status-menu [data-status='all'][aria-selected='true'] {
+    background: rgba(51, 65, 85, 0.65);
+    color: #f8fafc;
+  }
+
+  .my-orders-status-menu [data-status='pending']:hover,
+  .my-orders-status-menu [data-status='pending']:focus,
+  .my-orders-status-menu [data-status='pending'][aria-selected='true'] {
+    background: rgba(120, 53, 15, 0.5);
+    color: #fbbf24;
+  }
+
+  .my-orders-status-menu [data-status='processing']:hover,
+  .my-orders-status-menu [data-status='processing']:focus,
+  .my-orders-status-menu [data-status='processing'][aria-selected='true'] {
+    background: rgba(12, 74, 110, 0.55);
+    color: #38bdf8;
+  }
+
+  .my-orders-status-menu [data-status='completed']:hover,
+  .my-orders-status-menu [data-status='completed']:focus,
+  .my-orders-status-menu [data-status='completed'][aria-selected='true'] {
+    background: rgba(6, 78, 59, 0.58);
+    color: #34d399;
+  }
+
+  .my-orders-status-menu [data-status='cancelled']:hover,
+  .my-orders-status-menu [data-status='cancelled']:focus,
+  .my-orders-status-menu [data-status='cancelled'][aria-selected='true'] {
+    background: rgba(127, 29, 29, 0.55);
+    color: #f87171;
+  }
+
   .services-category-menu {
     background-color: #000000;
   }

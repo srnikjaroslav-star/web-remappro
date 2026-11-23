@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Download, FileText, Search, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLanguage } from '@/i18n/LanguageContext';
@@ -53,11 +54,11 @@ const STATUS_FILTERS = ['all', 'pending', 'processing', 'completed', 'cancelled'
 type StatusFilter = (typeof STATUS_FILTERS)[number];
 
 const FILTER_COLOR: Record<StatusFilter, string> = {
-  all: '#00eaff',
-  pending: '#facc15',
-  processing: '#06b6d4',
-  completed: '#22c55e',
-  cancelled: '#ef4444',
+  all: '#67e8f9',
+  pending: '#fcd34d',
+  processing: '#7dd3fc',
+  completed: '#6ee7b7',
+  cancelled: '#fda4af',
 };
 
 const fold = (value: string) =>
@@ -177,6 +178,7 @@ const MyOrders = ({ email, focusOrder = '' }: { email: string; focusOrder?: stri
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
   const [statusHighlight, setStatusHighlight] = useState<StatusFilter>('all');
   const statusMenuRef = useRef<HTMLDivElement>(null);
+  const statusMenuPanelRef = useRef<HTMLDivElement>(null);
   const statusFilterButtonRef = useRef<HTMLButtonElement>(null);
   const statusMenuOpenRef = useRef(false);
   const statusHighlightRef = useRef<StatusFilter>('all');
@@ -328,12 +330,45 @@ const MyOrders = ({ email, focusOrder = '' }: { email: string; focusOrder?: stri
     });
   }, [focusOrder, orders, loading]);
 
+  const statusMenuContains = (node: Node | null) =>
+    Boolean(node && (statusMenuRef.current?.contains(node) || statusMenuPanelRef.current?.contains(node)));
+
+  useLayoutEffect(() => {
+    if (!statusMenuOpen) return;
+    const place = () => {
+      const button = statusFilterButtonRef.current;
+      const menu = statusMenuPanelRef.current;
+      if (!button || !menu) return;
+      const rect = button.getBoundingClientRect();
+      const gap = 6;
+      const height = menu.offsetHeight;
+      const width = rect.width;
+      let top = rect.bottom + gap;
+      if (top + height > window.innerHeight - 8) {
+        const above = rect.top - gap - height;
+        top = above >= 8 ? above : Math.max(8, window.innerHeight - height - 8);
+      }
+      let left = rect.left;
+      if (left + width > window.innerWidth - 8) left = Math.max(8, window.innerWidth - width - 8);
+      menu.style.top = `${top}px`;
+      menu.style.left = `${left}px`;
+      menu.style.width = `${width}px`;
+    };
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+    };
+  }, [statusMenuOpen]);
+
   useEffect(() => {
     if (!statusMenuOpen) return;
-    statusMenuRef.current?.querySelector<HTMLElement>(`[data-status="${statusHighlight}"]`)?.focus({ preventScroll: true });
+    statusMenuPanelRef.current?.querySelector<HTMLElement>(`[data-status="${statusHighlight}"]`)?.focus({ preventScroll: true });
     const close = (event: MouseEvent) => {
       const target = event.target;
-      if (target instanceof Node && statusMenuRef.current?.contains(target)) return;
+      if (target instanceof Node && statusMenuContains(target)) return;
       setStatusMenuOpen(false);
     };
     document.addEventListener('mousedown', close, true);
@@ -361,10 +396,10 @@ const MyOrders = ({ email, focusOrder = '' }: { email: string; focusOrder?: stri
           className={`relative w-44 shrink-0 ${statusMenuOpen ? 'z-40' : ''}`}
           onFocusOut={(event) => {
             const next = event.relatedTarget;
-            if (next instanceof Node && statusMenuRef.current?.contains(next)) return;
+            if (next instanceof Node && statusMenuContains(next)) return;
             window.setTimeout(() => {
               const active = document.activeElement;
-              if (active instanceof Node && statusMenuRef.current?.contains(active)) return;
+              if (active instanceof Node && statusMenuContains(active)) return;
               setStatusMenuOpen(false);
             }, 0);
           }}
@@ -401,7 +436,8 @@ const MyOrders = ({ email, focusOrder = '' }: { email: string; focusOrder?: stri
               setStatusHighlight(statusFilter);
               setStatusMenuOpen(true);
             }}
-            className="admin-filter-select inline-flex h-[42px] w-full items-center justify-start !rounded-lg !border !border-primary !bg-primary/25 bg-[length:0.8rem] bg-[position:right_0.4rem_center] bg-no-repeat px-4 py-2 text-left !text-base font-semibold shadow-[0_0_18px_rgba(0,242,255,0.55)] transition-shadow hover:!border-primary hover:!bg-primary/35 hover:shadow-[0_0_22px_rgba(0,242,255,0.7)] focus:outline-none"
+            data-status={statusFilter}
+            className="my-orders-status-face inline-flex h-[42px] w-full items-center justify-start rounded-lg bg-[length:0.8rem] bg-[position:right_0.4rem_center] bg-no-repeat px-4 py-2 text-left text-base font-semibold transition-shadow focus:outline-none"
             style={{
               color: FILTER_COLOR[statusFilter],
               backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='${encodeURIComponent(FILTER_COLOR[statusFilter])}' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
@@ -409,31 +445,50 @@ const MyOrders = ({ email, focusOrder = '' }: { email: string; focusOrder?: stri
           >
             {statusFilter === 'all' ? t('myOrdersFilterAll') : t(STATUS_KEY[statusFilter])}
           </button>
-          {statusMenuOpen ? (
-            <div
-              role="listbox"
-              aria-label={t('myOrdersStatus')}
-              className="orders-status-menu absolute right-0 top-[calc(100%+4px)] z-40 w-full overflow-hidden rounded-lg border border-white/15 py-1 shadow-[0_12px_32px_rgba(0,0,0,0.55)]"
-            >
-              {STATUS_FILTERS.map((filter) => (
-                <button
-                  key={filter}
-                  type="button"
-                  role="option"
-                  data-status={filter}
-                  aria-selected={statusHighlight === filter}
-                  onClick={() => {
-                    setStatusFilter(filter);
-                    setStatusMenuOpen(false);
-                    statusFilterButtonRef.current?.focus();
+          {statusMenuOpen
+            ? createPortal(
+                <div
+                  ref={statusMenuPanelRef}
+                  role="listbox"
+                  aria-label={t('myOrdersStatus')}
+                  className="my-orders-status-menu fixed z-[60] rounded-xl py-1.5"
+                  onKeyDown={(event) => {
+                    if (event.key === 'Tab') {
+                      setStatusMenuOpen(false);
+                      return;
+                    }
+                    if (event.key === 'Escape') {
+                      event.preventDefault();
+                      setStatusMenuOpen(false);
+                      statusFilterButtonRef.current?.focus();
+                      return;
+                    }
+                    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+                    event.preventDefault();
+                    moveStatusHighlight(event.key === 'ArrowDown' ? 1 : -1);
                   }}
-                  className="block w-full px-4 py-2 text-left text-base font-semibold"
                 >
-                  {filter === 'all' ? t('myOrdersFilterAll') : t(STATUS_KEY[filter])}
-                </button>
-              ))}
-            </div>
-          ) : null}
+                  {STATUS_FILTERS.map((filter) => (
+                    <button
+                      key={filter}
+                      type="button"
+                      role="option"
+                      data-status={filter}
+                      aria-selected={statusHighlight === filter}
+                      onClick={() => {
+                        setStatusFilter(filter);
+                        setStatusMenuOpen(false);
+                        statusFilterButtonRef.current?.focus();
+                      }}
+                      className="block w-full px-4 py-2 text-left text-base font-semibold"
+                    >
+                      {filter === 'all' ? t('myOrdersFilterAll') : t(STATUS_KEY[filter])}
+                    </button>
+                  ))}
+                </div>,
+                document.body,
+              )
+            : null}
         </div>
       </div>
       {focusedOrder?.status === 'completed' && focusedOrder.result_file_url ? (
