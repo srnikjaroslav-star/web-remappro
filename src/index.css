@@ -468,6 +468,78 @@
     color: #ef4444;
   }
 
+  .services-category-menu {
+    background-color: #000000;
+  }
+
+  .services-category-menu [role='option'] {
+    background-color: #000000;
+    color: #e5e7eb;
+    outline: none;
+  }
+
+  .services-category-menu [data-category='all'] {
+    color: #e5e7eb;
+  }
+
+  .services-category-menu [data-category='Emission Control'] {
+    color: #22d3ee;
+  }
+
+  .services-category-menu [data-category='Engine Functions'] {
+    color: #a3e635;
+  }
+
+  .services-category-menu [data-category='Performance'] {
+    color: #fbbf24;
+  }
+
+  .services-category-menu [data-category='Security'] {
+    color: #e879f9;
+  }
+
+  .services-category-menu [role='option']:hover,
+  .services-category-menu [role='option']:focus,
+  .services-category-menu [role='option'][aria-selected='true'] {
+    background-color: #1a3034;
+    color: #e5e7eb;
+  }
+
+  .services-category-menu [data-category='all']:hover,
+  .services-category-menu [data-category='all']:focus,
+  .services-category-menu [data-category='all'][aria-selected='true'] {
+    background-color: #1a3034;
+    color: #e5e7eb;
+  }
+
+  .services-category-menu [data-category='Emission Control']:hover,
+  .services-category-menu [data-category='Emission Control']:focus,
+  .services-category-menu [data-category='Emission Control'][aria-selected='true'] {
+    background-color: #12343c;
+    color: #22d3ee;
+  }
+
+  .services-category-menu [data-category='Engine Functions']:hover,
+  .services-category-menu [data-category='Engine Functions']:focus,
+  .services-category-menu [data-category='Engine Functions'][aria-selected='true'] {
+    background-color: #243214;
+    color: #a3e635;
+  }
+
+  .services-category-menu [data-category='Performance']:hover,
+  .services-category-menu [data-category='Performance']:focus,
+  .services-category-menu [data-category='Performance'][aria-selected='true'] {
+    background-color: #332c12;
+    color: #fbbf24;
+  }
+
+  .services-category-menu [data-category='Security']:hover,
+  .services-category-menu [data-category='Security']:focus,
+  .services-category-menu [data-category='Security'][aria-selected='true'] {
+    background-color: #321838;
+    color: #e879f9;
+  }
+
   .table-header {
     @apply bg-secondary/50 text-muted-foreground font-medium text-sm uppercase tracking-wider;
   }

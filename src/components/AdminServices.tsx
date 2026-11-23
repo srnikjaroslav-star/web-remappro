@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { Check, ChevronDown, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { catalogCategories, loadServiceCatalog, notifyServiceCatalogChanged, peekServiceCatalog, subscribeServiceCatalog, type CatalogService } from '@/lib/serviceCatalog';
 import { formatCreditUnits } from '@/lib/creditUnits';
@@ -32,6 +32,11 @@ const categoryTone: Record<string, { text: string; color: string }> = {
 
 const categoryTextClass = (category: string) => categoryTone[category]?.text ?? 'text-white';
 
+const CATEGORY_FILTER_OPTIONS = [
+  { value: '', label: 'Všetky kategórie' },
+  ...catalogCategories.map((category) => ({ value: category, label: category })),
+];
+
 const readPrice = (value: string) => {
   const price = Math.round(Number(value.trim().replace(',', '.')) * 100) / 100;
   if (!Number.isFinite(price) || price < 0 || price > 100000) return null;
@@ -47,6 +52,9 @@ const AdminServices = () => {
   const [loading, setLoading] = useState(!knownCatalog);
   const [query, setQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
+  const categoryMenuRef = useRef<HTMLDivElement>(null);
+  const categoryFilterButtonRef = useRef<HTMLButtonElement>(null);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -71,6 +79,25 @@ const AdminServices = () => {
       reload();
     });
   }, []);
+
+  useEffect(() => {
+    if (!categoryMenuOpen) return;
+    categoryMenuRef.current?.querySelector<HTMLElement>('[aria-selected="true"]')?.focus({ preventScroll: true });
+    const close = (event: MouseEvent) => {
+      if (!categoryMenuRef.current?.contains(event.target as Node)) setCategoryMenuOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setCategoryMenuOpen(false);
+      categoryFilterButtonRef.current?.focus();
+    };
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [categoryMenuOpen, categoryFilter]);
 
   const categories = useMemo(() => {
     const extra = services
@@ -319,19 +346,73 @@ const AdminServices = () => {
               </>
             )}
           </span>
-          <select
-            value={categoryFilter}
-            onChange={(event) => setCategoryFilter(event.target.value)}
-            aria-label="Filtrovať kategóriu"
-            className={`h-[42px] w-max shrink-0 rounded-md border border-primary/70 bg-[#0a192f] px-3 text-base leading-6 shadow-[0_0_16px_rgba(0,242,255,0.28)] focus:outline-none ${categoryFilter ? categoryTextClass(categoryFilter) : 'text-foreground'}`}
-          >
-            <option value="" className="bg-[#050505] text-white">Všetky kategórie</option>
-            {catalogCategories.map((category) => (
-              <option key={category} value={category} className="bg-[#050505]" style={{ color: categoryTone[category].color }}>
-                {category}
-              </option>
+          <div ref={categoryMenuRef} className={`relative grid w-max shrink-0 ${categoryMenuOpen ? 'z-40' : ''}`}>
+            {CATEGORY_FILTER_OPTIONS.map((option) => (
+              <span key={option.label} aria-hidden className="invisible col-start-1 row-start-1 flex h-[42px] w-max items-center gap-2 whitespace-nowrap border border-transparent px-3 text-base leading-6">
+                {option.label}
+                <span className="inline-block h-4 w-4 shrink-0" />
+              </span>
             ))}
-          </select>
+            <button
+              ref={categoryFilterButtonRef}
+              type="button"
+              aria-haspopup="listbox"
+              aria-expanded={categoryMenuOpen}
+              aria-label="Filtrovať kategóriu"
+              onClick={() => setCategoryMenuOpen((open) => !open)}
+              onKeyDown={(event) => {
+                if (categoryMenuOpen || (event.key !== 'ArrowDown' && event.key !== 'ArrowUp')) return;
+                event.preventDefault();
+                const index = Math.max(0, CATEGORY_FILTER_OPTIONS.findIndex((option) => option.value === categoryFilter));
+                const direction = event.key === 'ArrowDown' ? 1 : -1;
+                const next = CATEGORY_FILTER_OPTIONS[(index + direction + CATEGORY_FILTER_OPTIONS.length) % CATEGORY_FILTER_OPTIONS.length];
+                setCategoryFilter(next.value);
+              }}
+              className={`col-start-1 row-start-1 inline-flex h-[42px] w-full items-center gap-2 whitespace-nowrap rounded-md border border-primary/70 bg-[#0a192f] px-3 text-left text-base leading-6 shadow-[0_0_16px_rgba(0,242,255,0.28)] focus:outline-none ${categoryFilter ? categoryTextClass(categoryFilter) : 'text-foreground'}`}
+            >
+              <span>{CATEGORY_FILTER_OPTIONS.find((option) => option.value === categoryFilter)?.label ?? 'Všetky kategórie'}</span>
+              <ChevronDown className="ml-auto h-4 w-4 shrink-0" />
+            </button>
+            {categoryMenuOpen ? (
+              <div
+                role="listbox"
+                aria-label="Kategória služieb"
+                className="services-category-menu absolute right-0 top-[calc(100%+4px)] z-40 min-w-full overflow-hidden rounded-md border border-white/15 py-1 shadow-[0_12px_32px_rgba(0,0,0,0.55)]"
+              >
+                {CATEGORY_FILTER_OPTIONS.map((option) => (
+                  <button
+                    key={option.label}
+                    type="button"
+                    role="option"
+                    data-category={option.value || 'all'}
+                    aria-selected={categoryFilter === option.value}
+                    onClick={() => {
+                      setCategoryFilter(option.value);
+                      setCategoryMenuOpen(false);
+                      categoryFilterButtonRef.current?.focus();
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Escape') {
+                        event.preventDefault();
+                        setCategoryMenuOpen(false);
+                        categoryFilterButtonRef.current?.focus();
+                        return;
+                      }
+                      if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+                      event.preventDefault();
+                      const index = Math.max(0, CATEGORY_FILTER_OPTIONS.findIndex((item) => item.value === option.value));
+                      const direction = event.key === 'ArrowDown' ? 1 : -1;
+                      const next = CATEGORY_FILTER_OPTIONS[(index + direction + CATEGORY_FILTER_OPTIONS.length) % CATEGORY_FILTER_OPTIONS.length];
+                      setCategoryFilter(next.value);
+                    }}
+                    className="block w-full whitespace-nowrap px-3 py-2 text-left text-base leading-6"
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
         </div>
         <div className="max-h-[calc(100vh-18.5rem)] overflow-auto">
           <table className="w-full border-collapse text-base">
