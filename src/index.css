@@ -403,21 +403,69 @@
     color-scheme: dark;
   }
 
-  .orders-status-filter option,
-  .orders-status-filter option:focus,
-  .orders-status-filter option:checked {
-    background-color: #000000 !important;
-    background-image: none !important;
-    box-shadow: none !important;
-    color-scheme: dark;
+  .orders-status-menu {
+    background-color: #000000;
   }
 
-  .orders-status-filter option:hover {
-    background-color: #1967d2 !important;
-    background-image: none !important;
-    box-shadow: inset 0 0 0 100px #1967d2 !important;
-    color: #ffffff !important;
-    color-scheme: dark;
+  .orders-status-menu [role='option'] {
+    background-color: #000000;
+    color: #e5e7eb;
+    outline: none;
+  }
+
+  .orders-status-menu [data-status='all'] {
+    color: #e5e7eb;
+  }
+
+  .orders-status-menu [data-status='pending'] {
+    color: #facc15;
+  }
+
+  .orders-status-menu [data-status='processing'] {
+    color: #06b6d4;
+  }
+
+  .orders-status-menu [data-status='completed'] {
+    color: #22c55e;
+  }
+
+  .orders-status-menu [data-status='cancelled'] {
+    color: #ef4444;
+  }
+
+  .orders-status-menu [data-status='all']:hover,
+  .orders-status-menu [data-status='all']:focus,
+  .orders-status-menu [data-status='all'][aria-selected='true'] {
+    background-color: #1a3034;
+    color: #e5e7eb;
+  }
+
+  .orders-status-menu [data-status='pending']:hover,
+  .orders-status-menu [data-status='pending']:focus,
+  .orders-status-menu [data-status='pending'][aria-selected='true'] {
+    background-color: #332c12;
+    color: #facc15;
+  }
+
+  .orders-status-menu [data-status='processing']:hover,
+  .orders-status-menu [data-status='processing']:focus,
+  .orders-status-menu [data-status='processing'][aria-selected='true'] {
+    background-color: #0f3238;
+    color: #06b6d4;
+  }
+
+  .orders-status-menu [data-status='completed']:hover,
+  .orders-status-menu [data-status='completed']:focus,
+  .orders-status-menu [data-status='completed'][aria-selected='true'] {
+    background-color: #12301c;
+    color: #22c55e;
+  }
+
+  .orders-status-menu [data-status='cancelled']:hover,
+  .orders-status-menu [data-status='cancelled']:focus,
+  .orders-status-menu [data-status='cancelled'][aria-selected='true'] {
+    background-color: #351618;
+    color: #ef4444;
   }
 
   .table-header {

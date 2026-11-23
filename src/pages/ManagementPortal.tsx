@@ -468,6 +468,14 @@ const issueCreditNote = (order: Order, invoiceNumber: string) => withDocumentSer
   throw new Error('Dobropis sa nepodarilo zapísať k objednávke.');
 });
 
+const STATUS_FILTER_OPTIONS = [
+  { value: 'all', label: 'Všetky' },
+  { value: 'pending', label: 'Čakajúce' },
+  { value: 'processing', label: 'V Procese' },
+  { value: 'completed', label: 'Dokončené' },
+  { value: 'cancelled', label: 'Zrušené' },
+] as const;
+
 const ManagementPortal = () => {
   const navigate = useNavigate();
   const { language } = useLanguage();
@@ -475,6 +483,27 @@ const ManagementPortal = () => {
   const [loading, setLoading] = useState(() => !adminSnapshot);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [statusMenuOpen, setStatusMenuOpen] = useState(false);
+  const statusMenuRef = useRef<HTMLDivElement>(null);
+  const statusFilterButtonRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!statusMenuOpen) return;
+    statusMenuRef.current?.querySelector<HTMLElement>('[aria-selected="true"]')?.focus({ preventScroll: true });
+    const close = (event: MouseEvent) => {
+      if (!statusMenuRef.current?.contains(event.target as Node)) setStatusMenuOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setStatusMenuOpen(false);
+      statusFilterButtonRef.current?.focus();
+    };
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [statusMenuOpen, statusFilter]);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [clientDownloadProgress, setClientDownloadProgress] = useState<Record<string, number>>({});
@@ -1841,22 +1870,70 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                 className="h-[42px] w-full rounded-lg border border-primary/60 bg-transparent py-2 pl-9 pr-4 text-base leading-6 text-foreground shadow-[0_0_14px_rgba(0,242,255,0.28)] placeholder:text-muted-foreground transition-shadow hover:border-primary hover:shadow-[0_0_16px_rgba(0,242,255,0.42)] focus:border-primary focus:outline-none focus:shadow-[0_0_18px_rgba(0,242,255,0.5)]"
               />
             </div>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className={`admin-filter-select orders-status-filter h-[42px] w-40 shrink-0 !rounded-lg !border bg-[length:0.8rem] bg-[position:right_0.4rem_center] bg-no-repeat px-4 py-2 text-left !text-base font-semibold transition-shadow focus:outline-none ${FILTER_FACE[statusFilter] || FILTER_FACE.all}`}
-              style={{
-                color: STATUS_TEXT_COLOR[statusFilter] || STATUS_TEXT_COLOR.all,
-                colorScheme: 'dark',
-                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='${encodeURIComponent(STATUS_TEXT_COLOR[statusFilter] || STATUS_TEXT_COLOR.all)}' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
-              }}
-            >
-              <option value="all" style={{ color: '#E5E7EB', backgroundColor: '#000000', fontSize: '16px' }}>Všetky</option>
-              <option value="pending" style={{ color: STATUS_TEXT_COLOR.pending, backgroundColor: '#000000', fontSize: '16px' }}>Čakajúce</option>
-              <option value="processing" style={{ color: STATUS_TEXT_COLOR.processing, backgroundColor: '#000000', fontSize: '16px' }}>V Procese</option>
-              <option value="completed" style={{ color: STATUS_TEXT_COLOR.completed, backgroundColor: '#000000', fontSize: '16px' }}>Dokončené</option>
-              <option value="cancelled" style={{ color: STATUS_TEXT_COLOR.cancelled, backgroundColor: '#000000', fontSize: '16px' }}>Zrušené</option>
-            </select>
+            <div ref={statusMenuRef} className={`relative w-40 shrink-0 ${statusMenuOpen ? 'z-30' : ''}`}>
+              <button
+                ref={statusFilterButtonRef}
+                type="button"
+                aria-haspopup="listbox"
+                aria-expanded={statusMenuOpen}
+                onClick={() => setStatusMenuOpen((open) => !open)}
+                onKeyDown={(event) => {
+                  if (statusMenuOpen || (event.key !== 'ArrowDown' && event.key !== 'ArrowUp')) return;
+                  event.preventDefault();
+                  const values = STATUS_FILTER_OPTIONS.map((option) => option.value);
+                  const index = Math.max(0, values.indexOf(statusFilter as (typeof values)[number]));
+                  const direction = event.key === 'ArrowDown' ? 1 : -1;
+                  setStatusFilter(values[(index + direction + values.length) % values.length]);
+                }}
+                className={`admin-filter-select orders-status-filter inline-flex h-[42px] w-full shrink-0 items-center justify-start !rounded-lg !border bg-[length:0.8rem] bg-[position:right_0.4rem_center] bg-no-repeat px-4 py-2 text-left !text-base font-semibold transition-shadow focus:outline-none ${FILTER_FACE[statusFilter] || FILTER_FACE.all}`}
+                style={{
+                  color: STATUS_TEXT_COLOR[statusFilter] || STATUS_TEXT_COLOR.all,
+                  colorScheme: 'dark',
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='${encodeURIComponent(STATUS_TEXT_COLOR[statusFilter] || STATUS_TEXT_COLOR.all)}' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
+                }}
+              >
+                {STATUS_FILTER_OPTIONS.find((option) => option.value === statusFilter)?.label ?? 'Všetky'}
+              </button>
+              {statusMenuOpen ? (
+                <div
+                  role="listbox"
+                  aria-label="Stav objednávok"
+                  className="orders-status-menu absolute right-0 top-[calc(100%+4px)] z-30 w-full overflow-hidden rounded-lg border border-white/15 py-1 shadow-[0_12px_32px_rgba(0,0,0,0.55)]"
+                >
+                  {STATUS_FILTER_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="option"
+                      data-status={option.value}
+                      aria-selected={statusFilter === option.value}
+                      onClick={() => {
+                        setStatusFilter(option.value);
+                        setStatusMenuOpen(false);
+                        statusFilterButtonRef.current?.focus();
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Escape') {
+                          event.preventDefault();
+                          setStatusMenuOpen(false);
+                          statusFilterButtonRef.current?.focus();
+                          return;
+                        }
+                        if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+                        event.preventDefault();
+                        const values = STATUS_FILTER_OPTIONS.map((item) => item.value);
+                        const index = Math.max(0, values.indexOf(option.value));
+                        const direction = event.key === 'ArrowDown' ? 1 : -1;
+                        setStatusFilter(values[(index + direction + values.length) % values.length]);
+                      }}
+                      className="block w-full px-4 py-2 text-left text-base font-semibold"
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
             <button
               type="button"
               onClick={openAccounting}
