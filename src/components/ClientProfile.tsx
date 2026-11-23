@@ -263,7 +263,7 @@ const ClientProfile = ({
               </span>
               <h2 className={sectionTitle}>{t('creditBalance')}</h2>
             </div>
-            <p className="relative mt-3 whitespace-nowrap text-3xl font-black tabular-nums leading-none neon-text sm:text-4xl">
+            <p className="relative mt-3 whitespace-normal text-3xl font-black tabular-nums leading-none neon-text sm:text-4xl">
               {creditBalance === null ? '—' : formatCreditUnits(creditBalance, language)}
             </p>
             <p className="relative mt-2 text-sm leading-relaxed text-cyan-50/80">

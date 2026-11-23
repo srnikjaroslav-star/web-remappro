@@ -175,8 +175,22 @@ const MyOrders = ({ email, focusOrder = '' }: { email: string; focusOrder?: stri
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
+  const [statusHighlight, setStatusHighlight] = useState<StatusFilter>('all');
   const statusMenuRef = useRef<HTMLDivElement>(null);
   const statusFilterButtonRef = useRef<HTMLButtonElement>(null);
+  const statusMenuOpenRef = useRef(false);
+  const statusHighlightRef = useRef<StatusFilter>('all');
+  statusMenuOpenRef.current = statusMenuOpen;
+  statusHighlightRef.current = statusHighlight;
+  const moveStatusHighlight = (direction: 1 | -1) => {
+    const base = statusMenuOpenRef.current ? statusHighlightRef.current : statusFilter;
+    const index = Math.max(0, STATUS_FILTERS.indexOf(base));
+    const next = STATUS_FILTERS[(index + direction + STATUS_FILTERS.length) % STATUS_FILTERS.length];
+    statusHighlightRef.current = next;
+    statusMenuOpenRef.current = true;
+    setStatusHighlight(next);
+    setStatusMenuOpen(true);
+  };
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<Record<string, number>>({});
   const busy = useRef(false);
@@ -316,22 +330,15 @@ const MyOrders = ({ email, focusOrder = '' }: { email: string; focusOrder?: stri
 
   useEffect(() => {
     if (!statusMenuOpen) return;
-    statusMenuRef.current?.querySelector<HTMLElement>('[aria-selected="true"]')?.focus({ preventScroll: true });
+    statusMenuRef.current?.querySelector<HTMLElement>(`[data-status="${statusHighlight}"]`)?.focus({ preventScroll: true });
     const close = (event: MouseEvent) => {
-      if (!statusMenuRef.current?.contains(event.target as Node)) setStatusMenuOpen(false);
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
+      const target = event.target;
+      if (target instanceof Node && statusMenuRef.current?.contains(target)) return;
       setStatusMenuOpen(false);
-      statusFilterButtonRef.current?.focus();
     };
-    document.addEventListener('mousedown', close);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', close);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [statusMenuOpen, statusFilter]);
+    document.addEventListener('mousedown', close, true);
+    return () => document.removeEventListener('mousedown', close, true);
+  }, [statusMenuOpen, statusHighlight]);
 
   const focusedOrder = orders.find((order) => order.id === selectedId && matchesFocus(order, focusOrder)) || null;
 
@@ -349,20 +356,50 @@ const MyOrders = ({ email, focusOrder = '' }: { email: string; focusOrder?: stri
             className="h-[42px] w-full rounded-md border border-primary/70 bg-transparent py-2 pl-9 pr-4 text-base leading-6 text-foreground shadow-[0_0_16px_rgba(0,242,255,0.28)] placeholder:text-muted-foreground transition-shadow hover:border-primary hover:shadow-[0_0_16px_rgba(0,242,255,0.45)] focus:border-primary focus:outline-none focus:shadow-[0_0_16px_rgba(0,242,255,0.45)]"
           />
         </label>
-        <div ref={statusMenuRef} className={`relative w-44 shrink-0 ${statusMenuOpen ? 'z-40' : ''}`}>
+        <div
+          ref={statusMenuRef}
+          className={`relative w-44 shrink-0 ${statusMenuOpen ? 'z-40' : ''}`}
+          onFocusOut={(event) => {
+            const next = event.relatedTarget;
+            if (next instanceof Node && statusMenuRef.current?.contains(next)) return;
+            window.setTimeout(() => {
+              const active = document.activeElement;
+              if (active instanceof Node && statusMenuRef.current?.contains(active)) return;
+              setStatusMenuOpen(false);
+            }, 0);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Tab') {
+              setStatusMenuOpen(false);
+              return;
+            }
+            if (event.key === 'Escape') {
+              if (!statusMenuOpenRef.current) return;
+              event.preventDefault();
+              setStatusMenuOpen(false);
+              statusFilterButtonRef.current?.focus();
+              return;
+            }
+            if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+            event.preventDefault();
+            moveStatusHighlight(event.key === 'ArrowDown' ? 1 : -1);
+          }}
+        >
           <button
             ref={statusFilterButtonRef}
             type="button"
             aria-haspopup="listbox"
             aria-expanded={statusMenuOpen}
             aria-label={t('myOrdersStatus')}
-            onClick={() => setStatusMenuOpen((open) => !open)}
-            onKeyDown={(event) => {
-              if (statusMenuOpen || (event.key !== 'ArrowDown' && event.key !== 'ArrowUp')) return;
-              event.preventDefault();
-              const index = Math.max(0, STATUS_FILTERS.indexOf(statusFilter));
-              const direction = event.key === 'ArrowDown' ? 1 : -1;
-              setStatusFilter(STATUS_FILTERS[(index + direction + STATUS_FILTERS.length) % STATUS_FILTERS.length]);
+            onClick={() => {
+              if (statusMenuOpenRef.current) {
+                setStatusMenuOpen(false);
+                return;
+              }
+              statusHighlightRef.current = statusFilter;
+              statusMenuOpenRef.current = true;
+              setStatusHighlight(statusFilter);
+              setStatusMenuOpen(true);
             }}
             className="admin-filter-select inline-flex h-[42px] w-full items-center justify-start !rounded-lg !border !border-primary !bg-primary/25 bg-[length:0.8rem] bg-[position:right_0.4rem_center] bg-no-repeat px-4 py-2 text-left !text-base font-semibold shadow-[0_0_18px_rgba(0,242,255,0.55)] transition-shadow hover:!border-primary hover:!bg-primary/35 hover:shadow-[0_0_22px_rgba(0,242,255,0.7)] focus:outline-none"
             style={{
@@ -384,24 +421,11 @@ const MyOrders = ({ email, focusOrder = '' }: { email: string; focusOrder?: stri
                   type="button"
                   role="option"
                   data-status={filter}
-                  aria-selected={statusFilter === filter}
+                  aria-selected={statusHighlight === filter}
                   onClick={() => {
                     setStatusFilter(filter);
                     setStatusMenuOpen(false);
                     statusFilterButtonRef.current?.focus();
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Escape') {
-                      event.preventDefault();
-                      setStatusMenuOpen(false);
-                      statusFilterButtonRef.current?.focus();
-                      return;
-                    }
-                    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
-                    event.preventDefault();
-                    const index = Math.max(0, STATUS_FILTERS.indexOf(filter));
-                    const direction = event.key === 'ArrowDown' ? 1 : -1;
-                    setStatusFilter(STATUS_FILTERS[(index + direction + STATUS_FILTERS.length) % STATUS_FILTERS.length]);
                   }}
                   className="block w-full px-4 py-2 text-left text-base font-semibold"
                 >

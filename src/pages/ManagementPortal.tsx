@@ -484,26 +484,34 @@ const ManagementPortal = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
+  const [statusHighlight, setStatusHighlight] = useState('all');
   const statusMenuRef = useRef<HTMLDivElement>(null);
   const statusFilterButtonRef = useRef<HTMLButtonElement>(null);
+  const statusMenuOpenRef = useRef(false);
+  const statusHighlightRef = useRef('all');
+  statusMenuOpenRef.current = statusMenuOpen;
+  statusHighlightRef.current = statusHighlight;
+  const moveStatusHighlight = (direction: 1 | -1) => {
+    const values = STATUS_FILTER_OPTIONS.map((option) => option.value);
+    const base = statusMenuOpenRef.current ? statusHighlightRef.current : statusFilter;
+    const index = Math.max(0, values.indexOf(base as (typeof values)[number]));
+    const next = values[(index + direction + values.length) % values.length];
+    statusHighlightRef.current = next;
+    statusMenuOpenRef.current = true;
+    setStatusHighlight(next);
+    setStatusMenuOpen(true);
+  };
   useEffect(() => {
     if (!statusMenuOpen) return;
-    statusMenuRef.current?.querySelector<HTMLElement>('[aria-selected="true"]')?.focus({ preventScroll: true });
+    statusMenuRef.current?.querySelector<HTMLElement>(`[data-status="${statusHighlight}"]`)?.focus({ preventScroll: true });
     const close = (event: MouseEvent) => {
-      if (!statusMenuRef.current?.contains(event.target as Node)) setStatusMenuOpen(false);
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
+      const target = event.target;
+      if (target instanceof Node && statusMenuRef.current?.contains(target)) return;
       setStatusMenuOpen(false);
-      statusFilterButtonRef.current?.focus();
     };
-    document.addEventListener('mousedown', close);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', close);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [statusMenuOpen, statusFilter]);
+    document.addEventListener('mousedown', close, true);
+    return () => document.removeEventListener('mousedown', close, true);
+  }, [statusMenuOpen, statusHighlight]);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [clientDownloadProgress, setClientDownloadProgress] = useState<Record<string, number>>({});
@@ -555,6 +563,7 @@ const ManagementPortal = () => {
   }, [section]);
   const onlineIds = useOnlineClients(!isCheckingAuth);
   const [cancelConfirmOrder, setCancelConfirmOrder] = useState<Order | null>(null);
+  const [statusRevertOrder, setStatusRevertOrder] = useState<Order | null>(null);
   const [cancellingOrder, setCancellingOrder] = useState(false);
   const [deleteConfirmOrder, setDeleteConfirmOrder] = useState<Order | null>(null);
   const [deletingOrder, setDeletingOrder] = useState(false);
@@ -1870,20 +1879,49 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                 className="h-[42px] w-full rounded-lg border border-primary/60 bg-transparent py-2 pl-9 pr-4 text-base leading-6 text-foreground shadow-[0_0_14px_rgba(0,242,255,0.28)] placeholder:text-muted-foreground transition-shadow hover:border-primary hover:shadow-[0_0_16px_rgba(0,242,255,0.42)] focus:border-primary focus:outline-none focus:shadow-[0_0_18px_rgba(0,242,255,0.5)]"
               />
             </div>
-            <div ref={statusMenuRef} className={`relative w-40 shrink-0 ${statusMenuOpen ? 'z-30' : ''}`}>
+            <div
+              ref={statusMenuRef}
+              className={`relative w-40 shrink-0 ${statusMenuOpen ? 'z-30' : ''}`}
+              onFocusOut={(event) => {
+                const next = event.relatedTarget;
+                if (next instanceof Node && statusMenuRef.current?.contains(next)) return;
+                window.setTimeout(() => {
+                  const active = document.activeElement;
+                  if (active instanceof Node && statusMenuRef.current?.contains(active)) return;
+                  setStatusMenuOpen(false);
+                }, 0);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Tab') {
+                  setStatusMenuOpen(false);
+                  return;
+                }
+                if (event.key === 'Escape') {
+                  if (!statusMenuOpenRef.current) return;
+                  event.preventDefault();
+                  setStatusMenuOpen(false);
+                  statusFilterButtonRef.current?.focus();
+                  return;
+                }
+                if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+                event.preventDefault();
+                moveStatusHighlight(event.key === 'ArrowDown' ? 1 : -1);
+              }}
+            >
               <button
                 ref={statusFilterButtonRef}
                 type="button"
                 aria-haspopup="listbox"
                 aria-expanded={statusMenuOpen}
-                onClick={() => setStatusMenuOpen((open) => !open)}
-                onKeyDown={(event) => {
-                  if (statusMenuOpen || (event.key !== 'ArrowDown' && event.key !== 'ArrowUp')) return;
-                  event.preventDefault();
-                  const values = STATUS_FILTER_OPTIONS.map((option) => option.value);
-                  const index = Math.max(0, values.indexOf(statusFilter as (typeof values)[number]));
-                  const direction = event.key === 'ArrowDown' ? 1 : -1;
-                  setStatusFilter(values[(index + direction + values.length) % values.length]);
+                onClick={() => {
+                  if (statusMenuOpenRef.current) {
+                    setStatusMenuOpen(false);
+                    return;
+                  }
+                  statusHighlightRef.current = statusFilter;
+                  statusMenuOpenRef.current = true;
+                  setStatusHighlight(statusFilter);
+                  setStatusMenuOpen(true);
                 }}
                 className={`admin-filter-select orders-status-filter inline-flex h-[42px] w-full shrink-0 items-center justify-start !rounded-lg !border bg-[length:0.8rem] bg-[position:right_0.4rem_center] bg-no-repeat px-4 py-2 text-left !text-base font-semibold transition-shadow focus:outline-none ${FILTER_FACE[statusFilter] || FILTER_FACE.all}`}
                 style={{
@@ -1906,25 +1944,11 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                       type="button"
                       role="option"
                       data-status={option.value}
-                      aria-selected={statusFilter === option.value}
+                      aria-selected={statusHighlight === option.value}
                       onClick={() => {
                         setStatusFilter(option.value);
                         setStatusMenuOpen(false);
                         statusFilterButtonRef.current?.focus();
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Escape') {
-                          event.preventDefault();
-                          setStatusMenuOpen(false);
-                          statusFilterButtonRef.current?.focus();
-                          return;
-                        }
-                        if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
-                        event.preventDefault();
-                        const values = STATUS_FILTER_OPTIONS.map((item) => item.value);
-                        const index = Math.max(0, values.indexOf(option.value));
-                        const direction = event.key === 'ArrowDown' ? 1 : -1;
-                        setStatusFilter(values[(index + direction + values.length) % values.length]);
                       }}
                       className="block w-full px-4 py-2 text-left text-base font-semibold"
                     >
@@ -2092,6 +2116,10 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                             onClick={(event) => {
                               event.stopPropagation();
                               const nextStatus = NEXT_WORKING_STATUS[order.status] || 'processing';
+                              if (order.status === 'completed' && nextStatus === 'pending') {
+                                setStatusRevertOrder(order);
+                                return;
+                              }
                               void handleStatusChange(order.id, nextStatus);
                             }}
                             title={`Prepnúť na ${STATUS_LABEL[NEXT_WORKING_STATUS[order.status] || 'processing']}`}
@@ -2700,6 +2728,38 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
               className="rounded-none border border-red-500/80 bg-red-500/10 text-red-400 shadow-[0_0_14px_rgba(239,68,68,0.32)] hover:border-red-400 hover:bg-red-500/16 hover:text-red-400 hover:shadow-[0_0_16px_rgba(239,68,68,0.42)]"
             >
               Áno, zmazať
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={statusRevertOrder !== null}
+        onOpenChange={(open) => {
+          if (!open) setStatusRevertOrder(null);
+        }}
+      >
+        <AlertDialogContent className="border border-primary/70 bg-[#0a192f] shadow-[0_0_32px_rgba(0,242,255,0.35)] sm:max-w-[560px]">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-xl font-black tracking-wide text-primary">POTVRDENIE</AlertDialogTitle>
+            <AlertDialogDescription className="text-base leading-6 text-white">
+              Naozaj chcete vrátiť dokončenú objednávku {statusRevertOrder?.order_number || statusRevertOrder?.id.slice(0, 8).toUpperCase()} do stavu Čakajúce?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-none border-slate-400/70 bg-white/5 text-white shadow-[0_0_12px_rgba(148,163,184,0.28)] hover:bg-white/10 hover:text-white hover:shadow-[0_0_16px_rgba(148,163,184,0.36)]">
+              Nie
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault();
+                const order = statusRevertOrder;
+                setStatusRevertOrder(null);
+                if (order) void handleStatusChange(order.id, 'pending');
+              }}
+              className="rounded-none border border-primary/70 bg-primary/15 text-primary shadow-[0_0_14px_rgba(0,242,255,0.32)] hover:bg-primary/25 hover:text-primary"
+            >
+              Áno, vrátiť na Čakajúce
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

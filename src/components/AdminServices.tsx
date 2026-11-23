@@ -53,8 +53,23 @@ const AdminServices = () => {
   const [query, setQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
+  const [categoryHighlight, setCategoryHighlight] = useState('');
   const categoryMenuRef = useRef<HTMLDivElement>(null);
   const categoryFilterButtonRef = useRef<HTMLButtonElement>(null);
+  const categoryMenuOpenRef = useRef(false);
+  const categoryHighlightRef = useRef('');
+  categoryMenuOpenRef.current = categoryMenuOpen;
+  categoryHighlightRef.current = categoryHighlight;
+  const moveCategoryHighlight = (direction: 1 | -1) => {
+    const values = CATEGORY_FILTER_OPTIONS.map((option) => option.value);
+    const base = categoryMenuOpenRef.current ? categoryHighlightRef.current : categoryFilter;
+    const index = Math.max(0, values.indexOf(base));
+    const next = values[(index + direction + values.length) % values.length];
+    categoryHighlightRef.current = next;
+    categoryMenuOpenRef.current = true;
+    setCategoryHighlight(next);
+    setCategoryMenuOpen(true);
+  };
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -82,22 +97,16 @@ const AdminServices = () => {
 
   useEffect(() => {
     if (!categoryMenuOpen) return;
-    categoryMenuRef.current?.querySelector<HTMLElement>('[aria-selected="true"]')?.focus({ preventScroll: true });
+    const mark = categoryHighlight || 'all';
+    categoryMenuRef.current?.querySelector<HTMLElement>(`[data-category="${CSS.escape(mark)}"]`)?.focus({ preventScroll: true });
     const close = (event: MouseEvent) => {
-      if (!categoryMenuRef.current?.contains(event.target as Node)) setCategoryMenuOpen(false);
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
+      const target = event.target;
+      if (target instanceof Node && categoryMenuRef.current?.contains(target)) return;
       setCategoryMenuOpen(false);
-      categoryFilterButtonRef.current?.focus();
     };
-    document.addEventListener('mousedown', close);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', close);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [categoryMenuOpen, categoryFilter]);
+    document.addEventListener('mousedown', close, true);
+    return () => document.removeEventListener('mousedown', close, true);
+  }, [categoryMenuOpen, categoryHighlight]);
 
   const categories = useMemo(() => {
     const extra = services
@@ -346,7 +355,35 @@ const AdminServices = () => {
               </>
             )}
           </span>
-          <div ref={categoryMenuRef} className={`relative grid w-max shrink-0 ${categoryMenuOpen ? 'z-40' : ''}`}>
+          <div
+            ref={categoryMenuRef}
+            className={`relative grid w-max shrink-0 ${categoryMenuOpen ? 'z-40' : ''}`}
+            onFocusOut={(event) => {
+              const next = event.relatedTarget;
+              if (next instanceof Node && categoryMenuRef.current?.contains(next)) return;
+              window.setTimeout(() => {
+                const active = document.activeElement;
+                if (active instanceof Node && categoryMenuRef.current?.contains(active)) return;
+                setCategoryMenuOpen(false);
+              }, 0);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Tab') {
+                setCategoryMenuOpen(false);
+                return;
+              }
+              if (event.key === 'Escape') {
+                if (!categoryMenuOpenRef.current) return;
+                event.preventDefault();
+                setCategoryMenuOpen(false);
+                categoryFilterButtonRef.current?.focus();
+                return;
+              }
+              if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+              event.preventDefault();
+              moveCategoryHighlight(event.key === 'ArrowDown' ? 1 : -1);
+            }}
+          >
             {CATEGORY_FILTER_OPTIONS.map((option) => (
               <span key={option.label} aria-hidden className="invisible col-start-1 row-start-1 flex h-[42px] w-max items-center gap-2 whitespace-nowrap border border-transparent px-3 text-base leading-6">
                 {option.label}
@@ -359,14 +396,15 @@ const AdminServices = () => {
               aria-haspopup="listbox"
               aria-expanded={categoryMenuOpen}
               aria-label="Filtrovať kategóriu"
-              onClick={() => setCategoryMenuOpen((open) => !open)}
-              onKeyDown={(event) => {
-                if (categoryMenuOpen || (event.key !== 'ArrowDown' && event.key !== 'ArrowUp')) return;
-                event.preventDefault();
-                const index = Math.max(0, CATEGORY_FILTER_OPTIONS.findIndex((option) => option.value === categoryFilter));
-                const direction = event.key === 'ArrowDown' ? 1 : -1;
-                const next = CATEGORY_FILTER_OPTIONS[(index + direction + CATEGORY_FILTER_OPTIONS.length) % CATEGORY_FILTER_OPTIONS.length];
-                setCategoryFilter(next.value);
+              onClick={() => {
+                if (categoryMenuOpenRef.current) {
+                  setCategoryMenuOpen(false);
+                  return;
+                }
+                categoryHighlightRef.current = categoryFilter;
+                categoryMenuOpenRef.current = true;
+                setCategoryHighlight(categoryFilter);
+                setCategoryMenuOpen(true);
               }}
               className={`col-start-1 row-start-1 inline-flex h-[42px] w-full items-center gap-2 whitespace-nowrap rounded-md border border-primary/70 bg-[#0a192f] px-3 text-left text-base leading-6 shadow-[0_0_16px_rgba(0,242,255,0.28)] focus:outline-none ${categoryFilter ? categoryTextClass(categoryFilter) : 'text-foreground'}`}
             >
@@ -385,25 +423,11 @@ const AdminServices = () => {
                     type="button"
                     role="option"
                     data-category={option.value || 'all'}
-                    aria-selected={categoryFilter === option.value}
+                    aria-selected={categoryHighlight === option.value}
                     onClick={() => {
                       setCategoryFilter(option.value);
                       setCategoryMenuOpen(false);
                       categoryFilterButtonRef.current?.focus();
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Escape') {
-                        event.preventDefault();
-                        setCategoryMenuOpen(false);
-                        categoryFilterButtonRef.current?.focus();
-                        return;
-                      }
-                      if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
-                      event.preventDefault();
-                      const index = Math.max(0, CATEGORY_FILTER_OPTIONS.findIndex((item) => item.value === option.value));
-                      const direction = event.key === 'ArrowDown' ? 1 : -1;
-                      const next = CATEGORY_FILTER_OPTIONS[(index + direction + CATEGORY_FILTER_OPTIONS.length) % CATEGORY_FILTER_OPTIONS.length];
-                      setCategoryFilter(next.value);
                     }}
                     className="block w-full whitespace-nowrap px-3 py-2 text-left text-base leading-6"
                   >
