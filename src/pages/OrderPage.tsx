@@ -715,6 +715,10 @@ const OrderPage = () => {
     const group = stageGroups.find((item) => item.id === groupId);
     if (!group) return;
     const memberIds = new Set(group.options.map((option) => option.id));
+    if (optionId && (groupId === 'stage1-diesel' || groupId === 'stage1-petrol')) {
+      const otherId = groupId === 'stage1-diesel' ? 'stage1-petrol' : 'stage1-diesel';
+      stageGroups.find((item) => item.id === otherId)?.options.forEach((option) => memberIds.add(option.id));
+    }
     setServices((current) => {
       const next = current.filter((id) => !memberIds.has(id));
       if (optionId) next.push(optionId);
