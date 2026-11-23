@@ -174,6 +174,9 @@ const MyOrders = ({ email, focusOrder = '' }: { email: string; focusOrder?: stri
   const [failed, setFailed] = useState(false);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [statusMenuOpen, setStatusMenuOpen] = useState(false);
+  const statusMenuRef = useRef<HTMLDivElement>(null);
+  const statusFilterButtonRef = useRef<HTMLButtonElement>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<Record<string, number>>({});
   const busy = useRef(false);
@@ -311,6 +314,25 @@ const MyOrders = ({ email, focusOrder = '' }: { email: string; focusOrder?: stri
     });
   }, [focusOrder, orders, loading]);
 
+  useEffect(() => {
+    if (!statusMenuOpen) return;
+    statusMenuRef.current?.querySelector<HTMLElement>('[aria-selected="true"]')?.focus({ preventScroll: true });
+    const close = (event: MouseEvent) => {
+      if (!statusMenuRef.current?.contains(event.target as Node)) setStatusMenuOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setStatusMenuOpen(false);
+      statusFilterButtonRef.current?.focus();
+    };
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [statusMenuOpen, statusFilter]);
+
   const focusedOrder = orders.find((order) => order.id === selectedId && matchesFocus(order, focusOrder)) || null;
 
   return (
@@ -327,19 +349,68 @@ const MyOrders = ({ email, focusOrder = '' }: { email: string; focusOrder?: stri
             className="h-[42px] w-full rounded-md border border-primary/70 bg-transparent py-2 pl-9 pr-4 text-base leading-6 text-foreground shadow-[0_0_16px_rgba(0,242,255,0.28)] placeholder:text-muted-foreground transition-shadow hover:border-primary hover:shadow-[0_0_16px_rgba(0,242,255,0.45)] focus:border-primary focus:outline-none focus:shadow-[0_0_16px_rgba(0,242,255,0.45)]"
           />
         </label>
-        <select
-          value={statusFilter}
-          aria-label={t('myOrdersStatus')}
-          onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
-          className="admin-filter-select h-[42px] w-44 shrink-0 !rounded-lg !border !border-primary !bg-primary/25 px-4 py-2 text-left !text-base font-semibold shadow-[0_0_18px_rgba(0,242,255,0.55)] transition-shadow hover:!border-primary hover:!bg-primary/35 hover:shadow-[0_0_22px_rgba(0,242,255,0.7)] focus:outline-none"
-          style={{ color: FILTER_COLOR[statusFilter] }}
-        >
-          {STATUS_FILTERS.map((filter) => (
-            <option key={filter} value={filter} style={{ color: FILTER_COLOR[filter], backgroundColor: '#050505', fontSize: '16px' }}>
-              {filter === 'all' ? t('myOrdersFilterAll') : t(STATUS_KEY[filter])}
-            </option>
-          ))}
-        </select>
+        <div ref={statusMenuRef} className={`relative w-44 shrink-0 ${statusMenuOpen ? 'z-40' : ''}`}>
+          <button
+            ref={statusFilterButtonRef}
+            type="button"
+            aria-haspopup="listbox"
+            aria-expanded={statusMenuOpen}
+            aria-label={t('myOrdersStatus')}
+            onClick={() => setStatusMenuOpen((open) => !open)}
+            onKeyDown={(event) => {
+              if (statusMenuOpen || (event.key !== 'ArrowDown' && event.key !== 'ArrowUp')) return;
+              event.preventDefault();
+              const index = Math.max(0, STATUS_FILTERS.indexOf(statusFilter));
+              const direction = event.key === 'ArrowDown' ? 1 : -1;
+              setStatusFilter(STATUS_FILTERS[(index + direction + STATUS_FILTERS.length) % STATUS_FILTERS.length]);
+            }}
+            className="admin-filter-select inline-flex h-[42px] w-full items-center justify-start !rounded-lg !border !border-primary !bg-primary/25 bg-[length:0.8rem] bg-[position:right_0.4rem_center] bg-no-repeat px-4 py-2 text-left !text-base font-semibold shadow-[0_0_18px_rgba(0,242,255,0.55)] transition-shadow hover:!border-primary hover:!bg-primary/35 hover:shadow-[0_0_22px_rgba(0,242,255,0.7)] focus:outline-none"
+            style={{
+              color: FILTER_COLOR[statusFilter],
+              backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='${encodeURIComponent(FILTER_COLOR[statusFilter])}' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
+            }}
+          >
+            {statusFilter === 'all' ? t('myOrdersFilterAll') : t(STATUS_KEY[statusFilter])}
+          </button>
+          {statusMenuOpen ? (
+            <div
+              role="listbox"
+              aria-label={t('myOrdersStatus')}
+              className="orders-status-menu absolute right-0 top-[calc(100%+4px)] z-40 w-full overflow-hidden rounded-lg border border-white/15 py-1 shadow-[0_12px_32px_rgba(0,0,0,0.55)]"
+            >
+              {STATUS_FILTERS.map((filter) => (
+                <button
+                  key={filter}
+                  type="button"
+                  role="option"
+                  data-status={filter}
+                  aria-selected={statusFilter === filter}
+                  onClick={() => {
+                    setStatusFilter(filter);
+                    setStatusMenuOpen(false);
+                    statusFilterButtonRef.current?.focus();
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Escape') {
+                      event.preventDefault();
+                      setStatusMenuOpen(false);
+                      statusFilterButtonRef.current?.focus();
+                      return;
+                    }
+                    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+                    event.preventDefault();
+                    const index = Math.max(0, STATUS_FILTERS.indexOf(filter));
+                    const direction = event.key === 'ArrowDown' ? 1 : -1;
+                    setStatusFilter(STATUS_FILTERS[(index + direction + STATUS_FILTERS.length) % STATUS_FILTERS.length]);
+                  }}
+                  className="block w-full px-4 py-2 text-left text-base font-semibold"
+                >
+                  {filter === 'all' ? t('myOrdersFilterAll') : t(STATUS_KEY[filter])}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
       </div>
       {focusedOrder?.status === 'completed' && focusedOrder.result_file_url ? (
         <div className="flex shrink-0 flex-col gap-3 border-b border-primary/30 bg-[#071820] px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
