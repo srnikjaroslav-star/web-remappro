@@ -113,8 +113,13 @@ const fieldClass = (_filled: boolean, hasError: boolean) => {
   return orderField;
 };
 
-const orderPanelGlow =
-  'order-panel !rounded-lg !border-primary/60 shadow-[0_0_24px_rgba(0,242,255,0.22),inset_0_0_0_1px_rgba(0,242,255,0.14)]';
+const categoryAccent = (category: string) => {
+  if (category === 'Emission Control') return 'border-l-[3px] border-l-[#2dd4bf] pl-2 text-[#2dd4bf]';
+  if (category === 'Engine Functions') return 'border-l-[3px] border-l-[#fbbf24] pl-2 text-[#fbbf24]';
+  if (category === 'Performance') return 'border-l-[3px] border-l-[#a78bfa] pl-2 text-[#a78bfa]';
+  if (category === 'Security') return 'border-l-[3px] border-l-[#e879f9] pl-2 text-[#f0abfc]';
+  return 'border-l-[3px] border-l-primary pl-2 text-primary';
+};
 
 const headerControl =
   'inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border border-primary/50 bg-secondary px-3 text-sm font-medium text-primary shadow-[0_0_16px_rgba(0,242,255,0.35)] transition-colors hover:border-primary hover:bg-primary/20 hover:shadow-[0_0_16px_rgba(0,242,255,0.5)]';
@@ -939,8 +944,10 @@ const OrderPage = () => {
     }
   };
 
+  const newOrderFit = !showOrders && portalView === 'new';
+
   return (
-    <div className="relative flex w-full flex-grow flex-col bg-background">
+    <div className={`relative flex w-full flex-grow flex-col bg-background ${newOrderFit ? 'lg:h-[calc(100dvh-4.25rem)] lg:max-h-[calc(100dvh-4.25rem)] lg:overflow-hidden' : ''}`}>
       <div className="order-hex-layer" aria-hidden="true">
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <pre className="w-1/2">{HEX_DUMP}</pre>
@@ -948,7 +955,7 @@ const OrderPage = () => {
         </div>
       </div>
 
-      <div className="relative z-10 flex w-full flex-grow flex-col">
+      <div className={`relative z-10 flex w-full flex-grow flex-col ${newOrderFit ? 'lg:min-h-0 lg:overflow-hidden' : ''}`}>
         <header className="sticky top-0 z-50 w-full border-b border-primary/25">
           <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-background/80 backdrop-blur-sm" />
           <div className="relative mx-auto flex w-full max-w-[1600px] flex-nowrap items-center gap-2 px-4 py-3 sm:gap-3 lg:px-8">
@@ -1088,7 +1095,7 @@ const OrderPage = () => {
           </div>
         </header>
 
-        <div className="mx-auto w-full max-w-[1600px] flex-grow px-4 pb-6 pt-2 lg:px-8">
+        <div className={`mx-auto w-full max-w-[1600px] flex-grow px-4 pb-6 pt-2 lg:px-8 ${newOrderFit ? 'lg:flex lg:min-h-0 lg:flex-col lg:overflow-hidden lg:pb-2' : ''}`}>
           {showOrders ? (
             <div className="space-y-3">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1137,20 +1144,20 @@ const OrderPage = () => {
             ) : null
           ) : (
           <>
-          <div className="mb-3 flex flex-row flex-wrap items-baseline gap-x-4">
+          <div className="mb-2 flex shrink-0 flex-row flex-wrap items-baseline gap-x-4">
             <h1 className="text-2xl font-bold tracking-tight md:text-3xl">{t('newOrder')}</h1>
             <p className="text-sm text-muted-foreground">{t('newOrderSubtitle')}</p>
           </div>
 
-          <div className="flex flex-col gap-8 lg:grid lg:grid-cols-12">
-            <div className="min-w-0 space-y-5 lg:col-span-8">
-              <section className={`${orderPanelGlow} p-4 md:p-5`}>
-                <div className="mb-4 flex items-center gap-2">
+          <div className="flex flex-col gap-5 lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1.55fr)_minmax(18rem,1fr)] lg:gap-3 lg:overflow-hidden">
+            <div className="min-w-0 space-y-4 lg:flex lg:min-h-0 lg:flex-col lg:gap-3 lg:space-y-0 lg:overflow-hidden">
+              <section className="order-card-vehicle shrink-0 rounded-xl p-3 md:p-4">
+                <div className="mb-3 flex items-center gap-2">
                   <Car className="h-4 w-4 text-primary" />
                   <h2 className="text-base font-semibold uppercase leading-5 tracking-[0.16em] text-primary">{t('vehicleSpec')}</h2>
                 </div>
 
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   <label className="block">
                     <span className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                       <Car className="h-3.5 w-3.5" /> {t('brand')}
@@ -1247,7 +1254,9 @@ const OrderPage = () => {
                             onClick={() => setVehicleField('fuelType', value)}
                             className={`h-[38px] rounded-lg border text-sm font-medium transition-colors ${
                               active
-                                ? 'border-primary bg-primary/20 text-primary shadow-[0_0_16px_rgba(0,242,255,0.4)]'
+                                ? value === 'Diesel'
+                                  ? 'border-cyan-400 bg-[linear-gradient(135deg,rgba(34,211,238,0.24),rgba(14,165,233,0.16))] text-white shadow-[0_0_14px_rgba(34,211,238,0.22)]'
+                                  : 'border-amber-400 bg-[linear-gradient(135deg,rgba(251,191,36,0.24),rgba(245,158,11,0.14))] text-amber-100 shadow-[0_0_14px_rgba(251,191,36,0.22)]'
                                 : 'border-primary/60 bg-secondary text-muted-foreground shadow-[0_0_14px_rgba(0,242,255,0.28)] hover:border-primary hover:text-foreground hover:shadow-[0_0_16px_rgba(0,242,255,0.42)]'
                             } ${errors.fuelType ? '!border-red-500' : ''}`}
                           >
@@ -1261,13 +1270,19 @@ const OrderPage = () => {
                 </div>
               </section>
 
-              <section className={`${orderPanelGlow} p-4 md:p-5`}>
-                <div className="mb-3 flex items-center justify-between gap-3">
+              <section className="order-card-file flex min-h-0 flex-col rounded-xl p-3 md:p-4 lg:flex-1 lg:overflow-hidden">
+                <div className="mb-3 flex shrink-0 items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
-                    <Upload className="h-4 w-4 text-primary" />
-                    <h2 className="text-base font-semibold uppercase leading-5 tracking-[0.16em] text-primary">{t('ecuFile')}</h2>
+                    <Upload className="h-4 w-4 text-emerald-300" />
+                    <h2 className="text-base font-semibold uppercase leading-5 tracking-[0.16em] text-emerald-300">{t('ecuFile')}</h2>
                   </div>
-                  <span className="text-[11px] uppercase tracking-wide text-muted-foreground">.bin · .ori · .mod · .ecu</span>
+                  <div className="flex gap-1.5">
+                    {['.BIN', '.ORI', '.MOD', '.ECU'].map((extension) => (
+                      <span key={extension} className="order-ext-badge rounded-[5px] px-[7px] py-0.5 text-[11px] font-bold tracking-wide">
+                        {extension}
+                      </span>
+                    ))}
+                  </div>
                 </div>
 
                 <div
@@ -1300,14 +1315,12 @@ const OrderPage = () => {
                     setIsDragging(false);
                     acceptFile(event.dataTransfer.files?.[0]);
                   }}
-                  className={`flex min-h-[240px] cursor-pointer flex-col items-center justify-center rounded-lg border px-6 py-10 text-center transition-all ${
-                    selectedFile
-                      ? 'border-emerald-400 bg-emerald-500/10 shadow-[0_0_24px_rgba(16,185,129,0.25)]'
-                      : isDragging
-                        ? 'border-primary bg-primary/15 shadow-[0_0_28px_rgba(0,242,255,0.45)]'
-                        : errors.file
-                          ? 'border-red-500 bg-red-500/5 shadow-[0_0_16px_rgba(239,68,68,0.28)]'
-                          : 'border-primary/60 bg-secondary shadow-[0_0_18px_rgba(0,242,255,0.28)] hover:border-primary hover:bg-primary/10 hover:shadow-[0_0_22px_rgba(0,242,255,0.45)]'
+                  className={`flex min-h-[240px] cursor-pointer flex-col items-center justify-center rounded-lg border px-6 py-10 text-center transition-all lg:min-h-0 lg:flex-1 lg:py-4 ${
+                    selectedFile || isDragging
+                      ? 'border-emerald-400 bg-[radial-gradient(circle_at_center,rgba(16,185,129,0.18),rgba(4,14,20,0.92))] shadow-[inset_0_0_24px_rgba(16,185,129,0.12)]'
+                      : errors.file
+                        ? 'border-red-500 bg-red-500/5 shadow-[0_0_16px_rgba(239,68,68,0.28)]'
+                        : 'border-dashed border-emerald-400/40 bg-[radial-gradient(circle_at_center,rgba(16,185,129,0.09),rgba(4,11,18,0.85))] hover:border-emerald-400 hover:bg-[radial-gradient(circle_at_center,rgba(16,185,129,0.18),rgba(4,14,20,0.92))] hover:shadow-[inset_0_0_24px_rgba(16,185,129,0.12)]'
                   }`}
                 >
                   <input
@@ -1334,8 +1347,8 @@ const OrderPage = () => {
                     </>
                   ) : (
                     <>
-                      <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-primary/60 bg-primary/10 shadow-[0_0_18px_rgba(0,242,255,0.35)]">
-                        <Upload className="h-8 w-8 text-primary" />
+                      <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-emerald-400/55 bg-emerald-500/15 shadow-[0_0_18px_rgba(16,185,129,0.28)]">
+                        <Upload className="h-8 w-8 text-emerald-300" />
                       </div>
                       <p className="text-lg font-semibold">{t('fileDrop')}</p>
                       <p className="mt-1 text-sm text-muted-foreground">{t('fileBrowse')}</p>
@@ -1354,35 +1367,35 @@ const OrderPage = () => {
                 )}
               </section>
 
-              <section className={`${orderPanelGlow} p-4 md:p-5`}>
+              <section className="order-card-note shrink-0 rounded-xl p-3 md:p-4">
                 <label className="block">
-                  <span className="mb-2 block text-base font-semibold uppercase leading-5 tracking-[0.16em] text-primary">{t('note')}</span>
+                  <span className="mb-2 block text-base font-semibold uppercase leading-5 tracking-[0.16em] text-violet-300">{t('note')}</span>
                   <textarea
                     value={customerNote}
                     onChange={(event) => setCustomerNote(event.target.value)}
                     maxLength={500}
                     rows={4}
                     placeholder={t('notePlaceholder')}
-                    className={`${orderField} min-h-[120px] resize-y`}
+                    className={`${orderField} order-note-field min-h-[120px] resize-y overflow-y-auto lg:min-h-[4.75rem] lg:max-h-[5.75rem]`}
                   />
                   <span className="mt-1.5 block text-right text-[11px] text-muted-foreground">{customerNote.length}/500</span>
                 </label>
               </section>
             </div>
 
-            <aside className="sticky top-16 z-20 flex max-h-[calc(100dvh-8.25rem)] min-h-0 min-w-0 flex-col self-start lg:col-span-4">
-              <div className="order-panel flex min-h-0 w-full flex-1 flex-col border-t-2 border-t-primary">
-                <div className="flex shrink-0 items-center justify-between gap-3 border-b border-primary/15 px-4 py-3">
+            <aside className="sticky top-16 z-20 flex max-h-[calc(100dvh-8.25rem)] min-h-0 min-w-0 flex-col self-start lg:static lg:z-auto lg:h-full lg:max-h-none lg:overflow-hidden lg:self-stretch">
+              <div className="order-card-checkout flex min-h-0 w-full flex-1 flex-col rounded-xl">
+                <div className="flex shrink-0 items-center justify-between gap-3 border-b border-cyan-400/20 px-4 py-3">
                   <h2 className="text-lg font-semibold uppercase leading-tight tracking-[0.12em] text-primary">{t('servicesCheckout')}</h2>
-                  <p className="shrink-0 whitespace-nowrap text-xl font-bold leading-none tabular-nums neon-text">{formatCreditUnits(totalPrice, language)}</p>
+                  <p className="shrink-0 whitespace-nowrap text-xl font-bold leading-none tabular-nums text-emerald-300">{formatCreditUnits(totalPrice, language)}</p>
                 </div>
 
                 <div className="order-counters shrink-0 px-3 pt-3">
-                  <div className="flex min-w-0 items-center justify-between gap-2 rounded-xl border border-primary/45 bg-black/50 px-3 py-2.5 shadow-[0_0_18px_rgba(0,242,255,0.14),inset_0_1px_0_rgba(0,242,255,0.18)]">
-                    <p className="truncate text-[11px] font-semibold uppercase tracking-[0.14em] text-primary/80">{t('selected')}</p>
-                    <p className="text-2xl font-bold leading-none tabular-nums neon-text">{selectedItems.length}</p>
+                  <div className="flex min-w-0 items-center justify-between gap-2 rounded-xl border border-emerald-400/45 bg-[linear-gradient(135deg,rgba(16,185,129,0.16),rgba(34,211,238,0.1))] px-3 py-2.5 shadow-[0_0_18px_rgba(16,185,129,0.12)]">
+                    <p className="truncate text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-200/80">{t('selected')}</p>
+                    <p className="text-2xl font-bold leading-none tabular-nums text-emerald-300">{selectedItems.length}</p>
                   </div>
-                  <div className="flex min-w-0 items-center justify-between gap-2 rounded-xl border border-primary/45 bg-black/50 px-3 py-2.5 shadow-[0_0_18px_rgba(0,242,255,0.14),inset_0_1px_0_rgba(0,242,255,0.18)]">
+                  <div className="flex min-w-0 items-center justify-between gap-2 rounded-xl border border-primary/30 bg-black/50 px-3 py-2.5">
                     <p className="truncate text-[11px] font-semibold uppercase tracking-[0.14em] text-primary/80">{t('available')}</p>
                     <p className="text-2xl font-bold leading-none tabular-nums neon-text">
                       {catalogStatus === 'ready' ? catalog.filter((service) => !isLegacyStage1(service)).length : '—'}
@@ -1390,7 +1403,7 @@ const OrderPage = () => {
                   </div>
                 </div>
 
-                <div className="order-services-scroll min-h-0 max-h-[50vh] flex-1 space-y-4 overflow-y-auto px-3 py-3">
+                <div className="order-services-scroll min-h-0 max-h-[50vh] flex-1 space-y-4 overflow-y-auto px-3 py-3 lg:max-h-none">
                   {catalogStatus === 'loading' && (
                     <p className="px-1 text-sm text-muted-foreground">{t('catalogLoading')}</p>
                   )}
@@ -1400,7 +1413,7 @@ const OrderPage = () => {
                   {catalogGroups.map((group) => (
                       <div key={group.category}>
                         <div className="mb-2 flex h-[22px] items-center px-3">
-                          <h3 className="truncate text-xl font-semibold uppercase leading-[22px] tracking-[0.16em] text-primary">{group.category}</h3>
+                          <h3 className={`truncate text-xl font-semibold uppercase leading-[22px] tracking-[0.16em] ${categoryAccent(group.category)}`}>{group.category}</h3>
                         </div>
                         <div className="space-y-1.5">
                           {group.category === 'Performance' && stageGroups.map((stageGroup) => (
@@ -1428,14 +1441,14 @@ const OrderPage = () => {
                                 onClick={() => toggleService(service.id)}
                                 className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-all ${
                                   selected
-                                    ? 'border border-primary bg-primary/10 shadow-[0_0_16px_rgba(0,242,255,0.28)]'
-                                    : 'border border-primary/20 bg-black/35 hover:border-primary/55'
+                                    ? 'border border-emerald-400/60 bg-[linear-gradient(90deg,rgba(16,185,129,0.2),rgba(34,211,238,0.1))] shadow-[0_0_16px_rgba(16,185,129,0.14)]'
+                                    : 'border border-sky-400/20 bg-black/35 hover:border-cyan-400/40 hover:bg-cyan-400/10'
                                 }`}
                               >
                                 <span
                                   className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-[4px] border-2 transition-all ${
                                     selected
-                                      ? 'border-primary bg-primary text-primary-foreground shadow-[0_0_12px_rgba(0,242,255,0.65)]'
+                                      ? 'border-emerald-400 bg-emerald-500 text-white shadow-[0_0_12px_rgba(16,185,129,0.55)]'
                                       : 'border-primary/60 bg-transparent'
                                   }`}
                                 >
@@ -1447,7 +1460,7 @@ const OrderPage = () => {
                                     <span className="block truncate text-[11px] leading-tight text-muted-foreground">{service.description}</span>
                                   )}
                                 </span>
-                                <span className="shrink-0 whitespace-nowrap text-sm font-semibold tabular-nums text-primary">
+                                <span className={`shrink-0 whitespace-nowrap text-sm font-semibold tabular-nums ${selected ? 'text-emerald-300' : 'text-primary'}`}>
                                   {formatCreditUnits(service.price, language)}
                                 </span>
                               </button>
@@ -1508,7 +1521,7 @@ const OrderPage = () => {
                   </label>
                   {errors.consent && <p className="-mt-1 text-xs text-red-400">{t(errors.consent)}</p>}
 
-                  <div className="flex items-end justify-between gap-3">
+                  <div className="flex items-end justify-between gap-3 rounded-[10px] border border-cyan-400/30 bg-[linear-gradient(90deg,rgba(14,165,233,0.12),rgba(16,185,129,0.12))] px-3 py-2.5">
                     <div>
                       <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">{t('totalPrice')}</p>
                       <p className="whitespace-nowrap text-2xl font-bold tabular-nums leading-none neon-text">{formatCreditUnits(totalPrice, language)}</p>
@@ -1525,7 +1538,7 @@ const OrderPage = () => {
                     disabled={isSubmitting && !shortOnCredits}
                     aria-busy={isSubmitting && !shortOnCredits}
                     aria-label={shortOnCredits ? t('topUpCreditsAria') : t('payCreditsAria')}
-                    className="btn-primary flex min-h-[52px] w-full items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="btn-primary order-pay-btn flex min-h-[52px] w-full items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {isSubmitting && !shortOnCredits ? (
                       <>
