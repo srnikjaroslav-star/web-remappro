@@ -116,7 +116,7 @@ const fieldClass = (_filled: boolean, hasError: boolean) => {
 const categoryAccent = (category: string) => {
   if (category === 'Emission Control') return 'border-l-[3px] border-l-[#2dd4bf] pl-2 text-[#2dd4bf]';
   if (category === 'Engine Functions') return 'border-l-[3px] border-l-[#fbbf24] pl-2 text-[#fbbf24]';
-  if (category === 'Performance') return 'border-l-[3px] border-l-[#a78bfa] pl-2 text-[#a78bfa]';
+  if (category === 'Performance') return 'border-l-[3px] border-l-[#22d3ee] pl-2 text-[#6ee7b7]';
   if (category === 'Security') return 'border-l-[3px] border-l-[#e879f9] pl-2 text-[#f0abfc]';
   return 'border-l-[3px] border-l-primary pl-2 text-primary';
 };
@@ -1416,19 +1416,21 @@ const OrderPage = () => {
                           <h3 className={`truncate text-xl font-semibold uppercase leading-[22px] tracking-[0.16em] ${categoryAccent(group.category)}`}>{group.category}</h3>
                         </div>
                         <div className="space-y-1.5">
-                          {group.category === 'Performance' && stageGroups.map((stageGroup) => (
-                            <div key={stageGroup.id} className="min-w-0 rounded-xl border border-primary/20 bg-black/35 px-2.5 py-1">
-                              <span className="block truncate text-[11px] font-semibold uppercase tracking-wide text-foreground">{stageGroup.label}</span>
-                              <div className="mt-0.5">
-                                <StageYearSelect
-                                  label={stageGroup.label}
-                                  value={stageGroupSelection(stageGroup, services)}
-                                  options={stageGroup.options}
-                                  onChange={(optionId) => selectStage(stageGroup.id, optionId)}
-                                />
-                              </div>
+                          {group.category === 'Performance' && stageGroups.map((stageGroup) => {
+                            const tone = stageGroup.id === 'stage1-petrol' ? 'petrol' : 'diesel';
+                            return (
+                            <div key={stageGroup.id} className={`stage-year-card tone-${tone}`}>
+                              <span className="stage-year-label">{stageGroup.label}</span>
+                              <StageYearSelect
+                                tone={tone}
+                                label={stageGroup.label}
+                                value={stageGroupSelection(stageGroup, services)}
+                                options={stageGroup.options}
+                                onChange={(optionId) => selectStage(stageGroup.id, optionId)}
+                              />
                             </div>
-                          ))}
+                            );
+                          })}
                           {group.items.filter((service) => !isLegacyStage1(service) && !isStageDropdownService(service)).map((service) => {
                             const selected = services.includes(service.id);
                             return (

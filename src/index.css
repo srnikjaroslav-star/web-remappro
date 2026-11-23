@@ -663,6 +663,186 @@
     box-shadow: 0 0 28px rgba(16, 185, 129, 0.38);
     transform: translateY(-1px);
   }
+
+  .stage-year-card {
+    width: 100%;
+    min-width: 0;
+    border-radius: 12px;
+    padding: 8px 10px 10px;
+  }
+
+  .stage-year-card.tone-diesel {
+    border: 1px solid rgba(34, 211, 238, 0.42);
+    background: linear-gradient(135deg, rgba(14, 165, 233, 0.14), rgba(6, 18, 28, 0.92));
+    box-shadow: 0 0 16px rgba(34, 211, 238, 0.1);
+  }
+
+  .stage-year-card.tone-petrol {
+    border: 1px solid rgba(251, 191, 36, 0.42);
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.14), rgba(18, 12, 6, 0.92));
+    box-shadow: 0 0 16px rgba(251, 191, 36, 0.1);
+  }
+
+  .stage-year-label {
+    display: block;
+    margin-bottom: 6px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .stage-year-card.tone-diesel .stage-year-label {
+    color: #67e8f9;
+  }
+
+  .stage-year-card.tone-petrol .stage-year-label {
+    color: #fcd34d;
+  }
+
+  .stage-year-trigger {
+    display: flex;
+    height: 44px;
+    width: 100%;
+    min-width: 0;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    border-radius: 10px;
+    padding: 0 12px;
+    text-align: left;
+    font-size: 14px;
+    font-weight: 600;
+    outline: none;
+  }
+
+  .stage-year-trigger:focus-visible {
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.16);
+  }
+
+  .stage-year-trigger.tone-diesel {
+    border: 1px solid rgba(34, 211, 238, 0.72);
+    background: rgba(8, 40, 58, 0.72);
+    color: #ecfeff;
+    box-shadow: 0 0 14px rgba(34, 211, 238, 0.2);
+  }
+
+  .stage-year-trigger.tone-diesel:focus-visible {
+    box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.28), 0 0 14px rgba(34, 211, 238, 0.2);
+  }
+
+  .stage-year-trigger.tone-petrol {
+    border: 1px solid rgba(251, 191, 36, 0.72);
+    background: rgba(58, 32, 8, 0.72);
+    color: #fffbeb;
+    box-shadow: 0 0 14px rgba(251, 191, 36, 0.18);
+  }
+
+  .stage-year-trigger.tone-petrol:focus-visible {
+    box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.28), 0 0 14px rgba(251, 191, 36, 0.18);
+  }
+
+  .stage-year-trigger.is-empty {
+    color: #cbd5e1;
+  }
+
+  .stage-year-trigger-price {
+    flex-shrink: 0;
+    font-size: 14px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .stage-year-trigger.tone-diesel .stage-year-trigger-price {
+    color: #67e8f9;
+  }
+
+  .stage-year-trigger.tone-petrol .stage-year-trigger-price {
+    color: #fcd34d;
+  }
+
+  .stage-year-menu {
+    position: fixed;
+    z-index: 120;
+    overflow-x: hidden;
+    overflow-y: auto;
+    border-radius: 10px;
+    padding: 4px;
+    background: rgba(5, 12, 20, 0.98);
+  }
+
+  .stage-year-menu.tone-diesel {
+    border: 1px solid rgba(34, 211, 238, 0.55);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45), 0 0 18px rgba(34, 211, 238, 0.2);
+  }
+
+  .stage-year-menu.tone-petrol {
+    border: 1px solid rgba(251, 191, 36, 0.55);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45), 0 0 18px rgba(251, 191, 36, 0.18);
+  }
+
+  .stage-year-option {
+    display: flex;
+    width: 100%;
+    min-height: 40px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border-radius: 8px;
+    padding: 8px 10px;
+    text-align: left;
+    font-size: 14px;
+    font-weight: 600;
+    color: #e2e8f0;
+    background: transparent;
+    outline: none;
+  }
+
+  .stage-year-option-price {
+    flex-shrink: 0;
+    font-size: 14px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .stage-year-menu.tone-diesel .stage-year-option:hover,
+  .stage-year-menu.tone-diesel .stage-year-option:focus-visible {
+    background: rgba(34, 211, 238, 0.24);
+    color: #ffffff;
+    box-shadow: inset 3px 0 0 #22d3ee;
+  }
+
+  .stage-year-menu.tone-diesel .stage-year-option.is-selected {
+    background: linear-gradient(90deg, rgba(14, 165, 233, 0.34), rgba(16, 185, 129, 0.16));
+    color: #ffffff;
+    box-shadow: inset 3px 0 0 #22d3ee;
+  }
+
+  .stage-year-menu.tone-diesel .stage-year-option-price {
+    color: #67e8f9;
+  }
+
+  .stage-year-menu.tone-petrol .stage-year-option:hover,
+  .stage-year-menu.tone-petrol .stage-year-option:focus-visible {
+    background: rgba(251, 191, 36, 0.24);
+    color: #fffbeb;
+    box-shadow: inset 3px 0 0 #fbbf24;
+  }
+
+  .stage-year-menu.tone-petrol .stage-year-option.is-selected {
+    background: linear-gradient(90deg, rgba(245, 158, 11, 0.34), rgba(251, 191, 36, 0.12));
+    color: #fffbeb;
+    box-shadow: inset 3px 0 0 #fbbf24;
+  }
+
+  .stage-year-menu.tone-petrol .stage-year-option-price {
+    color: #fcd34d;
+  }
 }
 
 @layer utilities {

@@ -5,17 +5,20 @@ import { useLanguage } from '@/i18n/LanguageContext';
 import { formatCreditUnits } from '@/lib/creditUnits';
 import { type StageOption } from '@/lib/stageOptions';
 
+type StageTone = 'diesel' | 'petrol';
+
 type StageYearSelectProps = {
   label: string;
   value: string;
   options: StageOption[];
   onChange: (id: string) => void;
+  tone?: StageTone;
 };
 
-const StageYearSelect = ({ label, value, options, onChange }: StageYearSelectProps) => {
+const StageYearSelect = ({ label, value, options, onChange, tone = 'diesel' }: StageYearSelectProps) => {
   const { language } = useLanguage();
   const [open, setOpen] = useState(false);
-  const [menu, setMenu] = useState({ top: 0, left: 0, width: 0 });
+  const [menu, setMenu] = useState({ top: 0, left: 0, width: 0, maxHeight: 280 });
   const rootRef = useRef<HTMLDivElement>(null);
   const chosen = options.find((option) => option.id === value);
 
@@ -71,12 +74,17 @@ const StageYearSelect = ({ label, value, options, onChange }: StageYearSelectPro
     }
     const rect = rootRef.current?.getBoundingClientRect();
     if (!rect) return;
-    const menuHeight = Math.min(208, (options.length + 1) * 30);
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const top = spaceBelow < menuHeight && rect.top > spaceBelow
-      ? Math.max(8, rect.top - menuHeight - 4)
-      : rect.bottom + 4;
-    setMenu({ top, left: rect.left, width: Math.max(rect.width, 280) });
+    const row = 44;
+    const wanted = (options.length + 1) * row + 10;
+    const spaceBelow = window.innerHeight - rect.bottom - 8;
+    const spaceAbove = rect.top - 8;
+    const openUp = spaceBelow < wanted && spaceAbove > spaceBelow;
+    const available = Math.max(row + 10, openUp ? spaceAbove : spaceBelow);
+    const maxHeight = Math.min(wanted, available);
+    const width = rect.width;
+    const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
+    const top = openUp ? Math.max(8, rect.top - maxHeight - 4) : rect.bottom + 4;
+    setMenu({ top, left, width, maxHeight });
     setOpen(true);
   };
 
@@ -86,27 +94,28 @@ const StageYearSelect = ({ label, value, options, onChange }: StageYearSelectPro
   };
 
   return (
-    <div ref={rootRef} className="min-w-0">
+    <div ref={rootRef} className="w-full min-w-0">
       <button
         type="button"
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={label}
         onClick={toggle}
-        className={`flex h-7 w-full min-w-0 items-center justify-between gap-2 rounded-md border border-primary bg-primary/25 px-2 text-left text-xs outline-none shadow-[0_0_18px_rgba(0,242,255,0.55)] ${
-          chosen ? 'text-foreground' : 'text-muted-foreground'
-        }`}
+        className={`stage-year-trigger tone-${tone}${chosen ? '' : ' is-empty'}`}
       >
-        <span className="truncate whitespace-nowrap">{chosen ? `${chosen.years} – ${formatCreditUnits(chosen.price, language)}` : '—'}</span>
-        <ChevronDown className="h-3.5 w-3.5 shrink-0 text-primary" />
+        <span className="min-w-0 flex-1 truncate">{chosen ? chosen.years : '—'}</span>
+        {chosen && (
+          <span className="stage-year-trigger-price">{formatCreditUnits(chosen.price, language)}</span>
+        )}
+        <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && createPortal(
         <ul
           data-stage-menu
           role="listbox"
           aria-label={label}
-          style={{ top: menu.top, left: menu.left, width: menu.width }}
-          className="fixed z-[120] max-h-52 overflow-auto rounded-md border border-primary bg-background py-1 shadow-[0_0_18px_rgba(0,242,255,0.55)]"
+          style={{ top: menu.top, left: menu.left, width: menu.width, maxHeight: menu.maxHeight }}
+          className={`stage-year-menu tone-${tone}`}
         >
           <li>
             <button
@@ -114,9 +123,9 @@ const StageYearSelect = ({ label, value, options, onChange }: StageYearSelectPro
               role="option"
               aria-selected={!chosen}
               onClick={() => choose('')}
-              className="block w-full px-2 py-1.5 text-left text-xs text-muted-foreground hover:bg-primary/10 hover:text-foreground"
+              className={`stage-year-option${!chosen ? ' is-selected' : ''}`}
             >
-              —
+              <span>—</span>
             </button>
           </li>
           {options.map((option) => {
@@ -128,11 +137,10 @@ const StageYearSelect = ({ label, value, options, onChange }: StageYearSelectPro
                   role="option"
                   aria-selected={active}
                   onClick={() => choose(option.id)}
-                  className={`block w-full whitespace-nowrap px-2 py-1.5 text-left text-xs text-foreground hover:bg-primary/10 ${
-                    active ? 'bg-primary/10' : ''
-                  }`}
+                  className={`stage-year-option${active ? ' is-selected' : ''}`}
                 >
-                  {`${option.years} – ${formatCreditUnits(option.price, language)}`}
+                  <span className="min-w-0 truncate">{option.years}</span>
+                  <span className="stage-year-option-price">{formatCreditUnits(option.price, language)}</span>
                 </button>
               </li>
             );
