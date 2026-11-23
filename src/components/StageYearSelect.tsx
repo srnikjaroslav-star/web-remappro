@@ -16,7 +16,7 @@ type StageYearSelectProps = {
 };
 
 const StageYearSelect = ({ label, value, options, onChange, tone = 'diesel' }: StageYearSelectProps) => {
-  const { language } = useLanguage();
+  const { language, t } = useLanguage();
   const [open, setOpen] = useState(false);
   const [menu, setMenu] = useState({ top: 0, left: 0, width: 0, maxHeight: 280 });
   const rootRef = useRef<HTMLDivElement>(null);
@@ -103,7 +103,7 @@ const StageYearSelect = ({ label, value, options, onChange, tone = 'diesel' }: S
         onClick={toggle}
         className={`stage-year-trigger tone-${tone}${chosen ? '' : ' is-empty'}`}
       >
-        <span className="min-w-0 flex-1 truncate">{chosen ? chosen.years : '—'}</span>
+        <span className="min-w-0 flex-1 truncate">{chosen ? chosen.years : t('stageYearPlaceholder')}</span>
         {chosen && (
           <span className="stage-year-trigger-price">{formatCreditUnits(chosen.price, language)}</span>
         )}
@@ -125,7 +125,7 @@ const StageYearSelect = ({ label, value, options, onChange, tone = 'diesel' }: S
               onClick={() => choose('')}
               className={`stage-year-option${!chosen ? ' is-selected' : ''}`}
             >
-              <span>—</span>
+              <span className="min-w-0 truncate">{t('stageYearClear')}</span>
             </button>
           </li>
           {options.map((option) => {
