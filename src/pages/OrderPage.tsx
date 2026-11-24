@@ -1281,7 +1281,7 @@ const OrderPage = () => {
                     <h2 className="text-base font-semibold uppercase leading-5 tracking-[0.16em] text-emerald-300">{t('ecuFile')}</h2>
                   </div>
                   <div className="flex gap-1.5">
-                    {['.BIN', '.ORI', '.MOD', '.ECU'].map((extension) => (
+                    {['.BIN', '.ORI', '.MOD'].map((extension) => (
                       <span key={extension} className="order-ext-badge rounded-[5px] px-[7px] py-0.5 text-[11px] font-bold tracking-wide">
                         {extension}
                       </span>
@@ -1395,13 +1395,13 @@ const OrderPage = () => {
                 </div>
 
                 <div className="order-counters shrink-0 px-3 pt-3">
-                  <div className="flex min-w-0 items-center justify-between gap-2 rounded-xl border border-emerald-400/45 bg-[linear-gradient(135deg,rgba(16,185,129,0.16),rgba(34,211,238,0.1))] px-3 py-2.5 shadow-[0_0_18px_rgba(16,185,129,0.12)]">
-                    <p className="truncate text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-200/80">{t('selected')}</p>
-                    <p className="text-2xl font-bold leading-none tabular-nums text-emerald-300">{selectedItems.length}</p>
+                  <div className="flex min-w-0 items-center justify-between gap-2 rounded-xl border border-emerald-400 bg-[linear-gradient(145deg,rgba(16,185,129,0.34),rgba(4,32,24,0.9))] px-3.5 py-3 shadow-[0_0_24px_rgba(16,185,129,0.42),inset_0_0_18px_rgba(52,211,153,0.18)]">
+                    <p className="min-w-0 text-base font-semibold leading-tight text-emerald-100 [text-shadow:0_0_12px_rgba(16,185,129,0.65)]">{t('selected')}</p>
+                    <p className="shrink-0 text-4xl font-bold leading-none tabular-nums text-emerald-300 [text-shadow:0_0_14px_rgba(16,185,129,0.7)]">{selectedItems.length}</p>
                   </div>
-                  <div className="flex min-w-0 items-center justify-between gap-2 rounded-xl border border-primary/30 bg-black/50 px-3 py-2.5">
-                    <p className="truncate text-[11px] font-semibold uppercase tracking-[0.14em] text-primary/80">{t('available')}</p>
-                    <p className="text-2xl font-bold leading-none tabular-nums neon-text">
+                  <div className="flex min-w-0 items-center justify-between gap-2 rounded-xl border border-cyan-400 bg-[linear-gradient(145deg,rgba(34,211,238,0.3),rgba(6,24,44,0.9))] px-3.5 py-3 shadow-[0_0_24px_rgba(34,211,238,0.42),inset_0_0_18px_rgba(34,211,238,0.16)]">
+                    <p className="min-w-0 text-base font-semibold leading-tight text-cyan-100 [text-shadow:0_0_12px_rgba(34,211,238,0.65)]">{t('available')}</p>
+                    <p className="shrink-0 text-4xl font-bold leading-none tabular-nums text-cyan-300 [text-shadow:0_0_14px_rgba(34,211,238,0.7)]">
                       {catalogStatus === 'ready' ? catalog.filter((service) => !isLegacyStage1(service)).length : '—'}
                     </p>
                   </div>
