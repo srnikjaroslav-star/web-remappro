@@ -833,23 +833,30 @@ const OrderPage = () => {
     clearServiceError();
   };
 
-  const acceptFile = (file: File | undefined) => {
-    if (!file) return;
-    const name = file.name.toLowerCase();
-    const allowed = ACCEPTED_EXTENSIONS.some((extension) => name.endsWith(extension));
-    if (!allowed) {
-      setErrors((current) => ({ ...current, file: 'errorFileType' }));
-      toast.error(t('toastBadFile'));
-      return;
-    }
-    setSelectedFile(file);
-    setPendingFile(null);
+  const clearFileError = () => {
     setErrors((current) => {
       if (!current.file) return current;
       const next = { ...current };
       delete next.file;
       return next;
     });
+  };
+
+  const acceptFile = (file: File | undefined) => {
+    if (!file) return;
+    const name = file.name.toLowerCase();
+    const allowed = ACCEPTED_EXTENSIONS.some((extension) => name.endsWith(extension));
+    if (!allowed) {
+      setSelectedFile(null);
+      setPendingFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      setErrors((current) => ({ ...current, file: 'errorFileType' }));
+      toast.error(t('toastBadFile'));
+      return;
+    }
+    setSelectedFile(file);
+    setPendingFile(null);
+    clearFileError();
   };
 
   const orderEmail = (source: ClientBilling) => {
@@ -1496,6 +1503,8 @@ const OrderPage = () => {
                     onClick={() => {
                       setSelectedFile(null);
                       setPendingFile(null);
+                      clearFileError();
+                      if (fileInputRef.current) fileInputRef.current.value = '';
                     }}
                     className="mt-3 inline-flex w-fit items-center gap-1.5 self-start rounded-md border border-[rgba(239,68,68,0.35)] bg-[rgba(239,68,68,0.12)] px-3 py-1.5 text-xs font-medium normal-case text-[#f87171] shadow-[0_0_10px_rgba(239,68,68,0.18)] hover:border-[rgba(239,68,68,0.65)] hover:bg-[rgba(239,68,68,0.22)] hover:shadow-[0_0_14px_rgba(239,68,68,0.35)]"
                   >
