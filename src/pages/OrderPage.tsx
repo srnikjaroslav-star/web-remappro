@@ -1497,9 +1497,9 @@ const OrderPage = () => {
                       setSelectedFile(null);
                       setPendingFile(null);
                     }}
-                    className="mt-3 inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                    className="mt-3 inline-flex w-fit items-center gap-1.5 self-start rounded-md border border-[rgba(239,68,68,0.35)] bg-[rgba(239,68,68,0.12)] px-3 py-1.5 text-xs font-medium normal-case text-[#f87171] shadow-[0_0_10px_rgba(239,68,68,0.18)] hover:border-[rgba(239,68,68,0.65)] hover:bg-[rgba(239,68,68,0.22)] hover:shadow-[0_0_14px_rgba(239,68,68,0.35)]"
                   >
-                    <X className="h-3.5 w-3.5" /> {t('fileRemove')}
+                    {t('fileRemove')}
                   </button>
                 )}
               </section>
