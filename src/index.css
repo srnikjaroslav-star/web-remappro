@@ -1343,3 +1343,87 @@
   background-color: rgba(10, 12, 14, 0.92) !important;
   box-shadow: 0 0 20px rgba(0, 229, 255, 0.42), inset 0 0 14px rgba(0, 229, 255, 0.16) !important;
 }
+
+.service-category-box {
+  border: 1px solid hsl(var(--primary) / 0.7);
+  background-color: #0a192f;
+  box-shadow: 0 0 16px rgba(0, 242, 255, 0.28);
+  color: #fafafa;
+}
+
+.service-category-box:focus {
+  outline: none;
+}
+
+.service-category-box.tone-emission {
+  border-color: #22d3ee;
+  background-color: rgba(8, 36, 48, 0.88);
+  box-shadow: 0 0 14px rgba(34, 211, 238, 0.28);
+  color: #38bdf8;
+}
+
+.service-category-box.tone-engine {
+  border-color: #a3e635;
+  background-color: rgba(24, 38, 10, 0.88);
+  box-shadow: 0 0 14px rgba(163, 230, 53, 0.26);
+  color: #a3e635;
+}
+
+.service-category-box.tone-performance {
+  border-color: #fb923c;
+  background-color: rgba(42, 20, 8, 0.88);
+  box-shadow: 0 0 14px rgba(251, 146, 60, 0.28);
+  color: #f59e0b;
+}
+
+.service-category-box.tone-security {
+  border-color: #e879f9;
+  background-color: rgba(38, 10, 44, 0.88);
+  box-shadow: 0 0 14px rgba(232, 121, 249, 0.28);
+  color: #c084fc;
+}
+
+.service-category-list {
+  border-radius: 4px;
+  background: #050608;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.85);
+}
+
+.service-category-item {
+  padding: 8px 12px;
+  color: var(--txt, #fafafa);
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.service-category-item.tone-emission {
+  --txt: #38bdf8;
+  --bar-bg: rgba(14, 116, 144, 0.28);
+}
+
+.service-category-item.tone-engine {
+  --txt: #a3e635;
+  --bar-bg: rgba(77, 124, 15, 0.28);
+}
+
+.service-category-item.tone-performance {
+  --txt: #f59e0b;
+  --bar-bg: rgba(120, 53, 15, 0.34);
+}
+
+.service-category-item.tone-security {
+  --txt: #c084fc;
+  --bar-bg: rgba(107, 33, 168, 0.28);
+}
+
+.service-category-item:hover,
+.service-category-item:focus,
+.service-category-item.is-selected {
+  background: var(--bar-bg);
+  color: var(--txt, #fafafa);
+  text-shadow: none;
+  outline: none;
+}

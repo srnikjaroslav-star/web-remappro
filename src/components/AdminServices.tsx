@@ -53,6 +53,81 @@ const categoryLabel = (category: string, translate: (key: 'catEmission' | 'catEn
   return category;
 };
 
+const categoryToneClass = (category: string) => {
+  if (category === 'Emission Control') return 'tone-emission';
+  if (category === 'Engine Functions') return 'tone-engine';
+  if (category === 'Performance') return 'tone-performance';
+  if (category === 'Security') return 'tone-security';
+  return '';
+};
+
+const CategorySelect = ({
+  value,
+  categories,
+  onChange,
+}: {
+  value: string;
+  categories: string[];
+  onChange: (category: string) => void;
+}) => {
+  const { t } = useLanguage();
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: MouseEvent) => {
+      const target = event.target;
+      if (target instanceof Node && rootRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+    document.addEventListener('mousedown', close, true);
+    return () => document.removeEventListener('mousedown', close, true);
+  }, [open]);
+
+  return (
+    <div
+      ref={rootRef}
+      className="relative"
+      onKeyDown={(event) => {
+        if (event.key !== 'Escape' || !open) return;
+        event.stopPropagation();
+        setOpen(false);
+      }}
+    >
+      <button
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+        className={`service-category-box ${categoryToneClass(value)} flex h-11 w-full items-center justify-between rounded-md px-3 text-left text-sm font-normal`}
+      >
+        <span className="truncate">{categoryLabel(value, t)}</span>
+        <ChevronDown className="h-4 w-4 shrink-0" />
+      </button>
+      {open ? (
+        <div role="listbox" className="service-category-list absolute left-0 right-0 top-[calc(100%+2px)] z-30 overflow-hidden">
+          {categories.map((category) => (
+            <button
+              key={category}
+              type="button"
+              role="option"
+              aria-selected={category === value}
+              onClick={() => {
+                onChange(category);
+                setOpen(false);
+              }}
+              className={`service-category-item ${categoryToneClass(category)} block w-full text-left text-sm font-normal ${category === value ? 'is-selected' : ''}`}
+            >
+              {categoryLabel(category, t)}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
 const AdminServices = () => {
   const { language, t } = useLanguage();
   const knownCatalog = peekServiceCatalog();
@@ -237,13 +312,7 @@ const AdminServices = () => {
               </label>
               <label className="block">
                 <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Kategória</span>
-                <select value={draft.category} onChange={(event) => setDraft((current) => ({ ...current, category: event.target.value }))} className={`${fieldClass.replace(' text-foreground', '')} ${categoryTextClass(draft.category)}`}>
-                  {categories.map((category) => (
-                    <option key={category} value={category} className="bg-[#050505]" style={{ color: categoryTone[category]?.color ?? '#fafafa' }}>
-                      {categoryLabel(category, t)}
-                    </option>
-                  ))}
-                </select>
+                <CategorySelect value={draft.category} categories={categories} onChange={(category) => setDraft((current) => ({ ...current, category }))} />
               </label>
               <label className="block">
                 <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Cena v kreditoch</span>
@@ -284,13 +353,7 @@ const AdminServices = () => {
               </label>
               <label className="block">
                 <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Kategória</span>
-                <select value={editDraft.category} onChange={(event) => setEditDraft((current) => ({ ...current, category: event.target.value }))} className={`${fieldClass.replace(' text-foreground', '')} ${categoryTextClass(editDraft.category)}`}>
-                  {categories.map((category) => (
-                    <option key={category} value={category} className="bg-[#050505]" style={{ color: categoryTone[category]?.color ?? '#fafafa' }}>
-                      {categoryLabel(category, t)}
-                    </option>
-                  ))}
-                </select>
+                <CategorySelect value={editDraft.category} categories={categories} onChange={(category) => setEditDraft((current) => ({ ...current, category }))} />
               </label>
               <label className="block">
                 <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Cena v kreditoch</span>
