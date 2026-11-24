@@ -1319,12 +1319,12 @@ const OrderPage = () => {
                     setIsDragging(false);
                     acceptFile(event.dataTransfer.files?.[0]);
                   }}
-                  className={`flex min-h-[240px] cursor-pointer flex-col items-center justify-center rounded-lg border px-6 py-10 text-center transition-all lg:min-h-0 lg:flex-1 lg:py-4 ${
+                  className={`group flex min-h-[240px] cursor-pointer flex-col items-center justify-center rounded-lg border px-6 py-10 text-center transition-all lg:min-h-0 lg:flex-1 lg:py-4 ${
                     selectedFile || isDragging
-                      ? 'border-emerald-400 bg-[radial-gradient(circle_at_center,rgba(16,185,129,0.18),rgba(4,14,20,0.92))] shadow-[inset_0_0_24px_rgba(16,185,129,0.12)]'
+                      ? 'border-solid border-[rgba(16,185,129,0.65)] bg-[radial-gradient(circle_at_center,rgba(16,185,129,0.18),rgba(5,36,28,0.76))] shadow-[0_0_20px_rgba(16,185,129,0.2),inset_0_0_24px_rgba(16,185,129,0.15)] hover:border-[#10b981] hover:bg-[radial-gradient(circle_at_center,rgba(16,185,129,0.28),rgba(5,46,36,0.82))] hover:shadow-[0_0_28px_rgba(16,185,129,0.36),inset_0_0_30px_rgba(16,185,129,0.22)]'
                       : errors.file
-                        ? 'border-red-500 bg-red-500/5 shadow-[0_0_16px_rgba(239,68,68,0.28)]'
-                        : 'border-dashed border-emerald-400/40 bg-[radial-gradient(circle_at_center,rgba(16,185,129,0.09),rgba(4,11,18,0.85))] hover:border-emerald-400 hover:bg-[radial-gradient(circle_at_center,rgba(16,185,129,0.18),rgba(4,14,20,0.92))] hover:shadow-[inset_0_0_24px_rgba(16,185,129,0.12)]'
+                        ? 'border-solid border-[rgba(239,68,68,0.65)] bg-[radial-gradient(circle_at_center,rgba(239,68,68,0.18),rgba(45,10,14,0.76))] shadow-[0_0_20px_rgba(239,68,68,0.2),inset_0_0_24px_rgba(239,68,68,0.15)] hover:border-[#ef4444] hover:bg-[radial-gradient(circle_at_center,rgba(239,68,68,0.28),rgba(62,12,18,0.82))] hover:shadow-[0_0_28px_rgba(239,68,68,0.36),inset_0_0_30px_rgba(239,68,68,0.22)]'
+                        : 'border-dashed border-[rgba(0,229,255,0.55)] bg-[radial-gradient(circle_at_center,rgba(0,229,255,0.15),rgba(4,20,34,0.76))] shadow-[0_0_18px_rgba(0,229,255,0.18),inset_0_0_20px_rgba(0,229,255,0.11)] hover:border-solid hover:border-[#00e5ff] hover:bg-[radial-gradient(circle_at_center,rgba(0,229,255,0.24),rgba(5,28,46,0.82))] hover:shadow-[0_0_26px_rgba(0,229,255,0.34),inset_0_0_28px_rgba(0,229,255,0.18)]'
                   }`}
                 >
                   <input
@@ -1351,10 +1351,24 @@ const OrderPage = () => {
                     </>
                   ) : (
                     <>
-                      <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-emerald-400/55 bg-emerald-500/15 shadow-[0_0_18px_rgba(16,185,129,0.28)]">
-                        <Upload className="h-8 w-8 text-emerald-300" />
+                      <div className={`mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border transition-all ${
+                        isDragging
+                          ? 'border-[rgba(16,185,129,0.55)] bg-[rgba(16,185,129,0.18)] shadow-[0_0_14px_rgba(16,185,129,0.25)] group-hover:border-[#10b981] group-hover:bg-[rgba(16,185,129,0.28)] group-hover:shadow-[0_0_22px_rgba(16,185,129,0.48)]'
+                          : errors.file
+                            ? 'border-[rgba(239,68,68,0.55)] bg-[rgba(239,68,68,0.18)] shadow-[0_0_14px_rgba(239,68,68,0.25)] group-hover:border-[#ef4444] group-hover:bg-[rgba(239,68,68,0.28)] group-hover:shadow-[0_0_22px_rgba(239,68,68,0.48)]'
+                            : 'border-[rgba(0,229,255,0.5)] bg-[rgba(0,229,255,0.14)] shadow-[0_0_14px_rgba(0,229,255,0.22)] group-hover:border-[#00e5ff] group-hover:bg-[rgba(0,229,255,0.24)] group-hover:shadow-[0_0_20px_rgba(0,229,255,0.45)]'
+                      }`}>
+                        <Upload className={`h-8 w-8 ${
+                          isDragging
+                            ? 'text-[#a7f3d0] group-hover:text-[#d1fae5]'
+                            : errors.file
+                              ? 'text-[#fecaca] group-hover:text-[#fee2e2]'
+                              : 'text-[#67e8f9] group-hover:text-[#e0f2fe]'
+                        }`} />
                       </div>
-                      <p className="text-lg font-semibold">{t('fileDrop')}</p>
+                      <p className={`text-lg font-semibold ${
+                        isDragging ? 'text-[#d1fae5]' : errors.file ? 'text-[#fee2e2]' : ''
+                      }`}>{t('fileDrop')}</p>
                       <p className="mt-1 text-sm text-muted-foreground">{t('fileBrowse')}</p>
                     </>
                   )}
