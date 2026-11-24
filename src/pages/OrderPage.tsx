@@ -148,6 +148,103 @@ const formatSize = (bytes: number) => {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
+const EMPTY_VEHICLE: VehicleData = {
+  brand: '',
+  model: '',
+  engine: '',
+  fuelType: '',
+  year: 0,
+  ecuType: '',
+};
+
+const ORDER_DRAFT_KEY = 'remappro-order-draft';
+
+interface OrderDraftFile {
+  name: string;
+  size: number;
+}
+
+interface OrderDraft {
+  vehicle: VehicleData;
+  services: string[];
+  customerNote: string;
+  file: OrderDraftFile | null;
+}
+
+const vehicleFromDraft = (value: unknown): VehicleData => {
+  if (!value || typeof value !== 'object') return { ...EMPTY_VEHICLE };
+  const source = value as Record<string, unknown>;
+  const year = typeof source.year === 'number' && Number.isFinite(source.year) ? source.year : 0;
+  return {
+    brand: typeof source.brand === 'string' ? source.brand : '',
+    model: typeof source.model === 'string' ? source.model : '',
+    engine: typeof source.engine === 'string' ? source.engine : '',
+    fuelType: typeof source.fuelType === 'string' ? source.fuelType : '',
+    year,
+    ecuType: typeof source.ecuType === 'string' ? source.ecuType : '',
+  };
+};
+
+const fileFromDraft = (value: unknown): OrderDraftFile | null => {
+  if (!value || typeof value !== 'object') return null;
+  const source = value as Record<string, unknown>;
+  if (typeof source.name !== 'string' || !source.name.trim()) return null;
+  if (typeof source.size !== 'number' || !Number.isFinite(source.size) || source.size < 0) return null;
+  return { name: source.name.slice(0, 260), size: source.size };
+};
+
+const readOrderDraft = (): OrderDraft | null => {
+  try {
+    const raw = sessionStorage.getItem(ORDER_DRAFT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object') return null;
+    const source = parsed as Record<string, unknown>;
+    const services = Array.isArray(source.services)
+      ? source.services.filter((id): id is string => typeof id === 'string' && id.trim().length > 0).slice(0, 100)
+      : [];
+    return {
+      vehicle: vehicleFromDraft(source.vehicle),
+      services,
+      customerNote: typeof source.customerNote === 'string' ? source.customerNote.slice(0, 500) : '',
+      file: fileFromDraft(source.file),
+    };
+  } catch {
+    return null;
+  }
+};
+
+const writeOrderDraft = (draft: OrderDraft) => {
+  try {
+    sessionStorage.setItem(ORDER_DRAFT_KEY, JSON.stringify(draft));
+  } catch {
+    // Storage can be blocked; the form still works for this visit.
+  }
+};
+
+const clearOrderDraft = () => {
+  try {
+    sessionStorage.removeItem(ORDER_DRAFT_KEY);
+  } catch {
+    // Storage can be blocked; nothing else depends on the delete.
+  }
+};
+
+const isBlankDraft = (draft: OrderDraft) => {
+  const { vehicle } = draft;
+  return (
+    !vehicle.brand.trim() &&
+    !vehicle.model.trim() &&
+    !vehicle.engine.trim() &&
+    !vehicle.ecuType.trim() &&
+    !vehicle.fuelType.trim() &&
+    !(vehicle.year > 0) &&
+    draft.services.length === 0 &&
+    !draft.customerNote.trim() &&
+    !draft.file
+  );
+};
+
 const OrderPage = () => {
   const { language, setLanguage, t } = useLanguage();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -212,23 +309,24 @@ const OrderPage = () => {
   const [loginBusy, setLoginBusy] = useState(false);
   const [legalConsentAgreed, setLegalConsentAgreed] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>({});
-  const [vehicle, setVehicle] = useState<VehicleData>({
-    brand: '',
-    model: '',
-    engine: '',
-    fuelType: '',
-    year: 0,
-    ecuType: '',
-  });
-  const [services, setServices] = useState<string[]>([]);
+  const [vehicle, setVehicle] = useState<VehicleData>(() => readOrderDraft()?.vehicle ?? { ...EMPTY_VEHICLE });
+  const [services, setServices] = useState<string[]>(() => readOrderDraft()?.services ?? []);
   const knownCatalog = peekServiceCatalog();
   const [catalog, setCatalog] = useState<CatalogService[]>(knownCatalog ?? []);
   const [catalogStatus, setCatalogStatus] = useState<'loading' | 'ready' | 'error'>(knownCatalog ? 'ready' : 'loading');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [customerNote, setCustomerNote] = useState('');
+  const [pendingFile, setPendingFile] = useState<OrderDraftFile | null>(() => readOrderDraft()?.file ?? null);
+  const [customerNote, setCustomerNote] = useState(() => readOrderDraft()?.customerNote ?? '');
 
   const dragDepth = useRef(0);
   const profileRequest = useRef(0);
+
+  useEffect(() => {
+    const file = selectedFile ? { name: selectedFile.name, size: selectedFile.size } : pendingFile;
+    const draft: OrderDraft = { vehicle, services, customerNote, file };
+    if (isBlankDraft(draft)) clearOrderDraft();
+    else writeOrderDraft(draft);
+  }, [vehicle, services, customerNote, selectedFile, pendingFile]);
 
   useEffect(() => {
     if (portalView !== 'new') return;
@@ -737,6 +835,7 @@ const OrderPage = () => {
       return;
     }
     setSelectedFile(file);
+    setPendingFile(null);
     setErrors((current) => {
       if (!current.file) return current;
       const next = { ...current };
@@ -778,9 +877,11 @@ const OrderPage = () => {
     .join('\n');
 
   const resetOrderDraft = () => {
-    setVehicle({ brand: '', model: '', engine: '', fuelType: '', year: 0, ecuType: '' });
+    clearOrderDraft();
+    setVehicle({ ...EMPTY_VEHICLE });
     setServices([]);
     setSelectedFile(null);
+    setPendingFile(null);
     setCustomerNote('');
     setErrors({});
     setLegalConsentAgreed(false);
@@ -1373,11 +1474,19 @@ const OrderPage = () => {
                     </>
                   )}
                 </div>
+                {!selectedFile && pendingFile && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {t('draftFileAgain', { name: pendingFile.name, size: formatSize(pendingFile.size) })}
+                  </p>
+                )}
                 {errors.file && <p className="mt-2 text-xs text-red-400">{t(errors.file)}</p>}
                 {selectedFile && (
                   <button
                     type="button"
-                    onClick={() => setSelectedFile(null)}
+                    onClick={() => {
+                      setSelectedFile(null);
+                      setPendingFile(null);
+                    }}
                     className="mt-3 inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
                   >
                     <X className="h-3.5 w-3.5" /> {t('fileRemove')}
