@@ -240,7 +240,7 @@ const AdminServices = () => {
                 <select value={draft.category} onChange={(event) => setDraft((current) => ({ ...current, category: event.target.value }))} className={`${fieldClass.replace(' text-foreground', '')} ${categoryTextClass(draft.category)}`}>
                   {categories.map((category) => (
                     <option key={category} value={category} className="bg-[#050505]" style={{ color: categoryTone[category]?.color ?? '#fafafa' }}>
-                      {category}
+                      {categoryLabel(category, t)}
                     </option>
                   ))}
                 </select>
@@ -287,7 +287,7 @@ const AdminServices = () => {
                 <select value={editDraft.category} onChange={(event) => setEditDraft((current) => ({ ...current, category: event.target.value }))} className={`${fieldClass.replace(' text-foreground', '')} ${categoryTextClass(editDraft.category)}`}>
                   {categories.map((category) => (
                     <option key={category} value={category} className="bg-[#050505]" style={{ color: categoryTone[category]?.color ?? '#fafafa' }}>
-                      {category}
+                      {categoryLabel(category, t)}
                     </option>
                   ))}
                 </select>
