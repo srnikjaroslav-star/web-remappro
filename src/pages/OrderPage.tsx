@@ -1360,9 +1360,11 @@ const OrderPage = () => {
                             className={`h-[38px] rounded-lg border text-sm font-medium transition-colors ${
                               active
                                 ? value === 'Diesel'
-                                  ? 'border-cyan-400 bg-[linear-gradient(135deg,rgba(34,211,238,0.24),rgba(14,165,233,0.16))] text-white shadow-[0_0_14px_rgba(34,211,238,0.22)]'
-                                  : 'border-amber-400 bg-[linear-gradient(135deg,rgba(251,191,36,0.24),rgba(245,158,11,0.14))] text-amber-100 shadow-[0_0_14px_rgba(251,191,36,0.22)]'
-                                : 'border-primary/60 bg-secondary text-muted-foreground shadow-[0_0_14px_rgba(0,242,255,0.28)] hover:border-primary hover:text-foreground hover:shadow-[0_0_16px_rgba(0,242,255,0.42)]'
+                                  ? 'border-[#38bdf8] bg-[linear-gradient(180deg,rgba(3,105,161,0.62),rgba(8,29,46,0.95))] text-white shadow-[0_0_22px_rgba(56,189,248,0.45),inset_0_0_12px_rgba(125,211,252,0.22)]'
+                                  : 'border-[#facc15] bg-[linear-gradient(180deg,rgba(161,98,7,0.62),rgba(28,20,4,0.95))] text-[#fefce8] shadow-[0_0_22px_rgba(250,204,21,0.45),inset_0_0_12px_rgba(254,240,138,0.22)]'
+                                : value === 'Diesel'
+                                  ? 'border-[rgba(34,211,238,0.34)] bg-[linear-gradient(180deg,rgba(14,116,144,0.20),rgba(6,24,38,0.85))] text-[#bae6fd] shadow-[0_0_8px_rgba(34,211,238,0.10)] hover:border-[rgba(56,189,248,0.68)] hover:bg-[linear-gradient(180deg,rgba(2,132,199,0.36),rgba(7,33,52,0.90))] hover:text-[#e0f2fe] hover:shadow-[0_0_16px_rgba(56,189,248,0.28)]'
+                                  : 'border-[rgba(234,179,8,0.34)] bg-[linear-gradient(180deg,rgba(161,98,7,0.20),rgba(24,18,5,0.85))] text-[#fef08a] shadow-[0_0_8px_rgba(234,179,8,0.10)] hover:border-[rgba(250,204,21,0.68)] hover:bg-[linear-gradient(180deg,rgba(202,138,4,0.36),rgba(34,24,6,0.90))] hover:text-[#fef9c3] hover:shadow-[0_0_16px_rgba(250,204,21,0.28)]'
                             } ${errors.fuelType ? '!border-red-500' : ''}`}
                           >
                             {t(labelKey)}
@@ -1496,14 +1498,14 @@ const OrderPage = () => {
 
               <section className="order-card-note shrink-0 rounded-xl p-3 md:p-4">
                 <label className="block">
-                  <span className="mb-2 block text-base font-semibold uppercase leading-5 tracking-[0.16em] text-violet-300">{t('note')}</span>
+                  <span className="mb-2 block text-base font-semibold leading-5 text-[#facc15]">{t('note')}</span>
                   <textarea
                     value={customerNote}
                     onChange={(event) => setCustomerNote(event.target.value)}
                     maxLength={500}
                     rows={4}
                     placeholder={t('notePlaceholder')}
-                    className={`${orderField} order-note-field min-h-[120px] resize-y overflow-y-auto lg:min-h-[4.75rem] lg:max-h-[5.75rem]`}
+                    className="input-field order-note-field w-full !rounded-lg !border !px-3 !py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none min-h-[120px] resize-y overflow-y-auto lg:min-h-[4.75rem] lg:max-h-[5.75rem]"
                   />
                   <span className="mt-1.5 block text-right text-[11px] text-muted-foreground">{customerNote.length}/500</span>
                 </label>
