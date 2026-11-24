@@ -45,8 +45,16 @@ const readPrice = (value: string) => {
 
 const fieldClass = 'h-11 w-full rounded-md border border-primary/70 bg-[#0a192f] px-3 text-sm text-foreground shadow-[0_0_16px_rgba(0,242,255,0.28)] focus:border-primary focus:outline-none focus:shadow-[0_0_16px_rgba(0,242,255,0.45)]';
 
+const categoryLabel = (category: string, translate: (key: 'catEmission' | 'catEngine' | 'catPerformance' | 'catSecurity') => string) => {
+  if (category === 'Emission Control') return translate('catEmission');
+  if (category === 'Engine Functions') return translate('catEngine');
+  if (category === 'Performance') return translate('catPerformance');
+  if (category === 'Security') return translate('catSecurity');
+  return category;
+};
+
 const AdminServices = () => {
-  const { language } = useLanguage();
+  const { language, t } = useLanguage();
   const knownCatalog = peekServiceCatalog();
   const [services, setServices] = useState<CatalogService[]>(knownCatalog ?? []);
   const [loading, setLoading] = useState(!knownCatalog);
@@ -386,7 +394,7 @@ const AdminServices = () => {
           >
             {CATEGORY_FILTER_OPTIONS.map((option) => (
               <span key={option.label} aria-hidden className="invisible col-start-1 row-start-1 flex h-[42px] w-max items-center gap-2 whitespace-nowrap border border-transparent px-3 text-base leading-6">
-                {option.label}
+                {option.value ? categoryLabel(option.value, t) : option.label}
                 <span className="inline-block h-4 w-4 shrink-0" />
               </span>
             ))}
@@ -408,7 +416,7 @@ const AdminServices = () => {
               }}
               className={`col-start-1 row-start-1 inline-flex h-[42px] w-full items-center gap-2 whitespace-nowrap rounded-md border border-primary/70 bg-[#0a192f] px-3 text-left text-base leading-6 shadow-[0_0_16px_rgba(0,242,255,0.28)] focus:outline-none ${categoryFilter ? categoryTextClass(categoryFilter) : 'text-foreground'}`}
             >
-              <span>{CATEGORY_FILTER_OPTIONS.find((option) => option.value === categoryFilter)?.label ?? 'Všetky kategórie'}</span>
+              <span>{categoryFilter ? categoryLabel(categoryFilter, t) : 'Všetky kategórie'}</span>
               <ChevronDown className="ml-auto h-4 w-4 shrink-0" />
             </button>
             {categoryMenuOpen ? (
@@ -431,7 +439,7 @@ const AdminServices = () => {
                     }}
                     className="block w-full whitespace-nowrap px-3 py-2 text-left text-base leading-6"
                   >
-                    {option.label}
+                    {option.value ? categoryLabel(option.value, t) : option.label}
                   </button>
                 ))}
               </div>
@@ -465,7 +473,7 @@ const AdminServices = () => {
                       {service.description && <p className="mt-1 text-xs text-white/70">{service.description}</p>}
                     </td>
                     <td className={`border-r border-slate-800/60 px-4 py-0 align-middle text-sm font-normal text-white${picked}`}>
-                      <span className={`whitespace-nowrap ${categoryTextClass(service.category)}`}>{service.category}</span>
+                      <span className={`whitespace-nowrap ${categoryTextClass(service.category)}`}>{categoryLabel(service.category, t)}</span>
                     </td>
                     <td className={`${cell} text-center`}>
                       <p className="whitespace-nowrap text-xl font-bold leading-none text-primary">{formatCreditUnits(service.price, language)}</p>
