@@ -113,6 +113,14 @@ const fieldClass = (_filled: boolean, hasError: boolean) => {
   return orderField;
 };
 
+const categoryLabelKey = (category: string): TranslationKey | null => {
+  if (category === 'Emission Control') return 'catEmission';
+  if (category === 'Engine Functions') return 'catEngine';
+  if (category === 'Performance') return 'catPerformance';
+  if (category === 'Security') return 'catSecurity';
+  return null;
+};
+
 const categoryAccent = (category: string) => {
   if (category === 'Emission Control') return 'border-l-[3px] border-l-[#2dd4bf] pl-2 text-[#2dd4bf]';
   if (category === 'Engine Functions') return 'border-l-[3px] border-l-[#fbbf24] pl-2 text-[#fbbf24]';
@@ -1539,10 +1547,12 @@ const OrderPage = () => {
                   {catalogStatus === 'error' && (
                     <p className="px-1 text-sm text-red-400">{t('catalogError')}</p>
                   )}
-                  {catalogGroups.map((group) => (
+                  {catalogGroups.map((group) => {
+                      const labelKey = categoryLabelKey(group.category);
+                      return (
                       <div key={group.category}>
                         <div className="mb-2 flex h-[22px] items-center px-3">
-                          <h3 className={`truncate text-xl font-semibold uppercase leading-[22px] tracking-[0.16em] ${categoryAccent(group.category)}`}>{group.category}</h3>
+                          <h3 className={`truncate text-xl font-semibold normal-case leading-[22px] tracking-[0.16em] ${categoryAccent(group.category)}`}>{labelKey ? t(labelKey) : group.category}</h3>
                         </div>
                         <div className="space-y-1.5">
                           {group.category === 'Performance' && stageGroups.map((stageGroup) => {
@@ -1604,7 +1614,8 @@ const OrderPage = () => {
                           </p>
                         )}
                       </div>
-                  ))}
+                      );
+                  })}
                   {errors.services && <p className="px-1 text-xs text-red-400">{t(errors.services)}</p>}
                 </div>
 
