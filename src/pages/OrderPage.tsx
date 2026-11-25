@@ -1622,7 +1622,8 @@ const OrderPage = () => {
                           </svg>
                         </button>
                         {open && (
-                        <div className="order-roletka-body" style={panelMax !== null ? { maxHeight: panelMax } : undefined}>
+                        <div className="order-roletka-panel" style={panelMax !== null ? { maxHeight: panelMax } : undefined}>
+                        <div className="order-roletka-body">
                           <div className="order-roletka-items">
                           {group.category === 'Performance' && stageGroups.map((stageGroup) => {
                             const tone = stageGroup.id === 'stage1-petrol' ? 'petrol' : 'diesel';
@@ -1673,6 +1674,7 @@ const OrderPage = () => {
                           </p>
                         )}
                         </div>
+                        </div>
                         )}
                       </div>
                       );
@@ -1681,7 +1683,7 @@ const OrderPage = () => {
                   {errors.services && <p className="shrink-0 px-1 pt-2 text-xs text-red-400">{t(errors.services)}</p>}
                 </div>
 
-                <div className="shrink-0 space-y-3 border-t border-primary/20 bg-black/45 p-4">
+                <div className="order-checkout-foot shrink-0 space-y-3 border-t border-primary/20 p-4">
                   <label
                     className={`flex cursor-pointer items-start gap-2.5 rounded-lg border px-3 py-2.5 text-[11px] leading-relaxed ${
                       legalConsentAgreed
