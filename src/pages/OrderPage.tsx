@@ -1751,7 +1751,7 @@ const OrderPage = () => {
                                     role="radio"
                                     aria-checked={selected}
                                     className={`order-srv-line${selected ? ' is-selected' : ''}`}
-                                    onClick={() => selectStage(stageGroup.id, option.id)}
+                                    onClick={() => selectStage(stageGroup.id, selected ? '' : option.id)}
                                   >
                                     <span className={`order-srv-check${selected ? ' is-on' : ''}`}>
                                       {selected && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
