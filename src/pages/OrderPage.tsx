@@ -129,6 +129,9 @@ const categoryTone = (category: string) => {
   return 'cat-other';
 };
 
+const isTcuService = (service: { name: string; category: string }) =>
+  service.category === 'Performance' && /\bTCU\b/i.test(service.name) && !isStageDropdownService(service) && !isLegacyStage1(service);
+
 const headerControl =
   'inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border border-primary/50 bg-secondary px-3 text-sm font-medium text-primary shadow-[0_0_16px_rgba(0,242,255,0.35)] transition-colors hover:border-primary hover:bg-primary/20 hover:shadow-[0_0_16px_rgba(0,242,255,0.5)]';
 
@@ -782,6 +785,53 @@ const OrderPage = () => {
 
   const catalogGroups = useMemo(() => groupCatalog(catalog), [catalog]);
   const stageGroups = useMemo(() => stageGroupsFromCatalog(catalog), [catalog]);
+  const checkoutRolls = useMemo(() => {
+    const rolls: Array<{
+      id: string;
+      tone: string;
+      labelKey: TranslationKey | null;
+      stageId?: string;
+      items?: CatalogService[];
+      disclaimer?: boolean;
+    }> = [];
+    for (const group of catalogGroups) {
+      if (group.category !== 'Performance') {
+        rolls.push({
+          id: group.category,
+          tone: categoryTone(group.category),
+          labelKey: categoryLabelKey(group.category),
+          items: group.items,
+          disclaimer: group.category === 'Emission Control',
+        });
+        continue;
+      }
+      for (const stage of stageGroups) {
+        const petrol = stage.id === 'stage1-petrol';
+        rolls.push({
+          id: stage.id,
+          tone: petrol ? 'cat-stage-petrol' : 'cat-stage-diesel',
+          labelKey: petrol ? 'catStagePetrol' : 'catStageDiesel',
+          stageId: stage.id,
+        });
+      }
+      const tcuItems = group.items.filter(isTcuService);
+      if (tcuItems.length > 0) {
+        rolls.push({ id: 'tcu', tone: 'cat-tcu', labelKey: 'catTcu', items: tcuItems });
+      }
+      const rest = group.items.filter(
+        (service) => !isLegacyStage1(service) && !isStageDropdownService(service) && !isTcuService(service),
+      );
+      if (rest.length > 0) {
+        rolls.push({
+          id: group.category,
+          tone: 'cat-performance',
+          labelKey: 'catPerformance',
+          items: rest,
+        });
+      }
+    }
+    return rolls;
+  }, [catalogGroups, stageGroups]);
 
   useEffect(() => {
     const dieselIds = new Set(
@@ -1598,20 +1648,22 @@ const OrderPage = () => {
                     <p className="shrink-0 px-1 text-sm text-red-400">{t('catalogError')}</p>
                   )}
                   <div className="order-roletky-list">
-                  {catalogGroups.map((group) => {
-                      const labelKey = categoryLabelKey(group.category);
-                      const open = openCategory === group.category;
-                      const picked = selectedItems.filter((service) => service.category === group.category).length;
+                  {checkoutRolls.map((roll) => {
+                      const stageGroup = roll.stageId ? stageGroups.find((group) => group.id === roll.stageId) : undefined;
+                      const open = openCategory === roll.id;
+                      const picked = stageGroup
+                        ? (stageGroupSelection(stageGroup, services) ? 1 : 0)
+                        : (roll.items ?? []).filter((service) => services.includes(service.id)).length;
                       return (
-                      <div key={group.category} className={`order-roletka ${categoryTone(group.category)}${open ? ' is-open' : ''}`}>
+                      <div key={roll.id} className={`order-roletka ${roll.tone}${open ? ' is-open' : ''}`}>
                         <button
                           type="button"
                           className="order-roletka-head"
                           aria-expanded={open}
-                          onClick={() => setOpenCategory(open ? null : group.category)}
+                          onClick={() => setOpenCategory(open ? null : roll.id)}
                         >
                           <span className="order-roletka-title">
-                            <span className="order-roletka-label">{labelKey ? t(labelKey) : group.category}</span>
+                            <span className="order-roletka-label">{roll.labelKey ? t(roll.labelKey) : roll.id}</span>
                             <span className="order-roletka-pill">
                               <span className="order-roletka-count">{picked}</span>
                               {t('categoryPicked')}
@@ -1625,22 +1677,16 @@ const OrderPage = () => {
                         <div className="order-roletka-panel" style={panelMax !== null ? { maxHeight: panelMax } : undefined}>
                         <div className="order-roletka-body">
                           <div className="order-roletka-items">
-                          {group.category === 'Performance' && stageGroups.map((stageGroup) => {
-                            const tone = stageGroup.id === 'stage1-petrol' ? 'petrol' : 'diesel';
-                            return (
-                            <div key={stageGroup.id} className={`stage-year-card tone-${tone}`}>
-                              <span className="stage-year-label">{stageGroup.label}</span>
-                              <StageYearSelect
-                                tone={tone}
-                                label={stageGroup.label}
-                                value={stageGroupSelection(stageGroup, services)}
-                                options={stageGroup.options}
-                                onChange={(optionId) => selectStage(stageGroup.id, optionId)}
-                              />
-                            </div>
-                            );
-                          })}
-                          {group.items.filter((service) => !isLegacyStage1(service) && !isStageDropdownService(service)).map((service) => {
+                          {stageGroup && (
+                            <StageYearSelect
+                              tone={stageGroup.id === 'stage1-petrol' ? 'petrol' : 'diesel'}
+                              label={roll.labelKey ? t(roll.labelKey) : stageGroup.label}
+                              value={stageGroupSelection(stageGroup, services)}
+                              options={stageGroup.options}
+                              onChange={(optionId) => selectStage(stageGroup.id, optionId)}
+                            />
+                          )}
+                          {(roll.items ?? []).map((service) => {
                             const selected = services.includes(service.id);
                             return (
                               <button
@@ -1668,7 +1714,7 @@ const OrderPage = () => {
                             );
                           })}
                           </div>
-                        {group.category === 'Emission Control' && (
+                        {roll.disclaimer && (
                           <p className="mt-2 rounded-lg border border-red-500 bg-[rgba(255,0,0,0.1)] px-3 py-2 text-[11px] leading-relaxed text-[#ffe14d]">
                             {t('offroadDisclaimer')}
                           </p>
