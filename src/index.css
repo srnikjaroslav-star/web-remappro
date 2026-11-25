@@ -723,7 +723,9 @@
   }
 
   .order-services-scroll {
-    overflow: hidden;
+    position: relative;
+    z-index: 3;
+    overflow: visible;
   }
 
   .order-roletky-list {
@@ -732,7 +734,7 @@
     flex: 1 1 auto;
     flex-direction: column;
     gap: 9px;
-    overflow: hidden;
+    overflow: visible;
   }
 
   .order-roletka.cat-emission {
@@ -740,9 +742,6 @@
     --c-bar-bg: rgba(14, 116, 144, 0.34);
     --c-bar-border: rgba(56, 189, 248, 0.82);
     --c-glow: 0 0 14px rgba(56, 189, 248, 0.22), inset 0 0 11px rgba(56, 189, 248, 0.13);
-    --c-runner: rgba(14, 116, 144, 0.5);
-    --c-thumb: rgba(56, 189, 248, 0.72);
-    --c-thumb-hover: rgba(56, 189, 248, 0.95);
   }
 
   .order-roletka.cat-engine {
@@ -750,9 +749,6 @@
     --c-bar-bg: rgba(77, 124, 15, 0.34);
     --c-bar-border: rgba(163, 230, 53, 0.8);
     --c-glow: 0 0 14px rgba(163, 230, 53, 0.2), inset 0 0 11px rgba(163, 230, 53, 0.12);
-    --c-runner: rgba(77, 124, 15, 0.5);
-    --c-thumb: rgba(163, 230, 53, 0.7);
-    --c-thumb-hover: rgba(163, 230, 53, 0.94);
   }
 
   .order-roletka.cat-performance {
@@ -760,9 +756,6 @@
     --c-bar-bg: rgba(146, 64, 14, 0.4);
     --c-bar-border: rgba(251, 191, 36, 0.84);
     --c-glow: 0 0 15px rgba(251, 191, 36, 0.24), inset 0 0 11px rgba(251, 191, 36, 0.14);
-    --c-runner: rgba(146, 64, 14, 0.54);
-    --c-thumb: rgba(251, 191, 36, 0.72);
-    --c-thumb-hover: rgba(251, 191, 36, 0.95);
   }
 
   .order-roletka.cat-security {
@@ -770,9 +763,6 @@
     --c-bar-bg: rgba(107, 33, 168, 0.36);
     --c-bar-border: rgba(192, 132, 252, 0.82);
     --c-glow: 0 0 14px rgba(192, 132, 252, 0.22), inset 0 0 11px rgba(192, 132, 252, 0.13);
-    --c-runner: rgba(107, 33, 168, 0.52);
-    --c-thumb: rgba(192, 132, 252, 0.7);
-    --c-thumb-hover: rgba(192, 132, 252, 0.95);
   }
 
   .order-roletka.cat-other {
@@ -780,23 +770,28 @@
     --c-bar-bg: rgba(8, 51, 68, 0.45);
     --c-bar-border: rgba(34, 211, 238, 0.7);
     --c-glow: 0 0 14px rgba(34, 211, 238, 0.18);
-    --c-runner: rgba(8, 145, 178, 0.45);
-    --c-thumb: rgba(34, 211, 238, 0.72);
-    --c-thumb-hover: rgba(34, 211, 238, 0.95);
   }
 
   .order-roletka {
+    position: relative;
     display: flex;
     width: 100%;
     min-width: 0;
-    min-height: 0;
     flex: 0 0 auto;
     flex-direction: column;
-    overflow: hidden;
+    overflow: visible;
     border: 1px solid var(--c-bar-border);
     border-radius: 9px;
     background: rgba(4, 13, 21, 0.9);
     box-shadow: var(--c-glow);
+    --c-runner: color-mix(in srgb, var(--c-main) 34%, transparent);
+    --c-thumb: var(--c-main);
+  }
+
+  .order-roletka.is-open {
+    z-index: 6;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
   }
 
   .order-roletka-head {
@@ -880,21 +875,27 @@
   }
 
   .order-roletka-body {
-    min-height: 0;
-    flex: 0 1 auto;
+    position: absolute;
+    top: calc(100% - 1px);
+    right: -1px;
+    left: -1px;
+    z-index: 5;
     overflow-x: hidden;
     overflow-y: auto;
-    max-height: min(176px, calc(50vh - 15.5rem));
+    max-height: calc(100dvh - 12rem);
     padding: 5px 7px 8px;
-    border-top: 1px solid rgba(148, 163, 184, 0.15);
-    background: rgba(4, 11, 18, 0.96);
+    border: 1px solid var(--c-bar-border);
+    border-top: 0;
+    border-radius: 0 0 9px 9px;
+    background: rgba(4, 11, 18, 0.98);
+    box-shadow: var(--c-glow);
     overscroll-behavior: contain;
     scrollbar-width: thin;
-    scrollbar-color: var(--c-thumb) rgba(2, 6, 10, 0.65);
+    scrollbar-color: var(--c-main) rgba(2, 6, 10, 0.65);
   }
 
   .order-roletka-body:hover {
-    scrollbar-color: var(--c-thumb-hover) rgba(2, 6, 10, 0.8);
+    scrollbar-color: var(--c-main) rgba(2, 6, 10, 0.8);
   }
 
   .order-roletka-body::-webkit-scrollbar {
@@ -907,12 +908,12 @@
   }
 
   .order-roletka-body::-webkit-scrollbar-thumb {
-    background: var(--c-thumb);
+    background: var(--c-main);
     border-radius: 999px;
   }
 
   .order-roletka-body::-webkit-scrollbar-thumb:hover {
-    background: var(--c-thumb-hover);
+    background: var(--c-main);
     box-shadow: 0 0 8px var(--c-main);
   }
 
@@ -939,15 +940,30 @@
     transition: background 0.12s ease, box-shadow 0.12s ease;
   }
 
-  .order-roletka .order-srv-line:hover:not(.is-selected) {
+  .order-roletka .order-srv-line:hover,
+  .order-roletka .order-srv-line.is-selected,
+  .order-roletka .order-srv-line.is-selected:hover {
     background: var(--c-runner);
     box-shadow: inset 3px 0 0 var(--c-main);
   }
 
-  .order-srv-line.is-selected {
-    border-color: rgba(52, 211, 153, 0.6);
-    background: linear-gradient(90deg, rgba(16, 185, 129, 0.22), rgba(34, 211, 238, 0.1));
-    box-shadow: 0 0 16px rgba(16, 185, 129, 0.14);
+  .order-srv-check {
+    display: flex;
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid color-mix(in srgb, var(--c-main) 70%, transparent);
+    border-radius: 4px;
+    background: transparent;
+    color: #04131a;
+  }
+
+  .order-srv-check.is-on {
+    border-color: var(--c-main);
+    background: var(--c-main);
+    box-shadow: 0 0 12px color-mix(in srgb, var(--c-main) 55%, transparent);
   }
 
   .order-srv-name {
@@ -970,19 +986,7 @@
   }
 
   .order-srv-line.is-selected .order-srv-credits {
-    color: #6ee7b7;
-  }
-
-  @media (min-width: 1024px) {
-    .order-roletka.is-open {
-      flex: 1 1 auto;
-      min-height: 0;
-    }
-
-    .order-roletka.is-open .order-roletka-body {
-      flex: 1 1 auto;
-      max-height: none;
-    }
+    color: var(--c-main);
   }
 
   .order-card-vehicle {

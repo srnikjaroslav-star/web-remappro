@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import type { User } from '@supabase/supabase-js';
 import { toast } from 'sonner';
@@ -323,6 +323,8 @@ const OrderPage = () => {
   const [catalog, setCatalog] = useState<CatalogService[]>(knownCatalog ?? []);
   const [catalogStatus, setCatalogStatus] = useState<'loading' | 'ready' | 'error'>(knownCatalog ? 'ready' : 'loading');
   const [openCategory, setOpenCategory] = useState<string | null>(null);
+  const [panelMax, setPanelMax] = useState<number | null>(null);
+  const checkoutRef = useRef<HTMLDivElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [pendingFile, setPendingFile] = useState<OrderDraftFile | null>(() => readOrderDraft()?.file ?? null);
   const [customerNote, setCustomerNote] = useState(() => readOrderDraft()?.customerNote ?? '');
@@ -801,6 +803,23 @@ const OrderPage = () => {
       return current.filter((id) => !drop.has(id));
     });
   }, [stageGroups]);
+
+  useLayoutEffect(() => {
+    if (!openCategory) {
+      setPanelMax(null);
+      return;
+    }
+    const measure = () => {
+      const card = checkoutRef.current;
+      const head = card?.querySelector<HTMLElement>('.order-roletka.is-open .order-roletka-head');
+      if (!card || !head) return;
+      const next = Math.max(0, Math.floor(card.getBoundingClientRect().bottom - head.getBoundingClientRect().bottom));
+      setPanelMax((current) => (current === next ? current : next));
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [openCategory]);
 
   const selectedItems = useMemo(
     () =>
@@ -1552,7 +1571,7 @@ const OrderPage = () => {
             </div>
 
             <aside className="sticky top-16 z-20 flex max-h-[calc(100dvh-8.25rem)] min-h-0 min-w-0 flex-col self-start lg:static lg:z-auto lg:h-full lg:max-h-none lg:overflow-hidden lg:self-stretch">
-              <div className="order-card-checkout flex min-h-0 w-full flex-1 flex-col rounded-xl">
+              <div ref={checkoutRef} className="order-card-checkout flex min-h-0 w-full flex-1 flex-col rounded-xl">
                 <div className="flex shrink-0 items-center justify-between gap-3 border-b border-cyan-400/20 px-4 py-3">
                   <h2 className="text-lg font-semibold uppercase leading-tight tracking-[0.12em] text-primary">{t('servicesCheckout')}</h2>
                   <p className="shrink-0 whitespace-nowrap text-xl font-bold leading-none tabular-nums text-emerald-300">{formatCreditUnits(totalPrice, language)}</p>
@@ -1571,7 +1590,7 @@ const OrderPage = () => {
                   </div>
                 </div>
 
-                <div className="order-services-scroll flex min-h-0 max-h-[50vh] flex-1 flex-col overflow-hidden px-3 py-3 lg:max-h-none">
+                <div className="order-services-scroll flex min-h-0 max-h-[50vh] flex-1 flex-col px-3 py-3 lg:max-h-none">
                   {catalogStatus === 'loading' && (
                     <p className="shrink-0 px-1 text-sm text-muted-foreground">{t('catalogLoading')}</p>
                   )}
@@ -1603,7 +1622,7 @@ const OrderPage = () => {
                           </svg>
                         </button>
                         {open && (
-                        <div className="order-roletka-body">
+                        <div className="order-roletka-body" style={panelMax !== null ? { maxHeight: panelMax } : undefined}>
                           <div className="order-roletka-items">
                           {group.category === 'Performance' && stageGroups.map((stageGroup) => {
                             const tone = stageGroup.id === 'stage1-petrol' ? 'petrol' : 'diesel';
@@ -1632,13 +1651,7 @@ const OrderPage = () => {
                                 onClick={() => toggleService(service.id)}
                                 className={`order-srv-line${selected ? ' is-selected' : ''}`}
                               >
-                                <span
-                                  className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-[4px] border-2 transition-all ${
-                                    selected
-                                      ? 'border-emerald-400 bg-emerald-500 text-white shadow-[0_0_12px_rgba(16,185,129,0.55)]'
-                                      : 'border-primary/60 bg-transparent'
-                                  }`}
-                                >
+                                <span className={`order-srv-check${selected ? ' is-on' : ''}`}>
                                   {selected && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
                                 </span>
                                 <span className="min-w-0 flex-1">
