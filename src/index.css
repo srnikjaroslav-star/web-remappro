@@ -804,8 +804,10 @@
   .order-roletka-title {
     display: flex;
     min-width: 0;
+    flex: 1 1 auto;
     align-items: center;
-    gap: 10px;
+    justify-content: space-between;
+    gap: 8px;
   }
 
   .order-roletka-label {
@@ -817,26 +819,60 @@
 
   .order-roletka-pill {
     display: inline-flex;
-    flex-shrink: 0;
+    width: 158px;
+    height: 32px;
+    flex: 0 0 158px;
     align-items: center;
-    gap: 5px;
-    padding: 3px 10px;
+    justify-content: space-between;
+    gap: 6px;
+    padding: 0 8px 0 10px;
     border: 1px solid var(--c-bar-border);
-    border-radius: 999px;
-    background: rgba(2, 6, 10, 0.78);
+    border-radius: 8px;
+    background: rgba(2, 6, 10, 0.92);
     color: var(--c-main);
     font-size: 12px;
     font-weight: 700;
-    line-height: 1.1;
+    line-height: 1;
     white-space: nowrap;
   }
 
+  .order-roletka-pill-word {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .order-roletka-figures {
+    display: inline-grid;
+    flex: 0 0 auto;
+    grid-template-columns: 24px 10px 22px;
+    align-items: baseline;
+    justify-items: center;
+    font-variant-numeric: tabular-nums;
+  }
+
   .order-roletka-count {
+    justify-self: end;
+    color: #ffffff;
+    font-size: 18px;
+    font-weight: 900;
+    line-height: 1;
+    text-shadow: 0 0 8px var(--c-main);
+  }
+
+  .order-roletka-of {
+    color: color-mix(in srgb, var(--c-main) 72%, #ffffff);
+    font-size: 13px;
+    font-weight: 800;
+    line-height: 1;
+  }
+
+  .order-roletka-total {
+    justify-self: start;
     color: #ffffff;
     font-size: 15px;
-    font-weight: 900;
-    font-variant-numeric: tabular-nums;
-    text-shadow: 0 0 8px var(--c-main);
+    font-weight: 800;
+    line-height: 1;
   }
 
   .order-roletka-chevron {

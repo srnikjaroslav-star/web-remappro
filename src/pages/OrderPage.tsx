@@ -1653,6 +1653,7 @@ const OrderPage = () => {
                       const picked = stageGroup
                         ? (stageGroupSelection(stageGroup, services) ? 1 : 0)
                         : (roll.items ?? []).filter((service) => services.includes(service.id)).length;
+                      const total = stageGroup ? stageGroup.options.length : (roll.items ?? []).length;
                       return (
                       <div key={roll.id} className={`order-roletka ${roll.tone}${open ? ' is-open' : ''}`}>
                         <button
@@ -1664,8 +1665,12 @@ const OrderPage = () => {
                           <span className="order-roletka-title">
                             <span className="order-roletka-label">{roll.labelKey ? t(roll.labelKey) : roll.id}</span>
                             <span className="order-roletka-pill">
-                              <span className="order-roletka-count">{picked}</span>
-                              {t('categoryPicked')}
+                              <span className="order-roletka-pill-word">{t('categoryPicked')}</span>
+                              <span className="order-roletka-figures">
+                                <span className="order-roletka-count">{picked}</span>
+                                <span className="order-roletka-of" aria-hidden="true">/</span>
+                                <span className="order-roletka-total">{total}</span>
+                              </span>
                             </span>
                           </span>
                           <svg className="order-roletka-chevron" viewBox="0 0 20 20" fill="none" aria-hidden="true">
