@@ -794,7 +794,6 @@ const OrderPage = () => {
       labelKey: TranslationKey | null;
       stageId?: string;
       items?: CatalogService[];
-      disclaimer?: boolean;
     }> = [];
     for (const group of catalogGroups) {
       if (group.category !== 'Performance') {
@@ -803,7 +802,6 @@ const OrderPage = () => {
           tone: categoryTone(group.category),
           labelKey: categoryLabelKey(group.category),
           items: group.items,
-          disclaimer: group.category === 'Emission Control',
         });
         continue;
       }
@@ -1743,17 +1741,6 @@ const OrderPage = () => {
                         <div className="order-roletka-body">
                           <div className="order-roletka-items">
                           {stageGroup && (
-                            <>
-                              <button
-                                type="button"
-                                className="order-srv-line"
-                                onClick={() => selectStage(stageGroup.id, '')}
-                              >
-                                <span className="order-srv-check" />
-                                <span className="min-w-0 flex-1">
-                                  <span className="order-srv-name">{t('stageYearClear')}</span>
-                                </span>
-                              </button>
                               <div className="contents" role="radiogroup" aria-label={roll.labelKey ? t(roll.labelKey) : stageGroup.label}>
                               {stageGroup.options.map((option) => {
                                 const selected = services.includes(option.id);
@@ -1779,7 +1766,6 @@ const OrderPage = () => {
                                 );
                               })}
                               </div>
-                            </>
                           )}
                           {(roll.items ?? []).map((service) => {
                             const selected = services.includes(service.id);
@@ -1809,11 +1795,6 @@ const OrderPage = () => {
                             );
                           })}
                           </div>
-                        {roll.disclaimer && (
-                          <p className="mt-2 rounded-lg border border-red-500 bg-[rgba(255,0,0,0.1)] px-3 py-2 text-[11px] leading-relaxed text-[#ffe14d]">
-                            {t('offroadDisclaimer')}
-                          </p>
-                        )}
                         </div>
                         </div>
                         )}
