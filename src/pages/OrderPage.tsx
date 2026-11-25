@@ -6,7 +6,6 @@ import ClientProfile from '@/components/ClientProfile';
 import CreditTopUpModal from '@/components/CreditTopUpModal';
 import NavLogo from '@/components/NavLogo';
 import MyOrders from '@/components/MyOrders';
-import StageYearSelect from '@/components/StageYearSelect';
 import ConnectionDot from '@/components/ConnectionDot';
 import SystemStatus, { fetchSystemSettings, isSystemOnline, useSystemOnline } from '@/components/SystemStatus';
 import { useLanguage } from '@/i18n/LanguageContext';
@@ -1678,13 +1677,43 @@ const OrderPage = () => {
                         <div className="order-roletka-body">
                           <div className="order-roletka-items">
                           {stageGroup && (
-                            <StageYearSelect
-                              tone={stageGroup.id === 'stage1-petrol' ? 'petrol' : 'diesel'}
-                              label={roll.labelKey ? t(roll.labelKey) : stageGroup.label}
-                              value={stageGroupSelection(stageGroup, services)}
-                              options={stageGroup.options}
-                              onChange={(optionId) => selectStage(stageGroup.id, optionId)}
-                            />
+                            <>
+                              <button
+                                type="button"
+                                className="order-srv-line"
+                                onClick={() => selectStage(stageGroup.id, '')}
+                              >
+                                <span className="order-srv-check" />
+                                <span className="min-w-0 flex-1">
+                                  <span className="order-srv-name">{t('stageYearClear')}</span>
+                                </span>
+                              </button>
+                              <div className="contents" role="radiogroup" aria-label={roll.labelKey ? t(roll.labelKey) : stageGroup.label}>
+                              {stageGroup.options.map((option) => {
+                                const selected = services.includes(option.id);
+                                return (
+                                  <button
+                                    key={option.id}
+                                    type="button"
+                                    role="radio"
+                                    aria-checked={selected}
+                                    className={`order-srv-line${selected ? ' is-selected' : ''}`}
+                                    onClick={() => selectStage(stageGroup.id, option.id)}
+                                  >
+                                    <span className={`order-srv-check${selected ? ' is-on' : ''}`}>
+                                      {selected && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
+                                    </span>
+                                    <span className="min-w-0 flex-1">
+                                      <span className="order-srv-name">{option.years}</span>
+                                    </span>
+                                    <span className="order-srv-credits">
+                                      {formatCreditUnits(option.price, language)}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                              </div>
+                            </>
                           )}
                           {(roll.items ?? []).map((service) => {
                             const selected = services.includes(service.id);
