@@ -121,12 +121,12 @@ const categoryLabelKey = (category: string): TranslationKey | null => {
   return null;
 };
 
-const categoryAccent = (category: string) => {
-  if (category === 'Emission Control') return 'border-l-[3px] border-l-[#2dd4bf] pl-2 text-[#2dd4bf]';
-  if (category === 'Engine Functions') return 'border-l-[3px] border-l-[#fbbf24] pl-2 text-[#fbbf24]';
-  if (category === 'Performance') return 'border-l-[3px] border-l-[#22d3ee] pl-2 text-[#6ee7b7]';
-  if (category === 'Security') return 'border-l-[3px] border-l-[#e879f9] pl-2 text-[#f0abfc]';
-  return 'border-l-[3px] border-l-primary pl-2 text-primary';
+const categoryTone = (category: string) => {
+  if (category === 'Emission Control') return 'cat-emission';
+  if (category === 'Engine Functions') return 'cat-engine';
+  if (category === 'Performance') return 'cat-performance';
+  if (category === 'Security') return 'cat-security';
+  return 'cat-other';
 };
 
 const headerControl =
@@ -322,6 +322,7 @@ const OrderPage = () => {
   const knownCatalog = peekServiceCatalog();
   const [catalog, setCatalog] = useState<CatalogService[]>(knownCatalog ?? []);
   const [catalogStatus, setCatalogStatus] = useState<'loading' | 'ready' | 'error'>(knownCatalog ? 'ready' : 'loading');
+  const [openCategory, setOpenCategory] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [pendingFile, setPendingFile] = useState<OrderDraftFile | null>(() => readOrderDraft()?.file ?? null);
   const [customerNote, setCustomerNote] = useState(() => readOrderDraft()?.customerNote ?? '');
@@ -779,6 +780,27 @@ const OrderPage = () => {
 
   const catalogGroups = useMemo(() => groupCatalog(catalog), [catalog]);
   const stageGroups = useMemo(() => stageGroupsFromCatalog(catalog), [catalog]);
+
+  useEffect(() => {
+    const dieselIds = new Set(
+      stageGroups.find((group) => group.id === 'stage1-diesel')?.options.map((option) => option.id) ?? [],
+    );
+    const petrolIds = new Set(
+      stageGroups.find((group) => group.id === 'stage1-petrol')?.options.map((option) => option.id) ?? [],
+    );
+    if (dieselIds.size === 0 || petrolIds.size === 0) return;
+    setServices((current) => {
+      let lastDiesel = -1;
+      let lastPetrol = -1;
+      current.forEach((id, index) => {
+        if (dieselIds.has(id)) lastDiesel = index;
+        if (petrolIds.has(id)) lastPetrol = index;
+      });
+      if (lastDiesel < 0 || lastPetrol < 0) return current;
+      const drop = lastDiesel > lastPetrol ? petrolIds : dieselIds;
+      return current.filter((id) => !drop.has(id));
+    });
+  }, [stageGroups]);
 
   const selectedItems = useMemo(
     () =>
@@ -1549,21 +1571,40 @@ const OrderPage = () => {
                   </div>
                 </div>
 
-                <div className="order-services-scroll min-h-0 max-h-[50vh] flex-1 space-y-4 overflow-y-auto px-3 py-3 lg:max-h-none">
+                <div className="order-services-scroll flex min-h-0 max-h-[50vh] flex-1 flex-col overflow-hidden px-3 py-3 lg:max-h-none">
                   {catalogStatus === 'loading' && (
-                    <p className="px-1 text-sm text-muted-foreground">{t('catalogLoading')}</p>
+                    <p className="shrink-0 px-1 text-sm text-muted-foreground">{t('catalogLoading')}</p>
                   )}
                   {catalogStatus === 'error' && (
-                    <p className="px-1 text-sm text-red-400">{t('catalogError')}</p>
+                    <p className="shrink-0 px-1 text-sm text-red-400">{t('catalogError')}</p>
                   )}
+                  <div className="order-roletky-list">
                   {catalogGroups.map((group) => {
                       const labelKey = categoryLabelKey(group.category);
+                      const open = openCategory === group.category;
+                      const picked = selectedItems.filter((service) => service.category === group.category).length;
                       return (
-                      <div key={group.category}>
-                        <div className="mb-2 flex h-[22px] items-center px-3">
-                          <h3 className={`truncate text-xl font-semibold normal-case leading-[22px] tracking-[0.16em] ${categoryAccent(group.category)}`}>{labelKey ? t(labelKey) : group.category}</h3>
-                        </div>
-                        <div className="space-y-1.5">
+                      <div key={group.category} className={`order-roletka ${categoryTone(group.category)}${open ? ' is-open' : ''}`}>
+                        <button
+                          type="button"
+                          className="order-roletka-head"
+                          aria-expanded={open}
+                          onClick={() => setOpenCategory(open ? null : group.category)}
+                        >
+                          <span className="order-roletka-title">
+                            <span className="order-roletka-label">{labelKey ? t(labelKey) : group.category}</span>
+                            <span className="order-roletka-pill">
+                              <span className="order-roletka-count">{picked}</span>
+                              {t('categoryPicked')}
+                            </span>
+                          </span>
+                          <svg className="order-roletka-chevron" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                            <path d="M5 7.5L10 12.5L15 7.5" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        </button>
+                        {open && (
+                        <div className="order-roletka-body">
+                          <div className="order-roletka-items">
                           {group.category === 'Performance' && stageGroups.map((stageGroup) => {
                             const tone = stageGroup.id === 'stage1-petrol' ? 'petrol' : 'diesel';
                             return (
@@ -1589,11 +1630,7 @@ const OrderPage = () => {
                                 aria-checked={selected}
                                 title={service.name}
                                 onClick={() => toggleService(service.id)}
-                                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-all ${
-                                  selected
-                                    ? 'border border-emerald-400/60 bg-[linear-gradient(90deg,rgba(16,185,129,0.2),rgba(34,211,238,0.1))] shadow-[0_0_16px_rgba(16,185,129,0.14)]'
-                                    : 'border border-sky-400/20 bg-black/35 hover:border-cyan-400/40 hover:bg-cyan-400/10'
-                                }`}
+                                className={`order-srv-line${selected ? ' is-selected' : ''}`}
                               >
                                 <span
                                   className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-[4px] border-2 transition-all ${
@@ -1605,27 +1642,30 @@ const OrderPage = () => {
                                   {selected && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
                                 </span>
                                 <span className="min-w-0 flex-1">
-                                  <span className="block truncate text-sm font-medium">{service.name}</span>
+                                  <span className="order-srv-name">{service.name}</span>
                                   {service.description && (
                                     <span className="block truncate text-[11px] leading-tight text-muted-foreground">{service.description}</span>
                                   )}
                                 </span>
-                                <span className={`shrink-0 whitespace-nowrap text-sm font-semibold tabular-nums ${selected ? 'text-emerald-300' : 'text-primary'}`}>
+                                <span className="order-srv-credits">
                                   {formatCreditUnits(service.price, language)}
                                 </span>
                               </button>
                             );
                           })}
-                        </div>
+                          </div>
                         {group.category === 'Emission Control' && (
                           <p className="mt-2 rounded-lg border border-red-500 bg-[rgba(255,0,0,0.1)] px-3 py-2 text-[11px] leading-relaxed text-[#ffe14d]">
                             {t('offroadDisclaimer')}
                           </p>
                         )}
+                        </div>
+                        )}
                       </div>
                       );
                   })}
-                  {errors.services && <p className="px-1 text-xs text-red-400">{t(errors.services)}</p>}
+                  </div>
+                  {errors.services && <p className="shrink-0 px-1 pt-2 text-xs text-red-400">{t(errors.services)}</p>}
                 </div>
 
                 <div className="shrink-0 space-y-3 border-t border-primary/20 bg-black/45 p-4">
