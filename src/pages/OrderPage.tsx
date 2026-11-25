@@ -95,6 +95,7 @@ interface FieldErrors {
   name?: TranslationKey;
   email?: TranslationKey;
   consent?: TranslationKey;
+  emission?: TranslationKey;
 }
 
 const isFilled = (value: string | number | undefined) => {
@@ -318,6 +319,8 @@ const OrderPage = () => {
   const [loginError, setLoginError] = useState('');
   const [loginBusy, setLoginBusy] = useState(false);
   const [legalConsentAgreed, setLegalConsentAgreed] = useState(false);
+  const [emissionAck, setEmissionAck] = useState(false);
+  const [confirmGate, setConfirmGate] = useState<null | { consent: boolean; emission: boolean }>(null);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [vehicle, setVehicle] = useState<VehicleData>(() => readOrderDraft()?.vehicle ?? { ...EMPTY_VEHICLE });
   const [services, setServices] = useState<string[]>(() => readOrderDraft()?.services ?? []);
@@ -880,6 +883,17 @@ const OrderPage = () => {
 
   const totalPrice = selectedItems.reduce((total, service) => total + service.price, 0);
   const shortOnCredits = creditBalance !== null && creditBalance < totalPrice;
+  const emissionSelected = selectedItems.some((service) => service.category === 'Emission Control');
+
+  useEffect(() => {
+    if (emissionSelected) return;
+    setEmissionAck(false);
+    setConfirmGate((current) => {
+      if (!current?.emission) return current;
+      const next = { ...current, emission: false };
+      return next.consent ? next : null;
+    });
+  }, [emissionSelected]);
 
   const setVehicleField = (field: keyof VehicleData, value: string | number) => {
     setVehicle((current) => ({ ...current, [field]: value }));
@@ -974,6 +988,7 @@ const OrderPage = () => {
       else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) next.email = 'errorEmailInvalid';
     }
     if (!legalConsentAgreed) next.consent = 'errorConsent';
+    if (emissionSelected && !emissionAck) next.emission = 'errorEmissionAck';
     return next;
   };
 
@@ -990,6 +1005,8 @@ const OrderPage = () => {
     setCustomerNote('');
     setErrors({});
     setLegalConsentAgreed(false);
+    setEmissionAck(false);
+    setConfirmGate(null);
     setIsDragging(false);
     dragDepth.current = 0;
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -1009,6 +1026,17 @@ const OrderPage = () => {
         // The order and the credit charge are already stored.
       }
     })();
+  };
+
+  const requestCheckout = () => {
+    const needConsent = !legalConsentAgreed;
+    const needEmission = emissionSelected && !emissionAck;
+    if (needConsent || needEmission) {
+      setConfirmGate({ consent: needConsent, emission: needEmission });
+      return;
+    }
+    if (shortOnCredits) openCreditTopUp();
+    else void payWithCredits();
   };
 
   const payWithCredits = async () => {
@@ -1157,7 +1185,7 @@ const OrderPage = () => {
   const newOrderFit = !showOrders && portalView === 'new';
 
   return (
-    <div className={`relative flex w-full flex-grow flex-col bg-background ${newOrderFit ? 'lg:h-[calc(100dvh-4.25rem)] lg:max-h-[calc(100dvh-4.25rem)] lg:overflow-hidden' : ''}`}>
+    <div className={`relative flex w-full min-w-0 flex-grow flex-col overflow-x-hidden bg-background ${newOrderFit ? 'lg:h-[calc(100dvh-4.25rem)] lg:max-h-[calc(100dvh-4.25rem)] lg:overflow-hidden' : ''}`}>
       <div className="order-hex-layer" aria-hidden="true">
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <pre className="w-1/2">{HEX_DUMP}</pre>
@@ -1527,7 +1555,7 @@ const OrderPage = () => {
                     setIsDragging(false);
                     acceptFile(event.dataTransfer.files?.[0]);
                   }}
-                  className={`group flex min-h-[240px] cursor-pointer flex-col items-center justify-center rounded-lg border px-6 py-10 text-center transition-all lg:min-h-0 lg:flex-1 lg:py-4 ${
+                  className={`order-file-drop group flex min-h-[240px] cursor-pointer flex-col items-center justify-center rounded-lg border px-6 py-10 text-center transition-all lg:min-h-0 lg:flex-1 lg:py-4 ${
                     selectedFile || isDragging
                       ? 'border-solid border-[rgba(16,185,129,0.65)] bg-[radial-gradient(circle_at_center,rgba(16,185,129,0.18),rgba(5,36,28,0.76))] shadow-[0_0_20px_rgba(16,185,129,0.2),inset_0_0_24px_rgba(16,185,129,0.15)] hover:border-[#10b981] hover:bg-[radial-gradient(circle_at_center,rgba(16,185,129,0.28),rgba(5,46,36,0.82))] hover:shadow-[0_0_28px_rgba(16,185,129,0.36),inset_0_0_30px_rgba(16,185,129,0.22)]'
                       : errors.file
@@ -1559,7 +1587,7 @@ const OrderPage = () => {
                     </>
                   ) : (
                     <>
-                      <div className={`mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border transition-all ${
+                      <div className={`order-file-mark mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border transition-all ${
                         isDragging
                           ? 'border-[rgba(16,185,129,0.55)] bg-[rgba(16,185,129,0.18)] shadow-[0_0_14px_rgba(16,185,129,0.25)] group-hover:border-[#10b981] group-hover:bg-[rgba(16,185,129,0.28)] group-hover:shadow-[0_0_22px_rgba(16,185,129,0.48)]'
                           : errors.file
@@ -1616,6 +1644,39 @@ const OrderPage = () => {
                   />
                   <span className="mt-1.5 block text-right text-[11px] text-muted-foreground">{customerNote.length}/500</span>
                 </label>
+              </section>
+
+              <section
+                className={`order-emission-notice shrink-0 rounded-xl px-3 py-2.5 md:px-4 ${confirmGate?.emission || errors.emission ? 'is-attention' : ''}`}
+              >
+                <h2 className="text-sm font-semibold leading-5 text-[#f0b4b4]">{t('emissionNoticeTitle')}</h2>
+                <p className="mt-1.5 text-xs leading-relaxed text-[#f3e6c8]">{t('offroadDisclaimer')}</p>
+                {emissionSelected && (
+                  <label className="mt-2.5 flex cursor-pointer items-start gap-2.5 text-xs leading-relaxed text-[#f8f1dc]">
+                    <input
+                      type="checkbox"
+                      checked={emissionAck}
+                      onChange={(event) => {
+                        const checked = event.target.checked;
+                        setEmissionAck(checked);
+                        if (!checked) return;
+                        setErrors((current) => {
+                          if (!current.emission) return current;
+                          const next = { ...current };
+                          delete next.emission;
+                          return next;
+                        });
+                        setConfirmGate((current) => {
+                          if (!current?.emission) return current;
+                          const next = { ...current, emission: false };
+                          return next.consent ? next : null;
+                        });
+                      }}
+                      className="mt-0.5 h-4 w-4 shrink-0 accent-amber-400"
+                    />
+                    <span>{t('emissionNoticeConfirm')}</span>
+                  </label>
+                )}
               </section>
             </div>
 
@@ -1771,21 +1832,25 @@ const OrderPage = () => {
                         : errors.consent
                           ? 'border-red-500 bg-red-500/10 text-muted-foreground'
                           : 'border-primary/20 text-muted-foreground hover:border-primary/40'
-                    }`}
+                    } ${confirmGate?.consent ? 'order-consent-attention' : ''}`}
                   >
                     <input
                       type="checkbox"
                       checked={legalConsentAgreed}
                       onChange={(event) => {
                         setLegalConsentAgreed(event.target.checked);
-                        if (event.target.checked) {
-                          setErrors((current) => {
-                            if (!current.consent) return current;
-                            const next = { ...current };
-                            delete next.consent;
-                            return next;
-                          });
-                        }
+                        if (!event.target.checked) return;
+                        setErrors((current) => {
+                          if (!current.consent) return current;
+                          const next = { ...current };
+                          delete next.consent;
+                          return next;
+                        });
+                        setConfirmGate((current) => {
+                          if (!current?.consent) return current;
+                          const next = { ...current, consent: false };
+                          return next.emission ? next : null;
+                        });
                       }}
                       className="mt-0.5 h-4 w-4 shrink-0 accent-cyan-400"
                     />
@@ -1820,7 +1885,7 @@ const OrderPage = () => {
 
                   <button
                     type="button"
-                    onClick={shortOnCredits ? openCreditTopUp : payWithCredits}
+                    onClick={requestCheckout}
                     disabled={isSubmitting && !shortOnCredits}
                     aria-busy={isSubmitting && !shortOnCredits}
                     aria-label={shortOnCredits ? t('topUpCreditsAria') : t('payCreditsAria')}
@@ -1848,6 +1913,35 @@ const OrderPage = () => {
           )}
         </div>
       </div>
+      {confirmGate && (
+        <div
+          className="fixed inset-0 z-[95] flex items-center justify-center overflow-hidden bg-black/55 p-4"
+          onClick={() => setConfirmGate(null)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="confirm-gate-title"
+            className="order-confirm-gate w-full max-w-md rounded-xl p-5"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 id="confirm-gate-title" className="text-base font-bold leading-snug text-[#f6d98a]">
+              {t('confirmGateTitle')}
+            </h2>
+            <div className="mt-3 space-y-2 text-sm leading-relaxed text-[#f8f1dc]">
+              <p>{t('confirmGateBody')}</p>
+              {confirmGate.emission && <p>{t('confirmGateEmission')}</p>}
+            </div>
+            <button
+              type="button"
+              onClick={() => setConfirmGate(null)}
+              className="order-confirm-gate-ack mt-5 min-h-[44px] w-full rounded-lg text-sm font-semibold"
+            >
+              {t('confirmGateAck')}
+            </button>
+          </div>
+        </div>
+      )}
       {operationClosed && (
         <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/75 p-4">
           <div
