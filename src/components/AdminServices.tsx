@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, ChevronDown, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { catalogCategories, loadServiceCatalog, notifyServiceCatalogChanged, peekServiceCatalog, subscribeServiceCatalog, type CatalogService } from '@/lib/serviceCatalog';
+import { loadServiceCatalog, notifyServiceCatalogChanged, peekServiceCatalog, subscribeServiceCatalog, type CatalogService } from '@/lib/serviceCatalog';
 import { formatCreditUnits } from '@/lib/creditUnits';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { supabase } from '@/lib/supabase';
@@ -15,27 +15,52 @@ type Draft = {
   price: string;
 };
 
+const STAGE_DIESEL = /^stage\s*1\s*diesel\s*[·|:–—-]\s*(.+)$/i;
+const STAGE_PETROL = /^stage\s*1\s*(?:gasoline\s*\/\s*petrol|gasoline|petrol)\s*[·|:–—-]\s*(.+)$/i;
+
+const SERVICE_GROUPS = [
+  { id: 'emission', stored: 'Emission Control', labelKey: 'catEmission', tone: 'tone-emission', color: '#38bdf8' },
+  { id: 'engine', stored: 'Engine Functions', labelKey: 'catEngine', tone: 'tone-engine', color: '#a3e635' },
+  { id: 'stage1-diesel', stored: 'Performance', labelKey: 'catStageDiesel', tone: 'tone-stage-diesel', color: '#fbbf24' },
+  { id: 'stage1-petrol', stored: 'Performance', labelKey: 'catStagePetrol', tone: 'tone-stage-petrol', color: '#ea580c' },
+  { id: 'tcu', stored: 'Performance', labelKey: 'catTcu', tone: 'tone-tcu', color: '#2dd4bf' },
+  { id: 'security', stored: 'Security', labelKey: 'catSecurity', tone: 'tone-security', color: '#c084fc' },
+] as const;
+
 const emptyDraft = (): Draft => ({
   id: '',
   name: '',
   description: '',
-  category: catalogCategories[0],
+  category: 'emission',
   price: '',
 });
 
-const categoryTone: Record<string, { text: string; color: string }> = {
-  'Emission Control': { text: 'text-cyan-400', color: '#22d3ee' },
-  'Engine Functions': { text: 'text-lime-400', color: '#a3e635' },
-  Performance: { text: 'text-amber-400', color: '#fbbf24' },
-  Security: { text: 'text-fuchsia-400', color: '#e879f9' },
+const groupById = (id: string) => SERVICE_GROUPS.find((group) => group.id === id);
+
+const visualGroup = (service: { name: string; category: string }) => {
+  if (service.category === 'Emission Control') return 'emission';
+  if (service.category === 'Engine Functions') return 'engine';
+  if (service.category === 'Security') return 'security';
+  if (service.category === 'Performance') {
+    const name = service.name.trim();
+    if (STAGE_DIESEL.test(name)) return 'stage1-diesel';
+    if (STAGE_PETROL.test(name)) return 'stage1-petrol';
+    if (/\bTCU\b/i.test(name)) return 'tcu';
+    return 'performance';
+  }
+  return service.category;
 };
 
-const categoryTextClass = (category: string) => categoryTone[category]?.text ?? 'text-white';
+const storedCategory = (choice: string) => {
+  const group = groupById(choice);
+  if (group) return group.stored;
+  if (choice === 'performance') return 'Performance';
+  return choice;
+};
 
-const CATEGORY_FILTER_OPTIONS = [
-  { value: '', label: 'Všetky kategórie' },
-  ...catalogCategories.map((category) => ({ value: category, label: category })),
-];
+const choiceTone = (id: string) => groupById(id)?.tone ?? (id === 'performance' ? 'tone-performance' : 'tone-legacy');
+
+const choiceColor = (id: string) => groupById(id)?.color ?? (id === 'performance' ? '#fbbf24' : '#e5e7eb');
 
 const readPrice = (value: string) => {
   const price = Math.round(Number(value.trim().replace(',', '.')) * 100) / 100;
@@ -45,20 +70,14 @@ const readPrice = (value: string) => {
 
 const fieldClass = 'h-11 w-full rounded-md border border-primary/70 bg-[#0a192f] px-3 text-sm text-foreground shadow-[0_0_16px_rgba(0,242,255,0.28)] focus:border-primary focus:outline-none focus:shadow-[0_0_16px_rgba(0,242,255,0.45)]';
 
-const categoryLabel = (category: string, translate: (key: 'catEmission' | 'catEngine' | 'catPerformance' | 'catSecurity') => string) => {
-  if (category === 'Emission Control') return translate('catEmission');
-  if (category === 'Engine Functions') return translate('catEngine');
-  if (category === 'Performance') return translate('catPerformance');
-  if (category === 'Security') return translate('catSecurity');
-  return category;
-};
-
-const categoryToneClass = (category: string) => {
-  if (category === 'Emission Control') return 'tone-emission';
-  if (category === 'Engine Functions') return 'tone-engine';
-  if (category === 'Performance') return 'tone-performance';
-  if (category === 'Security') return 'tone-security';
-  return '';
+const choiceLabel = (id: string, translate: (key: 'catEmission' | 'catEngine' | 'catPerformance' | 'catSecurity' | 'catStageDiesel' | 'catStagePetrol' | 'catTcu') => string) => {
+  const group = groupById(id);
+  if (group) return translate(group.labelKey);
+  if (id === 'performance' || id === 'Performance') return translate('catPerformance');
+  if (id === 'Emission Control') return translate('catEmission');
+  if (id === 'Engine Functions') return translate('catEngine');
+  if (id === 'Security') return translate('catSecurity');
+  return id;
 };
 
 const CategorySelect = ({
@@ -72,10 +91,12 @@ const CategorySelect = ({
 }) => {
   const { t } = useLanguage();
   const [open, setOpen] = useState(false);
+  const [scrollColor, setScrollColor] = useState(() => choiceColor(value));
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
+    setScrollColor(choiceColor(value));
     const close = (event: MouseEvent) => {
       const target = event.target;
       if (target instanceof Node && rootRef.current?.contains(target)) return;
@@ -83,7 +104,7 @@ const CategorySelect = ({
     };
     document.addEventListener('mousedown', close, true);
     return () => document.removeEventListener('mousedown', close, true);
-  }, [open]);
+  }, [open, value]);
 
   return (
     <div
@@ -100,26 +121,32 @@ const CategorySelect = ({
         aria-haspopup="listbox"
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
-        className={`service-category-box ${categoryToneClass(value)} flex h-11 w-full items-center justify-between rounded-md px-3 text-left text-sm font-normal`}
+        className={`service-category-box ${choiceTone(value)} flex h-11 w-full items-center justify-between rounded-md px-3 text-left text-sm font-normal`}
       >
-        <span className="truncate">{categoryLabel(value, t)}</span>
+        <span className="truncate">{choiceLabel(value, t)}</span>
         <ChevronDown className="h-4 w-4 shrink-0" />
       </button>
       {open ? (
-        <div role="listbox" className="service-category-list absolute left-0 right-0 top-[calc(100%+2px)] z-30 overflow-hidden">
+        <div
+          role="listbox"
+          className="service-category-list absolute left-0 right-0 top-[calc(100%+2px)] z-40 max-h-72 overflow-y-auto"
+          style={{ '--c-scroll': scrollColor } as CSSProperties}
+        >
           {categories.map((category) => (
             <button
               key={category}
               type="button"
               role="option"
               aria-selected={category === value}
+              onMouseEnter={() => setScrollColor(choiceColor(category))}
+              onFocus={() => setScrollColor(choiceColor(category))}
               onClick={() => {
                 onChange(category);
                 setOpen(false);
               }}
-              className={`service-category-item ${categoryToneClass(category)} block w-full text-left text-sm font-normal ${category === value ? 'is-selected' : ''}`}
+              className={`service-category-item ${choiceTone(category)} block w-full text-left text-sm font-normal ${category === value ? 'is-selected' : ''}`}
             >
-              {categoryLabel(category, t)}
+              {choiceLabel(category, t)}
             </button>
           ))}
         </div>
@@ -143,8 +170,9 @@ const AdminServices = () => {
   const categoryHighlightRef = useRef('');
   categoryMenuOpenRef.current = categoryMenuOpen;
   categoryHighlightRef.current = categoryHighlight;
+  const filterOptionValuesRef = useRef<string[]>(['']);
   const moveCategoryHighlight = (direction: 1 | -1) => {
-    const values = CATEGORY_FILTER_OPTIONS.map((option) => option.value);
+    const values = filterOptionValuesRef.current;
     const base = categoryMenuOpenRef.current ? categoryHighlightRef.current : categoryFilter;
     const index = Math.max(0, values.indexOf(base));
     const next = values[(index + direction + values.length) % values.length];
@@ -191,24 +219,39 @@ const AdminServices = () => {
     return () => document.removeEventListener('mousedown', close, true);
   }, [categoryMenuOpen, categoryHighlight]);
 
-  const categories = useMemo(() => {
-    const extra = services
-      .map((service) => service.category)
-      .filter((category) => !catalogCategories.includes(category));
-    return [...catalogCategories, ...new Set(extra)];
-  }, [services]);
+  const filterOptions = useMemo(() => {
+    const options: Array<{ value: string; label: string; tone: string }> = [
+      { value: '', label: 'Všetky kategórie', tone: 'tone-all' },
+      ...SERVICE_GROUPS.map((group) => ({ value: group.id, label: t(group.labelKey), tone: group.tone })),
+    ];
+    const known = new Set(options.map((option) => option.value));
+    for (const service of services) {
+      const id = visualGroup(service);
+      if (known.has(id)) continue;
+      known.add(id);
+      options.push({ value: id, label: choiceLabel(id, t), tone: choiceTone(id) });
+    }
+    return options;
+  }, [services, t]);
+  filterOptionValuesRef.current = filterOptions.map((option) => option.value);
+
+  const modalCategories = (current: string) => {
+    const ids: string[] = SERVICE_GROUPS.map((group) => group.id);
+    if (current && !ids.includes(current)) ids.push(current);
+    return ids;
+  };
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    const rank = (category: string) => {
-      const index = catalogCategories.indexOf(category);
-      return index === -1 ? catalogCategories.length : index;
+    const rank = (id: string) => {
+      const index = SERVICE_GROUPS.findIndex((group) => group.id === id);
+      return index === -1 ? SERVICE_GROUPS.length : index;
     };
     return services
-      .filter((service) => !categoryFilter || service.category === categoryFilter)
-      .filter((service) => !needle || [service.name, service.category, service.description].join(' ').toLowerCase().includes(needle))
-      .sort((a, b) => rank(a.category) - rank(b.category) || a.name.localeCompare(b.name, 'sk'));
-  }, [categoryFilter, query, services]);
+      .filter((service) => !categoryFilter || visualGroup(service) === categoryFilter)
+      .filter((service) => !needle || [service.name, service.category, service.description, choiceLabel(visualGroup(service), t)].join(' ').toLowerCase().includes(needle))
+      .sort((a, b) => rank(visualGroup(a)) - rank(visualGroup(b)) || a.name.localeCompare(b.name, 'sk'));
+  }, [categoryFilter, query, services, t]);
 
   const beginEdit = (service: CatalogService) => {
     setPendingDelete(null);
@@ -217,7 +260,7 @@ const AdminServices = () => {
       id: service.id,
       name: service.name,
       description: service.description,
-      category: service.category,
+      category: visualGroup(service),
       price: service.price.toFixed(2).replace('.', ','),
     });
   };
@@ -241,7 +284,7 @@ const AdminServices = () => {
     setBusy(true);
     const payload = {
       name: current.name.trim(),
-      category: current.category.trim(),
+      category: storedCategory(current.category.trim()),
       price,
     };
     const saved = current.id
@@ -312,7 +355,7 @@ const AdminServices = () => {
               </label>
               <label className="block">
                 <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Kategória</span>
-                <CategorySelect value={draft.category} categories={categories} onChange={(category) => setDraft((current) => ({ ...current, category }))} />
+                <CategorySelect value={draft.category} categories={modalCategories(draft.category)} onChange={(category) => setDraft((current) => ({ ...current, category }))} />
               </label>
               <label className="block">
                 <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Cena v kreditoch</span>
@@ -353,7 +396,7 @@ const AdminServices = () => {
               </label>
               <label className="block">
                 <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Kategória</span>
-                <CategorySelect value={editDraft.category} categories={categories} onChange={(category) => setEditDraft((current) => ({ ...current, category }))} />
+                <CategorySelect value={editDraft.category} categories={modalCategories(editDraft.category)} onChange={(category) => setEditDraft((current) => ({ ...current, category }))} />
               </label>
               <label className="block">
                 <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Cena v kreditoch</span>
@@ -455,9 +498,9 @@ const AdminServices = () => {
               moveCategoryHighlight(event.key === 'ArrowDown' ? 1 : -1);
             }}
           >
-            {CATEGORY_FILTER_OPTIONS.map((option) => (
-              <span key={option.label} aria-hidden className="invisible col-start-1 row-start-1 flex h-[42px] w-max items-center gap-2 whitespace-nowrap border border-transparent px-3 text-base leading-6">
-                {option.value ? categoryLabel(option.value, t) : option.label}
+            {filterOptions.map((option) => (
+              <span key={option.value || 'all'} aria-hidden className="invisible col-start-1 row-start-1 flex h-[42px] w-max items-center gap-2 whitespace-nowrap border border-transparent px-3 text-base leading-6">
+                {option.label}
                 <span className="inline-block h-4 w-4 shrink-0" />
               </span>
             ))}
@@ -477,32 +520,35 @@ const AdminServices = () => {
                 setCategoryHighlight(categoryFilter);
                 setCategoryMenuOpen(true);
               }}
-              className={`col-start-1 row-start-1 inline-flex h-[42px] w-full items-center gap-2 whitespace-nowrap rounded-md border border-primary/70 bg-[#0a192f] px-3 text-left text-base leading-6 shadow-[0_0_16px_rgba(0,242,255,0.28)] focus:outline-none ${categoryFilter ? categoryTextClass(categoryFilter) : 'text-foreground'}`}
+              className={`col-start-1 row-start-1 inline-flex h-[42px] w-full items-center gap-2 whitespace-nowrap rounded-md border border-primary/70 bg-[#0a192f] px-3 text-left text-base leading-6 shadow-[0_0_16px_rgba(0,242,255,0.28)] focus:outline-none ${categoryFilter ? choiceTone(categoryFilter) : 'text-foreground'}`}
+              style={categoryFilter ? { color: choiceColor(categoryFilter) } : undefined}
             >
-              <span>{categoryFilter ? categoryLabel(categoryFilter, t) : 'Všetky kategórie'}</span>
+              <span>{categoryFilter ? choiceLabel(categoryFilter, t) : 'Všetky kategórie'}</span>
               <ChevronDown className="ml-auto h-4 w-4 shrink-0" />
             </button>
             {categoryMenuOpen ? (
               <div
                 role="listbox"
                 aria-label="Kategória služieb"
-                className="services-category-menu absolute right-0 top-[calc(100%+4px)] z-40 min-w-full overflow-hidden rounded-md border border-white/15 py-1 shadow-[0_12px_32px_rgba(0,0,0,0.55)]"
+                className="services-category-menu absolute right-0 top-[calc(100%+4px)] z-40 max-h-80 min-w-full overflow-y-auto rounded-md border border-white/15 py-1 shadow-[0_12px_32px_rgba(0,0,0,0.55)]"
+                style={{ '--c-scroll': choiceColor(categoryHighlight) } as CSSProperties}
               >
-                {CATEGORY_FILTER_OPTIONS.map((option) => (
+                {filterOptions.map((option) => (
                   <button
-                    key={option.label}
+                    key={option.value || 'all'}
                     type="button"
                     role="option"
                     data-category={option.value || 'all'}
                     aria-selected={categoryHighlight === option.value}
+                    onMouseEnter={() => setCategoryHighlight(option.value)}
                     onClick={() => {
                       setCategoryFilter(option.value);
                       setCategoryMenuOpen(false);
                       categoryFilterButtonRef.current?.focus();
                     }}
-                    className="block w-full whitespace-nowrap px-3 py-2 text-left text-base leading-6"
+                    className={`block w-full whitespace-nowrap px-3 py-2 text-left text-base leading-6 ${option.tone}`}
                   >
-                    {option.value ? categoryLabel(option.value, t) : option.label}
+                    {option.label}
                   </button>
                 ))}
               </div>
@@ -536,7 +582,7 @@ const AdminServices = () => {
                       {service.description && <p className="mt-1 text-xs text-white/70">{service.description}</p>}
                     </td>
                     <td className={`border-r border-slate-800/60 px-4 py-0 align-middle text-sm font-normal text-white${picked}`}>
-                      <span className={`whitespace-nowrap ${categoryTextClass(service.category)}`}>{categoryLabel(service.category, t)}</span>
+                      <span className="whitespace-nowrap" style={{ color: choiceColor(visualGroup(service)) }}>{choiceLabel(visualGroup(service), t)}</span>
                     </td>
                     <td className={`${cell} text-center`}>
                       <p className="whitespace-nowrap text-xl font-bold leading-none text-primary">{formatCreditUnits(service.price, language)}</p>

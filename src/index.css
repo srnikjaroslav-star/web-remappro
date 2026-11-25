@@ -605,75 +605,36 @@
   }
 
   .services-category-menu {
-    background-color: #000000;
+    background-color: #040b12;
+    scrollbar-width: thin;
+    scrollbar-color: var(--c-scroll, #64748b) #040b12;
+  }
+
+  .services-category-menu::-webkit-scrollbar {
+    width: 7px;
+  }
+
+  .services-category-menu::-webkit-scrollbar-track {
+    background: #040b12;
+  }
+
+  .services-category-menu::-webkit-scrollbar-thumb {
+    background: var(--c-scroll, #64748b);
+    border-radius: 999px;
   }
 
   .services-category-menu [role='option'] {
-    background-color: #000000;
-    color: #e5e7eb;
+    background-color: #040b12;
+    color: var(--c-main, #e5e7eb);
     outline: none;
-  }
-
-  .services-category-menu [data-category='all'] {
-    color: #e5e7eb;
-  }
-
-  .services-category-menu [data-category='Emission Control'] {
-    color: #22d3ee;
-  }
-
-  .services-category-menu [data-category='Engine Functions'] {
-    color: #a3e635;
-  }
-
-  .services-category-menu [data-category='Performance'] {
-    color: #fbbf24;
-  }
-
-  .services-category-menu [data-category='Security'] {
-    color: #e879f9;
   }
 
   .services-category-menu [role='option']:hover,
   .services-category-menu [role='option']:focus,
   .services-category-menu [role='option'][aria-selected='true'] {
-    background-color: #1a3034;
-    color: #e5e7eb;
-  }
-
-  .services-category-menu [data-category='all']:hover,
-  .services-category-menu [data-category='all']:focus,
-  .services-category-menu [data-category='all'][aria-selected='true'] {
-    background-color: #1a3034;
-    color: #e5e7eb;
-  }
-
-  .services-category-menu [data-category='Emission Control']:hover,
-  .services-category-menu [data-category='Emission Control']:focus,
-  .services-category-menu [data-category='Emission Control'][aria-selected='true'] {
-    background-color: #12343c;
-    color: #22d3ee;
-  }
-
-  .services-category-menu [data-category='Engine Functions']:hover,
-  .services-category-menu [data-category='Engine Functions']:focus,
-  .services-category-menu [data-category='Engine Functions'][aria-selected='true'] {
-    background-color: #243214;
-    color: #a3e635;
-  }
-
-  .services-category-menu [data-category='Performance']:hover,
-  .services-category-menu [data-category='Performance']:focus,
-  .services-category-menu [data-category='Performance'][aria-selected='true'] {
-    background-color: #332c12;
-    color: #fbbf24;
-  }
-
-  .services-category-menu [data-category='Security']:hover,
-  .services-category-menu [data-category='Security']:focus,
-  .services-category-menu [data-category='Security'][aria-selected='true'] {
-    background-color: #321838;
-    color: #e879f9;
+    background-color: color-mix(in srgb, var(--c-main, #94a3b8) 34%, #040b12);
+    box-shadow: inset 3px 0 0 var(--c-main, #94a3b8);
+    color: var(--c-main, #e5e7eb);
   }
 
   .table-header {
@@ -1633,75 +1594,67 @@
   outline: none;
 }
 
-.service-category-box.tone-emission {
-  border-color: #22d3ee;
-  background-color: rgba(8, 36, 48, 0.88);
-  box-shadow: 0 0 14px rgba(34, 211, 238, 0.28);
-  color: #38bdf8;
-}
+.tone-all { --c-main: #e5e7eb; }
+.tone-emission { --c-main: #38bdf8; }
+.tone-engine { --c-main: #a3e635; }
+.tone-stage-diesel { --c-main: #fbbf24; }
+.tone-stage-petrol { --c-main: #ea580c; }
+.tone-tcu { --c-main: #2dd4bf; }
+.tone-security { --c-main: #c084fc; }
+.tone-performance { --c-main: #fbbf24; }
+.tone-legacy { --c-main: #e5e7eb; }
 
-.service-category-box.tone-engine {
-  border-color: #a3e635;
-  background-color: rgba(24, 38, 10, 0.88);
-  box-shadow: 0 0 14px rgba(163, 230, 53, 0.26);
-  color: #a3e635;
-}
-
-.service-category-box.tone-performance {
-  border-color: #fb923c;
-  background-color: rgba(42, 20, 8, 0.88);
-  box-shadow: 0 0 14px rgba(251, 146, 60, 0.28);
-  color: #f59e0b;
-}
-
-.service-category-box.tone-security {
-  border-color: #e879f9;
-  background-color: rgba(38, 10, 44, 0.88);
-  box-shadow: 0 0 14px rgba(232, 121, 249, 0.28);
-  color: #c084fc;
+.service-category-box.tone-emission,
+.service-category-box.tone-engine,
+.service-category-box.tone-stage-diesel,
+.service-category-box.tone-stage-petrol,
+.service-category-box.tone-tcu,
+.service-category-box.tone-security,
+.service-category-box.tone-performance,
+.service-category-box.tone-legacy {
+  border-color: var(--c-main);
+  background-color: color-mix(in srgb, var(--c-main) 16%, #071018);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--c-main) 28%, transparent);
+  color: var(--c-main);
 }
 
 .service-category-list {
   border-radius: 4px;
-  background: #050608;
+  background-color: #040b12;
   border: 1px solid rgba(148, 163, 184, 0.35);
   box-shadow: 0 12px 26px rgba(0, 0, 0, 0.85);
+  scrollbar-width: thin;
+  scrollbar-color: var(--c-scroll, #64748b) #040b12;
+}
+
+.service-category-list::-webkit-scrollbar {
+  width: 7px;
+}
+
+.service-category-list::-webkit-scrollbar-track {
+  background: #040b12;
+}
+
+.service-category-list::-webkit-scrollbar-thumb {
+  background: var(--c-scroll, #64748b);
+  border-radius: 999px;
 }
 
 .service-category-item {
   padding: 8px 12px;
-  color: var(--txt, #fafafa);
-  background: transparent;
+  color: var(--c-main, #fafafa);
+  background-color: #040b12;
   border: none;
   box-shadow: none;
   cursor: pointer;
 }
 
-.service-category-item.tone-emission {
-  --txt: #38bdf8;
-  --bar-bg: rgba(14, 116, 144, 0.28);
-}
-
-.service-category-item.tone-engine {
-  --txt: #a3e635;
-  --bar-bg: rgba(77, 124, 15, 0.28);
-}
-
-.service-category-item.tone-performance {
-  --txt: #f59e0b;
-  --bar-bg: rgba(120, 53, 15, 0.34);
-}
-
-.service-category-item.tone-security {
-  --txt: #c084fc;
-  --bar-bg: rgba(107, 33, 168, 0.28);
-}
-
 .service-category-item:hover,
 .service-category-item:focus,
 .service-category-item.is-selected {
-  background: var(--bar-bg);
-  color: var(--txt, #fafafa);
+  background-color: color-mix(in srgb, var(--c-main, #94a3b8) 34%, #040b12);
+  box-shadow: inset 3px 0 0 var(--c-main, #94a3b8);
+  color: var(--c-main, #fafafa);
   text-shadow: none;
   outline: none;
 }
