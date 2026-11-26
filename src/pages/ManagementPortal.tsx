@@ -2376,7 +2376,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
             <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-primary/40 bg-[#070d16] shadow-[0_0_30px_rgba(0,242,255,0.22)]">
               <div className="flex min-h-0 flex-1 flex-col p-2">
-                <div className="mb-2 flex shrink-0 items-center justify-between">
+                <div className="mb-1.5 flex shrink-0 items-center justify-between">
                   <h2 className="flex items-center gap-2 text-xl font-bold text-foreground">
                     <FileText className="w-6 h-6 text-primary" />
                     Detail objednávky
@@ -2391,13 +2391,13 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                 </div>
 
                 <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-                <div className="grid min-w-0 grid-cols-1 items-start gap-2 lg:grid-cols-2">
-                  <div className="flex min-w-0 flex-col gap-1">
-                    <section className="min-w-0 rounded-lg border border-primary/35 bg-[#0a192f] p-2.5 shadow-[inset_0_0_18px_rgba(0,242,255,0.08)]">
-                      <h3 className="mb-1.5 border-b border-primary/30 pb-1 text-sm font-semibold text-primary">
+                <div className="grid min-w-0 grid-cols-1 items-start gap-1 lg:grid-cols-2">
+                  <div className="flex min-w-0 flex-col gap-0.5">
+                    <section className="min-w-0 rounded-lg border border-primary/35 bg-[#0a192f] p-2 shadow-[inset_0_0_18px_rgba(0,242,255,0.08)]">
+                      <h3 className="mb-1 border-b border-primary/30 pb-1 text-sm font-semibold text-primary">
                         Základné informácie
                       </h3>
-                      <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-1">
                         <div>
                           <p className="text-sm text-muted-foreground">ID objednávky</p>
                           <p className="break-all font-mono font-semibold text-primary">{detailOrder.order_number || detailOrder.id.slice(0, 8).toUpperCase()}</p>
@@ -2464,11 +2464,11 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                       </div>
                     </section>
 
-                    <section className="min-w-0 rounded-lg border border-primary/35 bg-[#0a192f] p-2.5 shadow-[inset_0_0_18px_rgba(0,242,255,0.08)]">
-                      <h3 className="mb-1.5 border-b border-primary/30 pb-1 text-sm font-semibold text-primary">
+                    <section className="min-w-0 rounded-lg border border-primary/35 bg-[#0a192f] p-2 shadow-[inset_0_0_18px_rgba(0,242,255,0.08)]">
+                      <h3 className="mb-1 border-b border-primary/30 pb-1 text-sm font-semibold text-primary">
                         Vozidlo
                       </h3>
-                      <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-1">
                         <div>
                           <p className="text-sm text-muted-foreground">Značka / Model</p>
                           <p className="break-words font-medium text-foreground">{detailOrder.car_brand || 'Nezadané'} {detailOrder.car_model || ''}</p>
@@ -2488,18 +2488,57 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                       </div>
                     </section>
 
-                    <section className="min-w-0 rounded-lg border border-primary/35 bg-[#0a192f] p-2.5 shadow-[inset_0_0_18px_rgba(0,242,255,0.08)]">
-                      <h3 className="mb-1.5 border-b border-primary/30 pb-1 text-sm font-semibold text-primary">
+                    <section className="min-w-0 rounded-lg border border-primary/35 bg-[#0a192f] p-2 shadow-[inset_0_0_18px_rgba(0,242,255,0.08)]">
+                      <h3 className="mb-1 border-b border-primary/30 pb-1 text-sm font-semibold text-primary">
                         Poznámka zákazníka
                       </h3>
                       <p className="break-words whitespace-pre-wrap text-foreground">{detailOrder.customer_note || '—'}</p>
                     </section>
+                  </div>
 
-                    <section className="min-w-0 rounded-lg border border-primary/35 bg-[#0a192f] p-2.5 shadow-[inset_0_0_18px_rgba(0,242,255,0.08)]">
-                      <h3 className="mb-1.5 border-b border-primary/30 pb-1 text-sm font-semibold text-primary">
+                  <div className="flex min-w-0 flex-col gap-0.5">
+                    <section className="min-w-0 rounded-lg border border-primary/35 bg-[#0a192f] p-2 shadow-[inset_0_0_18px_rgba(0,242,255,0.08)]">
+                      <h3 className="mb-1 border-b border-primary/30 pb-1 text-sm font-semibold text-primary">
+                        Zákazník
+                      </h3>
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                        <div>
+                          <p className="text-sm text-muted-foreground">Meno</p>
+                          <p className="break-words font-medium text-foreground">{detailOrder.customer_name}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">E-mail</p>
+                          <p className="break-all text-foreground">{detailOrder.customer_email}</p>
+                        </div>
+                      </div>
+                    </section>
+
+                    <section className="min-w-0 rounded-lg border border-primary/35 bg-[#0a192f] p-2 shadow-[inset_0_0_18px_rgba(0,242,255,0.08)]">
+                      <h3 className="mb-1 border-b border-primary/30 pb-1 text-sm font-semibold text-primary">
+                        Služby
+                      </h3>
+                      <p className="break-words text-foreground">{getServiceNames(detailOrder.service_type) || '—'}</p>
+                    </section>
+
+                    <section className="min-w-0 rounded-lg border border-primary/35 bg-[#0a192f] p-2 shadow-[inset_0_0_18px_rgba(0,242,255,0.08)]">
+                      <h3 className="mb-1 border-b border-primary/30 pb-1 text-sm font-semibold text-primary">
+                        CRC
+                      </h3>
+                      <input
+                        type="text"
+                        value={getEditableValue(detailOrder, 'checksum_crc')}
+                        onChange={(e) => handleFieldChange(detailOrder.id, 'checksum_crc', e.target.value)}
+                        placeholder="CRC..."
+                        maxLength={6}
+                        className="h-9 !w-[4.75rem] !max-w-[4.75rem] shrink-0 rounded border border-primary/60 bg-[#070d16] px-3 py-2 font-mono text-xl leading-none text-cyan-400 shadow-[0_0_12px_rgba(0,242,255,0.18)] placeholder:text-primary/40 focus:border-primary focus:outline-none focus:shadow-[0_0_16px_rgba(0,242,255,0.35)]"
+                      />
+                    </section>
+
+                    <section className="min-w-0 rounded-lg border border-primary/35 bg-[#0a192f] p-2 shadow-[inset_0_0_18px_rgba(0,242,255,0.08)]">
+                      <h3 className="mb-1 border-b border-primary/30 pb-1 text-sm font-semibold text-primary">
                         Právne súhlasy klienta
                       </h3>
-                      <div className="space-y-1.5 text-sm">
+                      <div className="space-y-1 text-sm">
                         <p className="break-words text-foreground">
                           <span className="text-muted-foreground">Obchodné podmienky: </span>
                           {detailOrder.legal_consent_at
@@ -2518,58 +2557,19 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                         </p>
                         <div>
                           <p className="text-muted-foreground">Znenie súhlasu</p>
-                          <p className="break-words whitespace-pre-wrap text-foreground">
+                          <p className="max-h-14 overflow-y-auto break-words whitespace-pre-wrap text-foreground">
                             {detailOrder.consent_summary?.trim() || 'Nezaznamenané'}
                           </p>
                         </div>
                       </div>
                     </section>
                   </div>
-
-                  <div className="flex min-w-0 flex-col gap-1">
-                    <section className="min-w-0 rounded-lg border border-primary/35 bg-[#0a192f] p-2.5 shadow-[inset_0_0_18px_rgba(0,242,255,0.08)]">
-                      <h3 className="mb-1.5 border-b border-primary/30 pb-1 text-sm font-semibold text-primary">
-                        Zákazník
-                      </h3>
-                      <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
-                        <div>
-                          <p className="text-sm text-muted-foreground">Meno</p>
-                          <p className="break-words font-medium text-foreground">{detailOrder.customer_name}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-muted-foreground">E-mail</p>
-                          <p className="break-all text-foreground">{detailOrder.customer_email}</p>
-                        </div>
-                      </div>
-                    </section>
-
-                    <section className="min-w-0 rounded-lg border border-primary/35 bg-[#0a192f] p-2.5 shadow-[inset_0_0_18px_rgba(0,242,255,0.08)]">
-                      <h3 className="mb-1.5 border-b border-primary/30 pb-1 text-sm font-semibold text-primary">
-                        Služby
-                      </h3>
-                      <p className="break-words text-foreground">{getServiceNames(detailOrder.service_type) || '—'}</p>
-                    </section>
-
-                    <section className="min-w-0 rounded-lg border border-primary/35 bg-[#0a192f] p-2.5 shadow-[inset_0_0_18px_rgba(0,242,255,0.08)]">
-                      <h3 className="mb-1.5 border-b border-primary/30 pb-1 text-sm font-semibold text-primary">
-                        CRC
-                      </h3>
-                      <input
-                        type="text"
-                        value={getEditableValue(detailOrder, 'checksum_crc')}
-                        onChange={(e) => handleFieldChange(detailOrder.id, 'checksum_crc', e.target.value)}
-                        placeholder="CRC..."
-                        maxLength={6}
-                        className="h-9 !w-[4.75rem] !max-w-[4.75rem] shrink-0 rounded border border-primary/60 bg-[#070d16] px-3 py-2 font-mono text-xl leading-none text-cyan-400 shadow-[0_0_12px_rgba(0,242,255,0.18)] placeholder:text-primary/40 focus:border-primary focus:outline-none focus:shadow-[0_0_16px_rgba(0,242,255,0.35)]"
-                      />
-                    </section>
-                  </div>
                 </div>
 
                 {/* Interná poznámka */}
                 {detailOrder.internal_note && (
-                  <section className="mt-2 min-w-0 rounded-lg border border-primary/35 bg-[#0a192f] p-2.5 shadow-[inset_0_0_18px_rgba(0,242,255,0.08)]">
-                    <h3 className="mb-1.5 border-b border-primary/30 pb-1 text-sm font-semibold text-primary">
+                  <section className="mt-1 min-w-0 rounded-lg border border-primary/35 bg-[#0a192f] p-2 shadow-[inset_0_0_18px_rgba(0,242,255,0.08)]">
+                    <h3 className="mb-1 border-b border-primary/30 pb-1 text-sm font-semibold text-primary">
                       Interná poznámka
                     </h3>
                     <p className="break-words whitespace-pre-wrap text-foreground">{detailOrder.internal_note}</p>
@@ -2578,8 +2578,8 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
 
                 {/* Activity Log */}
                 {activityLogs.length > 0 && (
-                  <section className="mt-2 min-w-0 rounded-lg border border-primary/35 bg-[#0a192f] p-2.5 shadow-[inset_0_0_18px_rgba(0,242,255,0.08)]">
-                    <h3 className="mb-1.5 border-b border-primary/30 pb-1 text-sm font-semibold text-primary">
+                  <section className="mt-1 min-w-0 rounded-lg border border-primary/35 bg-[#0a192f] p-2 shadow-[inset_0_0_18px_rgba(0,242,255,0.08)]">
+                    <h3 className="mb-1 border-b border-primary/30 pb-1 text-sm font-semibold text-primary">
                       Časová os aktivít
                     </h3>
                     <div className="space-y-1.5">
@@ -2632,7 +2632,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                 )}
 
                 </div>
-                <div className="mt-2 flex shrink-0 items-center justify-end gap-3 border-t border-primary/30 pt-2">
+                <div className="mt-1.5 flex shrink-0 items-center justify-end gap-3 border-t border-primary/30 pt-1.5">
                   <button
                     type="button"
                     onClick={closeOrderDetail}
