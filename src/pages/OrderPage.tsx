@@ -1113,6 +1113,20 @@ const OrderPage = () => {
         },
       }).catch(() => undefined);
 
+      const emissionOffroadConsent = Boolean(emissionSelected && emissionAck);
+      const termsText = `${t('consentLead')} ${t('consentTerms')}, ${t('consentPrivacy')} ${t('consentAnd')} ${t('consentRefunds')}${t('consentTail')}`;
+      const consentScope = emissionOffroadConsent
+        ? (language === 'en'
+          ? 'Confirmed: terms and the emission off-road/motorsport/export declaration.'
+          : 'Potvrdené: VOP a emisné off-road/motorsport/export vyhlásenie.')
+        : (language === 'en'
+          ? 'Confirmed: terms only.'
+          : 'Potvrdené: len VOP.');
+      const emissionText = emissionOffroadConsent
+        ? `${t('emissionNoticeTitle')}. ${t('offroadDisclaimer')} ${t('emissionNoticeConfirm')}`
+        : '';
+      const consentSummary = [consentScope, termsText, emissionText].filter(Boolean).join('\n');
+
       const invoked = await supabase.functions.invoke('pay-with-credits', {
         body: {
           serviceIds: services,
@@ -1126,6 +1140,8 @@ const OrderPage = () => {
           fileUrl: storedFile,
           customerNote: composedNote,
           legalConsent: legalConsentAgreed,
+          emissionOffroadConsent,
+          consentSummary,
           language: language === 'en' ? 'EN' : 'SK',
         },
       });

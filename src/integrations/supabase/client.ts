@@ -24,6 +24,11 @@ export interface Order {
   result_file_name?: string | null;
   result_file_path?: string | null;
   legal_consent: boolean;
+  legal_consent_at?: string | null;
+  legal_consent_known?: boolean;
+  emission_offroad_consent?: boolean | null;
+  emission_offroad_consent_at?: string | null;
+  consent_summary?: string | null;
   customer_note: string | null;
   checksum_crc: string | null;
   internal_note: string | null;

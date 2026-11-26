@@ -232,6 +232,11 @@ const normalizeOrder = (row: StoredOrderRow, owner?: { name: string; email: stri
     credit_note_pdf: row.credit_note_pdf || packed.creditUrl || null,
     created_at: row.created_at || new Date().toISOString(),
     legal_consent: row.legal_consent ?? true,
+    legal_consent_at: row.legal_consent_at || null,
+    legal_consent_known: typeof row.legal_consent === 'boolean',
+    emission_offroad_consent: row.emission_offroad_consent === true,
+    emission_offroad_consent_at: row.emission_offroad_consent_at || null,
+    consent_summary: typeof row.consent_summary === 'string' ? row.consent_summary : null,
   };
 };
 
@@ -677,12 +682,15 @@ const ManagementPortal = () => {
       const user = session?.user ?? null;
       if (!user) return;
       const listBase = 'id, user_id, created_at, vehicle_brand, vehicle_model, vehicle_year, engine, ecu, fuel, services, total_price, status, note';
-      let listQuery = supabase.from('orders').select(listBase).order('created_at', { ascending: false });
-      if (user.id) listQuery = listQuery.eq('user_id', user.id);
-      const [billing, listed] = await Promise.all([
-        loadClientBilling(user),
-        listQuery,
-      ]);
+      const listWithConsent = `${listBase}, legal_consent, legal_consent_at, emission_offroad_consent, emission_offroad_consent_at, consent_summary`;
+      const loadOrderList = (columns: string) => {
+        let query = supabase.from('orders').select(columns).order('created_at', { ascending: false });
+        if (user.id) query = query.eq('user_id', user.id);
+        return query;
+      };
+      const listedWithConsent = await loadOrderList(listWithConsent);
+      const listed = listedWithConsent.error ? await loadOrderList(listBase) : listedWithConsent;
+      const billing = await loadClientBilling(user);
       if (listed.error) throw listed.error;
       const owner = {
         id: user.id || '',
@@ -777,7 +785,10 @@ const ManagementPortal = () => {
         updatedOrder.credit_note_number !== detailOrder.credit_note_number ||
         updatedOrder.credit_note_pdf !== detailOrder.credit_note_pdf ||
         updatedOrder.status !== detailOrder.status ||
-        updatedOrder.result_file_url !== detailOrder.result_file_url
+        updatedOrder.result_file_url !== detailOrder.result_file_url ||
+        updatedOrder.legal_consent_at !== detailOrder.legal_consent_at ||
+        updatedOrder.emission_offroad_consent !== detailOrder.emission_offroad_consent ||
+        updatedOrder.consent_summary !== detailOrder.consent_summary
       )) {
         setDetailOrder(updatedOrder);
         if (updatedOrder.id) {
@@ -2482,6 +2493,33 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                         Poznámka zákazníka
                       </h3>
                       <p className="break-words whitespace-pre-wrap text-foreground">{detailOrder.customer_note || '—'}</p>
+                    </section>
+
+                    <section className="min-w-0 rounded-lg border border-primary/35 bg-[#0a192f] p-2.5 shadow-[inset_0_0_18px_rgba(0,242,255,0.08)]">
+                      <h3 className="mb-1.5 border-b border-primary/30 pb-1 text-sm font-semibold text-primary">
+                        Potvrdené súhlasy
+                      </h3>
+                      <div className="space-y-1 text-sm">
+                        <p className="break-words text-foreground">
+                          <span className="text-muted-foreground">VOP súhlas: </span>
+                          {detailOrder.legal_consent_at
+                            ? `Áno · ${formatLocalDateTime(detailOrder.legal_consent_at)}`
+                            : detailOrder.legal_consent_known && detailOrder.legal_consent
+                              ? 'Áno'
+                              : 'Nie je zaznamenaný'}
+                        </p>
+                        {detailOrder.emission_offroad_consent ? (
+                          <p className="break-words text-foreground">
+                            <span className="text-muted-foreground">Emisný off-road/motorsport/export súhlas: </span>
+                            {detailOrder.emission_offroad_consent_at
+                              ? `Áno · ${formatLocalDateTime(detailOrder.emission_offroad_consent_at)}`
+                              : 'Áno'}
+                          </p>
+                        ) : null}
+                        {detailOrder.consent_summary ? (
+                          <p className="break-words whitespace-pre-wrap text-foreground">{detailOrder.consent_summary}</p>
+                        ) : null}
+                      </div>
                     </section>
                   </div>
 
