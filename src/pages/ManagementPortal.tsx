@@ -31,7 +31,7 @@ import { SERVICES } from '@/data/services';
 import { mailLanguageForClient } from '@/lib/clientLanguage';
 import { loadBillingByUserId, loadClientBilling, orderDisplayName, refundOrderCredits, restoreClientCredits, settleClientCredits } from '@/lib/clientProfile';
 import { downloadOrderCreditNote, downloadOrderInvoice } from '@/lib/accountingDocument';
-import { generateCreditNotePdf, generateInvoicePdf } from '@/utils/invoiceGenerator';
+import { generateCreditNotePdf, generateInvoicePdf, invoiceConsentFromOrder } from '@/utils/invoiceGenerator';
 import { loadServiceCatalog, lookupServiceName } from '@/lib/serviceCatalog';
 import { formatCreditUnits } from '@/lib/creditUnits';
 import { useLanguage } from '@/i18n/LanguageContext';
@@ -404,9 +404,10 @@ const issueCompletionInvoice = (order: Order) => withDocumentSeries(async () => 
     customer_email: order.customer_email,
     total_price: order.total_price,
   };
+  const consent = invoiceConsentFromOrder(order);
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const invoiceNumber = existing || await nextInvoiceNumber();
-    const file = await generateInvoicePdf({ invoiceNumber, issuedAt: new Date(), buyer, price });
+    const file = await generateInvoicePdf({ invoiceNumber, issuedAt: new Date(), buyer, price, consent });
     try {
       const saved = await saveOrderInvoice({ ...target, invoice_number: invoiceNumber }, file);
       if (saved.invoice_number === invoiceNumber) return saved;
@@ -415,6 +416,7 @@ const issueCompletionInvoice = (order: Order) => withDocumentSeries(async () => 
         issuedAt: new Date(),
         buyer,
         price,
+        consent,
       });
       return saveOrderInvoice({ ...target, invoice_number: saved.invoice_number }, kept);
     } catch (error) {

@@ -1,14 +1,20 @@
 import { loadBillingByUserId } from '@/lib/clientProfile';
 import { supabase } from '@/lib/supabase';
-import { generateCreditNotePdf, generateInvoicePdf, type InvoiceBuyer } from '@/utils/invoiceGenerator';
+import { generateCreditNotePdf, generateInvoicePdf, invoiceConsentFromOrder, type InvoiceBuyer } from '@/utils/invoiceGenerator';
 import { readCreditNoteMark, readInvoiceMark, saveBlob } from '@/lib/orderInvoice';
 
 export type AccountingSource = {
+  id?: string | null;
+  orderNumber?: string | null;
   userId?: string | null;
   note?: string | null;
   total?: number | string | null;
   customerName?: string;
   customerEmail?: string;
+  legalConsent?: boolean | null;
+  legalConsentAt?: string | null;
+  emissionOffroadConsent?: boolean | null;
+  emissionOffroadConsentAt?: string | null;
 };
 
 const clientId = (value?: string | null) => {
@@ -39,14 +45,33 @@ const buyerFor = async (source: AccountingSource): Promise<InvoiceBuyer> => {
 };
 
 const loadSource = async (orderId: string, hints?: { customerName?: string; customerEmail?: string }): Promise<AccountingSource> => {
-  const row = await supabase.from('orders').select('user_id, note, total_price').eq('id', orderId).maybeSingle();
+  const withConsent = 'id, order_number, user_id, note, total_price, legal_consent, legal_consent_at, emission_offroad_consent, emission_offroad_consent_at';
+  let row = await supabase.from('orders').select(withConsent).eq('id', orderId).maybeSingle();
+  if (row.error) row = await supabase.from('orders').select('id, user_id, note, total_price').eq('id', orderId).maybeSingle();
   if (row.error || !row.data) throw new Error(row.error?.message || 'Doklad sa nepodarilo načítať');
+  const data = row.data as {
+    id?: string | null;
+    order_number?: string | null;
+    user_id?: string | null;
+    note?: string | null;
+    total_price?: number | string | null;
+    legal_consent?: boolean | null;
+    legal_consent_at?: string | null;
+    emission_offroad_consent?: boolean | null;
+    emission_offroad_consent_at?: string | null;
+  };
   return {
-    userId: row.data.user_id,
-    note: row.data.note,
-    total: row.data.total_price,
+    id: data.id || orderId,
+    orderNumber: data.order_number,
+    userId: data.user_id,
+    note: data.note,
+    total: data.total_price,
     customerName: hints?.customerName,
     customerEmail: hints?.customerEmail,
+    legalConsent: data.legal_consent,
+    legalConsentAt: data.legal_consent_at,
+    emissionOffroadConsent: data.emission_offroad_consent,
+    emissionOffroadConsentAt: data.emission_offroad_consent_at,
   };
 };
 
@@ -93,6 +118,15 @@ export const buildAccountingFile = async (source: AccountingSource, kind: 'invoi
       issuedAt: issuedOn(invoice.invoice_date),
       buyer,
       price,
+      consent: invoiceConsentFromOrder({
+        id: source.id,
+        order_number: source.orderNumber,
+        note: source.note,
+        legal_consent: source.legalConsent,
+        legal_consent_at: source.legalConsentAt,
+        emission_offroad_consent: source.emissionOffroadConsent,
+        emission_offroad_consent_at: source.emissionOffroadConsentAt,
+      }),
     }),
   };
 };

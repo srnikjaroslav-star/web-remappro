@@ -471,17 +471,29 @@ type ExportDocument = {
   kind: 'invoice' | 'credit';
   number: string;
   url: string;
+  id: string;
+  orderNumber: string | null;
   userId: string;
   note: string;
   total: number | string | null;
+  legalConsent: boolean | null;
+  legalConsentAt: string | null;
+  emissionOffroadConsent: boolean | null;
+  emissionOffroadConsentAt: string | null;
 };
 
 type ExportRow = {
+  id?: string | null;
+  order_number?: string | null;
   user_id?: string | null;
   note?: string | null;
   created_at?: string | null;
   status?: string | null;
   total_price?: number | string | null;
+  legal_consent?: boolean | null;
+  legal_consent_at?: string | null;
+  emission_offroad_consent?: boolean | null;
+  emission_offroad_consent_at?: string | null;
 };
 
 const documentsForExport = (rows: ExportRow[], fromYmd: string, toYmd: string) => {
@@ -496,9 +508,15 @@ const documentsForExport = (rows: ExportRow[], fromYmd: string, toYmd: string) =
     const hasInvoice = Boolean(invoice.invoice_number && invoice.invoice_url);
     const hasCredit = Boolean(credit.credit_note_number && credit.credit_note_url);
     const base = {
+      id: String(row.id || ''),
+      orderNumber: row.order_number ?? null,
       userId: String(row.user_id || ''),
       note,
       total: row.total_price ?? null,
+      legalConsent: row.legal_consent ?? null,
+      legalConsentAt: row.legal_consent_at ?? null,
+      emissionOffroadConsent: row.emission_offroad_consent ?? null,
+      emissionOffroadConsentAt: row.emission_offroad_consent_at ?? null,
     };
 
     if (status === 'completed' && hasInvoice && inExportRange(invoiceDate, fromYmd, toYmd)) {
@@ -516,9 +534,12 @@ const documentsForExport = (rows: ExportRow[], fromYmd: string, toYmd: string) =
 };
 
 const loadExportRows = async () => {
-  const fromOrders = await supabase.from('orders').select('user_id, note, created_at, status, total_price');
-  if (fromOrders.error) throw new Error(fromOrders.error.message || 'Faktúry sa nepodarilo načítať');
-  return (fromOrders.data || []) as ExportRow[];
+  const withConsent = 'id, order_number, user_id, note, created_at, status, total_price, legal_consent, legal_consent_at, emission_offroad_consent, emission_offroad_consent_at';
+  const fromOrders = await supabase.from('orders').select(withConsent);
+  if (!fromOrders.error) return (fromOrders.data || []) as ExportRow[];
+  const plain = await supabase.from('orders').select('user_id, note, created_at, status, total_price');
+  if (plain.error) throw new Error(plain.error.message || 'Faktúry sa nepodarilo načítať');
+  return (plain.data || []) as ExportRow[];
 };
 
 export type InvoiceArchiveCounts = { invoices: number; credits: number; total: number };
@@ -538,9 +559,15 @@ export const exportInvoiceArchive = async (fromYmd: string, toYmd: string) => {
     try {
       const { materializeAccountingFile } = await import('@/lib/accountingDocument');
       const built = await materializeAccountingFile({
+        id: document.id,
+        orderNumber: document.orderNumber,
         userId: document.userId,
         note: document.note,
         total: document.total,
+        legalConsent: document.legalConsent,
+        legalConsentAt: document.legalConsentAt,
+        emissionOffroadConsent: document.emissionOffroadConsent,
+        emissionOffroadConsentAt: document.emissionOffroadConsentAt,
       }, document.kind);
       if (built) bytes = new Uint8Array(await built.file.arrayBuffer());
     } catch (error) {

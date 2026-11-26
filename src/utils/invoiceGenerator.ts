@@ -17,11 +17,31 @@ export type InvoiceBuyer = {
   taxId?: string;
 };
 
+export type InvoiceConsent = {
+  orderRef: string;
+  termsConfirmed: boolean;
+  termsConfirmedAt?: string | null;
+  emissionConfirmed: boolean;
+  emissionConfirmedAt?: string | null;
+};
+
+export type InvoiceConsentOrder = {
+  id?: string | null;
+  order_number?: string | null;
+  note?: string | null;
+  legal_consent?: boolean | null;
+  legal_consent_known?: boolean | null;
+  legal_consent_at?: string | null;
+  emission_offroad_consent?: boolean | null;
+  emission_offroad_consent_at?: string | null;
+};
+
 export type InvoicePdfInput = {
   invoiceNumber: string;
   issuedAt?: Date;
   buyer: InvoiceBuyer;
   price: number;
+  consent?: InvoiceConsent | null;
 };
 
 export type CreditNotePdfInput = {
@@ -40,6 +60,58 @@ type AccountingPdfInput = {
   issuedAt?: Date;
   buyer: InvoiceBuyer;
   price: number;
+  consent?: InvoiceConsent | null;
+};
+
+const formatConsentWhen = (value?: string | null) => {
+  const raw = value?.trim();
+  if (!raw) return '';
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString('sk-SK', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
+export const invoiceConsentFromOrder = (order: InvoiceConsentOrder): InvoiceConsent | null => {
+  const tagged = String(order.note || '').split('\n')[0]?.trim() || '';
+  const orderRef = String(order.order_number || '').trim()
+    || (tagged.startsWith('RP-') ? tagged : '')
+    || (order.id ? order.id.slice(0, 8).toUpperCase() : '');
+  const termsAt = order.legal_consent_at?.trim() || null;
+  const emissionAt = order.emission_offroad_consent_at?.trim() || null;
+  const termsConfirmed = Boolean(termsAt) || (
+    order.legal_consent_known === true
+      ? order.legal_consent === true
+      : order.legal_consent_known == null && order.legal_consent === true
+  );
+  const emissionConfirmed = order.emission_offroad_consent === true || Boolean(emissionAt);
+  if (!orderRef || (!termsConfirmed && !emissionConfirmed)) return null;
+  return {
+    orderRef,
+    termsConfirmed,
+    termsConfirmedAt: termsAt,
+    emissionConfirmed,
+    emissionConfirmedAt: emissionAt,
+  };
+};
+
+const consentNoteText = (consent?: InvoiceConsent | null) => {
+  const ref = consent?.orderRef.trim() || '';
+  if (!consent || !ref) return '';
+  if (consent.emissionConfirmed) {
+    const when = formatConsentWhen(consent.emissionConfirmedAt) || formatConsentWhen(consent.termsConfirmedAt);
+    const dated = when ? ` (dňa ${when})` : '';
+    return `Súhlas a vyhlásenie odberateľa (obj. ${ref}): Odberateľ elektronicky potvrdil obchodné podmienky a vyhlásenie o použití úpravy výhradne na off-road, motorsport alebo exportné účely${dated}.`;
+  }
+  if (!consent.termsConfirmed) return '';
+  const when = formatConsentWhen(consent.termsConfirmedAt);
+  const dated = when ? ` (dňa ${when})` : '';
+  return `Potvrdenie obchodných podmienok (obj. ${ref}): Odberateľ elektronicky potvrdil obchodné podmienky${dated}.`;
 };
 
 const fontCache = new Map<string, Promise<string>>();
@@ -384,6 +456,26 @@ const renderAccountingPdf = async (input: AccountingPdfInput) => {
   doc.setFontSize(8);
   doc.setTextColor(...INK);
   doc.text(invoiceSettings.vatNote, margin, summaryY + 9.2);
+  const consentLine = consentNoteText(input.consent);
+  if (consentLine) {
+    const noteWidth = Math.max(48, right - summaryWidth - margin - 5);
+    const noteTop = summaryY + 13.6;
+    const noteBottom = doc.internal.pageSize.getHeight() - 22;
+    doc.setFont('Roboto', 'normal');
+    doc.setTextColor(...INK);
+    let size = 8;
+    doc.setFontSize(size);
+    let lines = doc.splitTextToSize(consentLine, noteWidth);
+    let lineHeight = doc.getLineHeightFactor() * size / doc.internal.scaleFactor;
+    while (noteTop + lines.length * lineHeight > noteBottom && size > 6.5) {
+      size = Math.round((size - 0.3) * 10) / 10;
+      doc.setFontSize(size);
+      lines = doc.splitTextToSize(consentLine, noteWidth);
+      lineHeight = doc.getLineHeightFactor() * size / doc.internal.scaleFactor;
+    }
+    const maxLines = Math.max(1, Math.floor((noteBottom - noteTop) / lineHeight));
+    doc.text(lines.slice(0, maxLines), margin, noteTop);
+  }
 
   const pageHeight = doc.internal.pageSize.getHeight();
   const footerY = pageHeight - 12;
@@ -412,6 +504,7 @@ export const generateInvoicePdf = (input: InvoicePdfInput) => renderAccountingPd
   issuedAt: input.issuedAt,
   buyer: input.buyer,
   price: input.price,
+  consent: input.consent,
 });
 
 export const generateCreditNotePdf = (input: CreditNotePdfInput) => {
