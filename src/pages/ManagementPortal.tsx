@@ -1509,6 +1509,7 @@ const ManagementPortal = () => {
       await downloadOrderInvoice(order.id, {
         customerName: order.customer_name,
         customerEmail: order.customer_email,
+        orderRef: order.order_number || undefined,
       });
     } catch (error) {
       console.error('Invoice download error:', error);

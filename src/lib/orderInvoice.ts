@@ -484,7 +484,6 @@ type ExportDocument = {
 
 type ExportRow = {
   id?: string | null;
-  order_number?: string | null;
   user_id?: string | null;
   note?: string | null;
   created_at?: string | null;
@@ -509,7 +508,7 @@ const documentsForExport = (rows: ExportRow[], fromYmd: string, toYmd: string) =
     const hasCredit = Boolean(credit.credit_note_number && credit.credit_note_url);
     const base = {
       id: String(row.id || ''),
-      orderNumber: row.order_number ?? null,
+      orderNumber: /^RP-/i.test(note.split('\n')[0]?.trim() || '') ? note.split('\n')[0].trim() : null,
       userId: String(row.user_id || ''),
       note,
       total: row.total_price ?? null,
@@ -534,12 +533,10 @@ const documentsForExport = (rows: ExportRow[], fromYmd: string, toYmd: string) =
 };
 
 const loadExportRows = async () => {
-  const withConsent = 'id, order_number, user_id, note, created_at, status, total_price, legal_consent, legal_consent_at, emission_offroad_consent, emission_offroad_consent_at';
+  const withConsent = 'id, user_id, note, created_at, status, total_price, legal_consent, legal_consent_at, emission_offroad_consent, emission_offroad_consent_at, consent_summary';
   const fromOrders = await supabase.from('orders').select(withConsent);
-  if (!fromOrders.error) return (fromOrders.data || []) as ExportRow[];
-  const plain = await supabase.from('orders').select('user_id, note, created_at, status, total_price');
-  if (plain.error) throw new Error(plain.error.message || 'Faktúry sa nepodarilo načítať');
-  return (plain.data || []) as ExportRow[];
+  if (fromOrders.error) throw new Error(fromOrders.error.message || 'Faktúry sa nepodarilo načítať');
+  return (fromOrders.data || []) as ExportRow[];
 };
 
 export type InvoiceArchiveCounts = { invoices: number; credits: number; total: number };

@@ -34,6 +34,7 @@ export type InvoiceConsentOrder = {
   legal_consent_at?: string | null;
   emission_offroad_consent?: boolean | null;
   emission_offroad_consent_at?: string | null;
+  consent_summary?: string | null;
 };
 
 export type InvoicePdfInput = {

@@ -15,6 +15,7 @@ export type AccountingSource = {
   legalConsentAt?: string | null;
   emissionOffroadConsent?: boolean | null;
   emissionOffroadConsentAt?: string | null;
+  consentSummary?: string | null;
 };
 
 const clientId = (value?: string | null) => {
@@ -44,14 +45,26 @@ const buyerFor = async (source: AccountingSource): Promise<InvoiceBuyer> => {
   };
 };
 
-const loadSource = async (orderId: string, hints?: { customerName?: string; customerEmail?: string }): Promise<AccountingSource> => {
-  const withConsent = 'id, order_number, user_id, note, total_price, legal_consent, legal_consent_at, emission_offroad_consent, emission_offroad_consent_at';
-  let row = await supabase.from('orders').select(withConsent).eq('id', orderId).maybeSingle();
-  if (row.error) row = await supabase.from('orders').select('id, user_id, note, total_price').eq('id', orderId).maybeSingle();
+type AccountingHints = {
+  customerName?: string;
+  customerEmail?: string;
+  orderRef?: string;
+};
+
+const orderRefFromNote = (note?: string | null) => {
+  const first = String(note || '').split('\n')[0]?.trim() || '';
+  return /^RP-/i.test(first) ? first : '';
+};
+
+const loadSource = async (orderId: string, hints?: AccountingHints): Promise<AccountingSource> => {
+  const row = await supabase
+    .from('orders')
+    .select('id, user_id, note, total_price, legal_consent, legal_consent_at, emission_offroad_consent, emission_offroad_consent_at, consent_summary')
+    .eq('id', orderId)
+    .maybeSingle();
   if (row.error || !row.data) throw new Error(row.error?.message || 'Doklad sa nepodarilo načítať');
   const data = row.data as {
     id?: string | null;
-    order_number?: string | null;
     user_id?: string | null;
     note?: string | null;
     total_price?: number | string | null;
@@ -59,10 +72,11 @@ const loadSource = async (orderId: string, hints?: { customerName?: string; cust
     legal_consent_at?: string | null;
     emission_offroad_consent?: boolean | null;
     emission_offroad_consent_at?: string | null;
+    consent_summary?: string | null;
   };
   return {
     id: data.id || orderId,
-    orderNumber: data.order_number,
+    orderNumber: hints?.orderRef?.trim() || orderRefFromNote(data.note) || null,
     userId: data.user_id,
     note: data.note,
     total: data.total_price,
@@ -72,6 +86,7 @@ const loadSource = async (orderId: string, hints?: { customerName?: string; cust
     legalConsentAt: data.legal_consent_at,
     emissionOffroadConsent: data.emission_offroad_consent,
     emissionOffroadConsentAt: data.emission_offroad_consent_at,
+    consentSummary: data.consent_summary,
   };
 };
 
@@ -83,7 +98,7 @@ const replaceStoredPdf = async (stored: string, file: File) => {
     contentType: 'application/pdf',
     upsert: true,
   });
-  if (uploaded.error) console.error('[replaceStoredPdf]', uploaded.error);
+  if (uploaded.error) throw new Error(uploaded.error.message || 'Uložené PDF sa nepodarilo prepísať.');
 };
 
 export const buildAccountingFile = async (source: AccountingSource, kind: 'invoice' | 'credit') => {
@@ -126,6 +141,7 @@ export const buildAccountingFile = async (source: AccountingSource, kind: 'invoi
         legal_consent_at: source.legalConsentAt,
         emission_offroad_consent: source.emissionOffroadConsent,
         emission_offroad_consent_at: source.emissionOffroadConsentAt,
+        consent_summary: source.consentSummary,
       }),
     }),
   };
@@ -144,10 +160,10 @@ const downloadBuilt = async (source: AccountingSource, kind: 'invoice' | 'credit
   saveBlob(built.file, `${built.number}.pdf`);
 };
 
-export const downloadOrderInvoice = async (orderId: string, hints?: { customerName?: string; customerEmail?: string }) => {
+export const downloadOrderInvoice = async (orderId: string, hints?: AccountingHints) => {
   await downloadBuilt(await loadSource(orderId, hints), 'invoice');
 };
 
-export const downloadOrderCreditNote = async (orderId: string, hints?: { customerName?: string; customerEmail?: string }) => {
+export const downloadOrderCreditNote = async (orderId: string, hints?: AccountingHints) => {
   await downloadBuilt(await loadSource(orderId, hints), 'credit');
 };
