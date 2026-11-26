@@ -230,26 +230,47 @@ Deno.serve(async (req) => {
     }
     const orderId = String(data?.order_id ?? "");
     if (orderId) {
-      const payload = body && typeof body === "object" ? body as Record<string, unknown> : {};
-      const readFlag = (...keys: string[]) => keys.some((key) => {
-        const value = payload[key];
+      const records: Record<string, unknown>[] = [];
+      const pushRecord = (value: unknown) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) return;
+        records.push(value as Record<string, unknown>);
+      };
+      pushRecord(body);
+      pushRecord((body as { body?: unknown } | null)?.body);
+      pushRecord((body as { consent?: unknown } | null)?.consent);
+      const folded = new Map<string, unknown>();
+      for (const record of records) {
+        for (const [key, value] of Object.entries(record)) {
+          folded.set(key.toLowerCase().replace(/[^a-z0-9]/g, ""), value);
+        }
+      }
+      const isTrue = (value: unknown) => {
         if (value === true || value === 1) return true;
         if (typeof value === "string") {
           const normalized = value.trim().toLowerCase();
           return normalized === "true" || normalized === "1" || normalized === "yes";
         }
         return false;
-      });
-      const readText = (...keys: string[]) => {
-        for (const key of keys) {
-          const value = payload[key];
+      };
+      const readFlag = (...names: string[]) => names.some((name) => isTrue(folded.get(name)));
+      const readText = (...names: string[]) => {
+        for (const name of names) {
+          const value = folded.get(name);
           if (typeof value === "string" && value.trim()) return value.slice(0, 2000);
         }
         return null;
       };
-      const legalConsent = readFlag("legalConsent", "legal_consent");
-      const emissionOffroadConsent = readFlag("emissionOffroadConsent", "emission_offroad_consent");
-      const consentSummary = readText("consentSummary", "consent_summary");
+      const legalConsent = readFlag("legalconsent");
+      let emissionOffroadConsent = readFlag("emissionoffroadconsent", "emissionack");
+      let consentSummary = readText("consentsummary");
+      if (
+        !emissionOffroadConsent
+        && consentSummary
+        && /off-road|offroad/i.test(consentSummary)
+        && /potvrdzujem|i confirm|vyhlásenie|declaration/i.test(consentSummary)
+      ) {
+        emissionOffroadConsent = true;
+      }
       const consentedAt = new Date().toISOString();
       const consentPatch = {
         legal_consent: Boolean(legalConsent),

@@ -1027,17 +1027,18 @@ const OrderPage = () => {
   };
 
   const requestCheckout = () => {
+    const emissionOffroadConsent = Boolean(emissionSelected && emissionAck);
     const needConsent = !legalConsentAgreed;
-    const needEmission = emissionSelected && !emissionAck;
+    const needEmission = emissionSelected && !emissionOffroadConsent;
     if (needConsent || needEmission) {
       setConfirmGate({ consent: needConsent, emission: needEmission });
       return;
     }
     if (shortOnCredits) openCreditTopUp();
-    else void payWithCredits();
+    else void payWithCredits(emissionOffroadConsent);
   };
 
-  const payWithCredits = async () => {
+  const payWithCredits = async (emissionOffroadConsent: boolean) => {
     const freshStatus = await fetchSystemSettings();
     const operationOpen = freshStatus
       ? isSystemOnline(freshStatus.mode, freshStatus.schedule)
@@ -1113,7 +1114,6 @@ const OrderPage = () => {
         },
       }).catch(() => undefined);
 
-      const emissionOffroadConsent = Boolean(emissionSelected && emissionAck);
       const termsText = `${t('consentLead')} ${t('consentTerms')}, ${t('consentPrivacy')} ${t('consentAnd')} ${t('consentRefunds')}${t('consentTail')}`;
       const consentScope = emissionOffroadConsent
         ? (language === 'en'
@@ -1143,8 +1143,14 @@ const OrderPage = () => {
           legal_consent: legalConsentAgreed,
           emissionOffroadConsent,
           emission_offroad_consent: emissionOffroadConsent,
+          emissionAck: emissionOffroadConsent,
           consentSummary,
           consent_summary: consentSummary,
+          consent: {
+            legalConsent: legalConsentAgreed,
+            emissionOffroadConsent,
+            consentSummary,
+          },
           language: language === 'en' ? 'EN' : 'SK',
         },
       });
