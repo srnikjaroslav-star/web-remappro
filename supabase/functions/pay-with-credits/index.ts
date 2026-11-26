@@ -230,11 +230,26 @@ Deno.serve(async (req) => {
     }
     const orderId = String(data?.order_id ?? "");
     if (orderId) {
-      const legalConsent = body.legalConsent === true;
-      const emissionOffroadConsent = body.emissionOffroadConsent === true;
-      const consentSummary = typeof body.consentSummary === "string"
-        ? body.consentSummary.slice(0, 2000)
-        : null;
+      const payload = body && typeof body === "object" ? body as Record<string, unknown> : {};
+      const readFlag = (...keys: string[]) => keys.some((key) => {
+        const value = payload[key];
+        if (value === true || value === 1) return true;
+        if (typeof value === "string") {
+          const normalized = value.trim().toLowerCase();
+          return normalized === "true" || normalized === "1" || normalized === "yes";
+        }
+        return false;
+      });
+      const readText = (...keys: string[]) => {
+        for (const key of keys) {
+          const value = payload[key];
+          if (typeof value === "string" && value.trim()) return value.slice(0, 2000);
+        }
+        return null;
+      };
+      const legalConsent = readFlag("legalConsent", "legal_consent");
+      const emissionOffroadConsent = readFlag("emissionOffroadConsent", "emission_offroad_consent");
+      const consentSummary = readText("consentSummary", "consent_summary");
       const consentedAt = new Date().toISOString();
       const consentPatch = {
         legal_consent: Boolean(legalConsent),

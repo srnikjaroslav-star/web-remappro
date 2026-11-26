@@ -1140,8 +1140,11 @@ const OrderPage = () => {
           fileUrl: storedFile,
           customerNote: composedNote,
           legalConsent: legalConsentAgreed,
+          legal_consent: legalConsentAgreed,
           emissionOffroadConsent,
+          emission_offroad_consent: emissionOffroadConsent,
           consentSummary,
+          consent_summary: consentSummary,
           language: language === 'en' ? 'EN' : 'SK',
         },
       });

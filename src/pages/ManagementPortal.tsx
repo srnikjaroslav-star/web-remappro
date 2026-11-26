@@ -2497,28 +2497,31 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
 
                     <section className="min-w-0 rounded-lg border border-primary/35 bg-[#0a192f] p-2.5 shadow-[inset_0_0_18px_rgba(0,242,255,0.08)]">
                       <h3 className="mb-1.5 border-b border-primary/30 pb-1 text-sm font-semibold text-primary">
-                        Potvrdené súhlasy
+                        Právne súhlasy klienta
                       </h3>
-                      <div className="space-y-1 text-sm">
+                      <div className="space-y-1.5 text-sm">
                         <p className="break-words text-foreground">
-                          <span className="text-muted-foreground">VOP súhlas: </span>
+                          <span className="text-muted-foreground">Obchodné podmienky: </span>
                           {detailOrder.legal_consent_at
-                            ? `Áno · ${formatLocalDateTime(detailOrder.legal_consent_at)}`
+                            ? `Potvrdené · ${formatLocalDateTime(detailOrder.legal_consent_at)}`
                             : detailOrder.legal_consent_known && detailOrder.legal_consent
-                              ? 'Áno'
-                              : 'Nie je zaznamenaný'}
+                              ? 'Potvrdené'
+                              : 'Nezaznamenané'}
                         </p>
-                        {detailOrder.emission_offroad_consent ? (
-                          <p className="break-words text-foreground">
-                            <span className="text-muted-foreground">Emisný off-road/motorsport/export súhlas: </span>
-                            {detailOrder.emission_offroad_consent_at
-                              ? `Áno · ${formatLocalDateTime(detailOrder.emission_offroad_consent_at)}`
-                              : 'Áno'}
+                        <p className="break-words text-foreground">
+                          <span className="text-muted-foreground">Vyhlásenie pre emisné/off-road úpravy: </span>
+                          {detailOrder.emission_offroad_consent_at
+                            ? `Potvrdené · ${formatLocalDateTime(detailOrder.emission_offroad_consent_at)}`
+                            : detailOrder.emission_offroad_consent
+                              ? 'Potvrdené'
+                              : 'Nezaznamenané'}
+                        </p>
+                        <div>
+                          <p className="text-muted-foreground">Znenie súhlasu</p>
+                          <p className="break-words whitespace-pre-wrap text-foreground">
+                            {detailOrder.consent_summary?.trim() || 'Nezaznamenané'}
                           </p>
-                        ) : null}
-                        {detailOrder.consent_summary ? (
-                          <p className="break-words whitespace-pre-wrap text-foreground">{detailOrder.consent_summary}</p>
-                        ) : null}
+                        </div>
                       </div>
                     </section>
                   </div>
