@@ -451,6 +451,33 @@ export const notifyCreatedOrder = async (
   }
 };
 
+export const notifyCreditTopUp = async (input: {
+  topupRef: string;
+  credits: number;
+  price: number;
+  email: string;
+  name: string;
+  company: string;
+  invoiceNumber: string;
+  balance: number;
+}): Promise<void> => {
+  const money = `${input.price.toLocaleString("sk-SK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
+  const credits = `${input.credits.toLocaleString("sk-SK", { maximumFractionDigits: 0 })} kreditov`;
+  const balance = `${input.balance.toLocaleString("sk-SK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kreditov`;
+  const text = [
+    "Dobitie kreditov",
+    `ID dobitia: ${input.topupRef || "—"}`,
+    `Klient: ${input.name || "—"}`,
+    `Firma: ${input.company || "—"}`,
+    `E-mail: ${input.email || "—"}`,
+    `Balík: ${credits}`,
+    `Uhradené: ${money}`,
+    `Faktúra: ${input.invoiceNumber || "—"}`,
+    `Zostatok: ${balance}`,
+  ].join("\n");
+  await sendTelegram(text);
+};
+
 export const notifyOrderById = async (admin: AdminClient, orderId: string): Promise<void> => {
   try {
     const id = orderId.trim();

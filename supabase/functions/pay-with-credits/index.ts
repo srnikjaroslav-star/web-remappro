@@ -1,4 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { sendCreditOrderEmail } from "../_shared/creditFulfillment.ts";
+import { clientPortalLanguage } from "../_shared/statusEmail.ts";
 
 const STATUS_URL = "https://kivqvwdfujsnuwfxjtcz.supabase.co";
 const STATUS_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtpdnF2d2RmdWpzbnV3ZnhqdGN6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcwMjQ1OTMsImV4cCI6MjA4MjYwMDU5M30.-iDvC0T6lozYv5d4xrHrHeS9PSGOfqwajZapMB7hqjQ";
@@ -190,6 +192,10 @@ Deno.serve(async (req) => {
       ? String(yearNumber)
       : "";
 
+    if (body.legalConsent !== true) {
+      return json({ ok: false, code: "CONSENT_REQUIRED" });
+    }
+
     const admin = createClient(supabaseUrl, serviceKey);
     const { data, error } = await admin.rpc("pay_with_credits", {
       p_user_id: user.id,
@@ -209,25 +215,13 @@ Deno.serve(async (req) => {
 
     if (error) {
       const message = error.message ?? "";
-      const code = ["NO_ACCOUNT", "INSUFFICIENT_CREDITS", "INVALID_AMOUNT", "NOT_AUTHENTICATED"]
+      const code = ["NO_ACCOUNT", "INSUFFICIENT_CREDITS", "INVALID_AMOUNT", "NOT_AUTHENTICATED", "CONSENT_REQUIRED"]
         .find((item) => message.includes(item)) ?? "SERVER";
       return json({ ok: false, code }, code === "SERVER" ? 500 : 200);
     }
 
-    const mailLanguage = (value: unknown) => {
-      const raw = String(value ?? "").trim().toUpperCase();
-      if (raw.startsWith("EN")) return "EN";
-      if (raw.startsWith("SK")) return "SK";
-      return "";
-    };
-    let language = mailLanguage(body.language);
-    if (!language) {
-      const profile = await admin.from("client_profiles").select("language").eq("user_id", user.id).maybeSingle();
-      language = mailLanguage((profile.data as { language?: unknown } | null)?.language)
-        || mailLanguage(user.user_metadata?.language)
-        || mailLanguage(user.user_metadata?.lang)
-        || "SK";
-    }
+    const customerEmail = String(body.customerEmail ?? user.email ?? "").trim();
+    const language = await clientPortalLanguage(admin, user.id, customerEmail, body.language);
     const orderId = String(data?.order_id ?? "");
     if (orderId) {
       const records: Record<string, unknown>[] = [];
@@ -303,6 +297,28 @@ Deno.serve(async (req) => {
         telegramScheduled = true;
       } catch (telegramError) {
         console.error("[pay-with-credits] telegram", telegramError);
+      }
+      const vehicle = [body.brand, body.model, body.year].map((part: unknown) => String(part ?? "").trim()).filter(Boolean).join(" ");
+      const mail = sendCreditOrderEmail(admin, {
+        userId: user.id,
+        email: customerEmail,
+        name: String(body.customerName ?? "").trim(),
+        orderNumber: String(data?.order_number ?? ""),
+        vehicle,
+        credits: amount,
+        explicitLanguage: language,
+      }).catch((mailError) => {
+        console.error("[pay-with-credits] order email", mailError);
+      });
+      try {
+        const waitUntil = (globalThis as {
+          EdgeRuntime?: { waitUntil?: (promise: Promise<unknown>) => void };
+        }).EdgeRuntime?.waitUntil;
+        if (waitUntil) waitUntil(mail);
+        else void mail;
+      } catch (mailError) {
+        console.error("[pay-with-credits] order email", mailError);
+        void mail;
       }
     }
 

@@ -6,7 +6,6 @@ import ConnectionDot from '@/components/ConnectionDot';
 import { fetchSystemStatusFromDB } from '@/components/SystemStatus';
 import { adjustClientCredits, loadClientBilling, loadCreditClients, loadPortalActivityByClient, readCreditBalance, type PortalActivity } from '@/lib/clientProfile';
 import { formatCreditUnits } from '@/lib/creditUnits';
-import { useLanguage } from '@/i18n/LanguageContext';
 import { clientRecordName, companyFromMetadata, joinProfileName } from '@/lib/profileName';
 import { supabase } from '@/lib/supabase';
 
@@ -89,7 +88,7 @@ const withSignedInClient = (rows: ClientAccount[], self: ClientAccount | null) =
 };
 
 const ClientCredits = ({ onlineIds, reloadKey = 0 }: ClientCreditsProps) => {
-  const { language } = useLanguage();
+  const language = 'sk' as const;
   const [clients, setClients] = useState<ClientAccount[]>(clientsCache?.clients ?? []);
   const [loading, setLoading] = useState(!clientsCache);
   const [query, setQuery] = useState('');

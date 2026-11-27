@@ -1,5 +1,6 @@
 import Stripe from "https://esm.sh/stripe@17.7.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { fulfillCreditPackage } from "../_shared/creditFulfillment.ts";
 import { applyCreditTopUpSession, isCreditTopUpSession } from "../_shared/creditTopup.ts";
 
 const corsHeaders = {
@@ -53,11 +54,13 @@ Deno.serve(async (req) => {
       return json({ ok: false, code: applied.code }, status);
     }
 
+    const delivered = await fulfillCreditPackage(admin, session.id ?? "");
     return json({
       ok: true,
       balance: applied.balance,
       credited: applied.credited,
       amount: applied.amount,
+      invoiceSent: delivered.ok,
     });
   } catch (error) {
     console.error("[confirm-credit-topup]", error);

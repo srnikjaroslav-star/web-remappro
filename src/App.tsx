@@ -62,7 +62,7 @@ const AppShell = () => {
           <Route path="/pricing" element={<PricingPage />} />
           <Route path="/success" element={<SuccessPage />} />
           <Route path="/login" element={<Login />} />
-          <Route path="/sprava-29-vk" element={<ManagementPortal />} />
+          <Route path="/sprava-29-vk" element={<LanguageProvider locked="sk"><ManagementPortal /></LanguageProvider>} />
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="/refunds" element={<RefundsPage />} />

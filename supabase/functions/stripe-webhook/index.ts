@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { fulfillCreditPackage } from "../_shared/creditFulfillment.ts";
 import { applyCreditTopUpSession, isCreditTopUpSession } from "../_shared/creditTopup.ts";
 import { dispatchTelegram, notifyOrderById } from "../_shared/telegramOrder.ts";
 
@@ -236,6 +237,15 @@ serve(async (req) => {
             status: 500,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
+        }
+        if (applied.ok) {
+          const delivered = await fulfillCreditPackage(supabase, String(session.id ?? ""));
+          if (!delivered.ok) {
+            return new Response(JSON.stringify({ error: "Credit invoice was not sent" }), {
+              status: 500,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
         }
         return new Response(JSON.stringify({
           received: true,

@@ -2,6 +2,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import regularFont from '../assets/fonts/Roboto-Regular.ttf';
 import boldFont from '../assets/fonts/Roboto-Bold.ttf';
+import { INVOICE_FOOTER, INVOICE_SUBTITLE, PACKAGE_ITEM_DESCRIPTION, SUPPLIER_VAT_NOTE } from '@/lib/creditPackages';
 import { LOGO_BASE64 } from '@/lib/invoiceLogo';
 import { loadInvoiceSettings } from '@/lib/invoiceSettings';
 
@@ -43,6 +44,9 @@ export type InvoicePdfInput = {
   buyer: InvoiceBuyer;
   price: number;
   consent?: InvoiceConsent | null;
+  itemName?: string;
+  itemDescription?: string;
+  topupId?: string;
 };
 
 export type CreditNotePdfInput = {
@@ -62,6 +66,9 @@ type AccountingPdfInput = {
   buyer: InvoiceBuyer;
   price: number;
   consent?: InvoiceConsent | null;
+  itemName?: string;
+  itemDescription?: string;
+  topupId?: string;
 };
 
 const formatConsentWhen = (value?: string | null) => {
@@ -168,42 +175,12 @@ const addDays = (date: Date, days: number) => {
   return next;
 };
 
-const INK: [number, number, number] = [0, 0, 0];
-const MUTED: [number, number, number] = [90, 90, 90];
-
-const grayscaleLogo = (src: string) => new Promise<string>((resolve) => {
-  if (typeof document === 'undefined') {
-    resolve(src);
-    return;
-  }
-  const image = new Image();
-  image.onload = () => {
-    const canvas = document.createElement('canvas');
-    canvas.width = image.naturalWidth || image.width;
-    canvas.height = image.naturalHeight || image.height;
-    const context = canvas.getContext('2d', { willReadFrequently: true });
-    if (!context || !canvas.width || !canvas.height) {
-      resolve(src);
-      return;
-    }
-    context.drawImage(image, 0, 0);
-    const frame = context.getImageData(0, 0, canvas.width, canvas.height);
-    const pixels = frame.data;
-    for (let index = 0; index < pixels.length; index += 4) {
-      const gray = pixels[index] * 0.299 + pixels[index + 1] * 0.587 + pixels[index + 2] * 0.114;
-      pixels[index] = gray;
-      pixels[index + 1] = gray;
-      pixels[index + 2] = gray;
-    }
-    context.putImageData(frame, 0, 0);
-    resolve(canvas.toDataURL('image/png'));
-  };
-  image.onerror = () => resolve(src);
-  image.src = src;
-});
-
-const SOFT: [number, number, number] = [214, 219, 226];
-const LABEL: [number, number, number] = [120, 128, 138];
+const BLUE: [number, number, number] = [14, 99, 196];
+const INK: [number, number, number] = [15, 23, 42];
+const MUTED: [number, number, number] = [71, 85, 105];
+const SOFT: [number, number, number] = [191, 219, 254];
+const LABEL: [number, number, number] = BLUE;
+const WASH: [number, number, number] = [239, 246, 255];
 
 const card = (doc: jsPDF, x: number, y: number, width: number, height: number) => {
   doc.setDrawColor(...SOFT);
@@ -240,10 +217,13 @@ const renderAccountingPdf = async (input: AccountingPdfInput) => {
   const logoWidth = 42;
   const logoHeight = logoWidth * (327 / 1024);
   const headerTop = 14;
-  const logo = await grayscaleLogo(LOGO_BASE64);
-  doc.addImage(logo, 'PNG', margin, headerTop, logoWidth, logoHeight);
+  doc.addImage(LOGO_BASE64, 'PNG', margin, headerTop, logoWidth, logoHeight);
+  doc.setFont('Roboto', 'bold');
+  doc.setFontSize(6.4);
+  doc.setTextColor(...BLUE);
+  doc.text(INVOICE_SUBTITLE, margin, headerTop + logoHeight + 3.6);
 
-  const kind = input.originalInvoice ? 'DOBROPIS — DAŇOVÝ DOKLAD' : 'FAKTÚRA — DAŇOVÝ DOKLAD';
+  const kind = input.originalInvoice ? 'DOBROPIS' : 'FAKTÚRA';
   doc.setFont('Roboto', 'bold');
   const kindSize = fitText(doc, kind, 78, 7);
   doc.setFontSize(kindSize);
@@ -261,7 +241,7 @@ const renderAccountingPdf = async (input: AccountingPdfInput) => {
   const mid = margin + contentWidth / 2;
   const pad = 4;
   const columnText = contentWidth / 2 - pad * 2;
-  const partiesY = Math.max(headerTop + logoHeight, headerTop + 16) + 6;
+  const partiesY = headerTop + logoHeight + 11;
   const lineStep = 4.5;
   const supplierLines = 8;
   const buyer = input.buyer;
@@ -323,7 +303,7 @@ const renderAccountingPdf = async (input: AccountingPdfInput) => {
   idValue('IČO:', invoiceSettings.supplierIco);
   idValue('DIČ:', invoiceSettings.supplierDic);
   [
-    'Nie je platiteľom DPH',
+    SUPPLIER_VAT_NOTE,
     'Živnostenský register Okresného úradu Veľký Krtíš',
     'Číslo živnostenského registra: 660-5049',
   ].forEach((line) => {
@@ -345,7 +325,8 @@ const renderAccountingPdf = async (input: AccountingPdfInput) => {
     buyerCursor += lineStep;
   });
 
-  const due = addDays(issued, invoiceSettings.dueDays);
+  const due = input.topupId ? issued : addDays(issued, invoiceSettings.dueDays);
+  const paymentLabel = input.topupId ? 'Uhradené kartou' : 'Bankový prevod';
   const factsY = partiesY + partiesHeight + 4;
   const factsHeight = input.originalInvoice ? 34 : 30;
   card(doc, margin, factsY, contentWidth, factsHeight);
@@ -374,7 +355,7 @@ const renderAccountingPdf = async (input: AccountingPdfInput) => {
   labelAt('SWIFT / BIC', margin + pad, factsY + 22);
   labelAt('FORMA ÚHRADY', margin + contentWidth / 4, factsY + 22);
   valueAt(invoiceSettings.swift, margin + pad, factsY + 26.2, columnText / 2 - 2, 9);
-  valueAt('Bankový prevod', margin + contentWidth / 4, factsY + 26.2, columnText / 2 - 2, 9);
+  valueAt(paymentLabel, margin + contentWidth / 4, factsY + 26.2, columnText / 2 - 2, 9);
 
   labelAt('IDENTIFIKÁCIA A DÁTUMY', mid + pad, factsY + 6);
   labelAt('VARIABILNÝ SYMBOL', mid + pad, factsY + 12);
@@ -399,7 +380,7 @@ const renderAccountingPdf = async (input: AccountingPdfInput) => {
     margin: { left: margin, right: margin },
     theme: 'grid',
     head: [['P.Č.', 'NÁZOV POLOŽKY / SLUŽBY', 'MNOŽSTVO', 'CENA SPOLU']],
-    body: [['1.', invoiceSettings.itemName, '1 ks', money(input.price)]],
+    body: [['1.', input.itemName?.trim() || invoiceSettings.itemName, '1 ks', money(input.price)]],
     styles: {
       font: 'Roboto',
       fontStyle: 'normal',
@@ -408,13 +389,13 @@ const renderAccountingPdf = async (input: AccountingPdfInput) => {
       fillColor: [255, 255, 255],
       lineColor: SOFT,
       lineWidth: 0.2,
-      cellPadding: { top: 2.2, right: 2, bottom: 5.2, left: 2 },
+      cellPadding: { top: 2.2, right: 2, bottom: 10, left: 2 },
       valign: 'top',
     },
     headStyles: {
       fontStyle: 'bold',
       fontSize: 7.5,
-      fillColor: [255, 255, 255],
+      fillColor: WASH,
       textColor: LABEL,
       lineColor: SOFT,
       lineWidth: 0.2,
@@ -428,10 +409,13 @@ const renderAccountingPdf = async (input: AccountingPdfInput) => {
     },
     didDrawCell: (data) => {
       if (data.section !== 'body' || data.column.index !== 1) return;
+      const description = input.itemDescription?.trim()
+        || (input.topupId ? PACKAGE_ITEM_DESCRIPTION : 'Digitálna služba B2B portálu REMAPPRO');
       doc.setFont('Roboto', 'normal');
-      doc.setFontSize(8);
-      doc.setTextColor(...LABEL);
-      doc.text('Digitálna služba B2B portálu REMAPPRO', data.cell.x + 2, data.cell.y + data.cell.height - 2);
+      doc.setFontSize(7.5);
+      doc.setTextColor(...BLUE);
+      const lines = doc.splitTextToSize(description, data.cell.width - 4);
+      doc.text(lines, data.cell.x + 2, data.cell.y + data.cell.height - 2.2 - (lines.length - 1) * 3.2);
     },
   });
 
@@ -453,46 +437,44 @@ const renderAccountingPdf = async (input: AccountingPdfInput) => {
   doc.setFontSize(8);
   doc.setTextColor(...LABEL);
   doc.text('Poznámka:', margin, summaryY + 5);
+  const noteParts = [
+    SUPPLIER_VAT_NOTE,
+    input.topupId ? `ID dobitia: ${input.topupId}` : '',
+    consentNoteText(input.consent),
+  ].filter(Boolean);
+  const noteBody = noteParts.join(' ');
+  const noteWidth = Math.max(48, right - summaryWidth - margin - 5);
+  const noteTop = summaryY + 9.2;
+  const noteBottom = doc.internal.pageSize.getHeight() - 22;
   doc.setFont('Roboto', 'normal');
-  doc.setFontSize(8);
   doc.setTextColor(...INK);
-  doc.text(invoiceSettings.vatNote, margin, summaryY + 9.2);
-  const consentLine = consentNoteText(input.consent);
-  if (consentLine) {
-    const noteWidth = Math.max(48, right - summaryWidth - margin - 5);
-    const noteTop = summaryY + 13.6;
-    const noteBottom = doc.internal.pageSize.getHeight() - 22;
-    doc.setFont('Roboto', 'normal');
-    doc.setTextColor(...INK);
-    let size = 8;
+  let size = 8;
+  doc.setFontSize(size);
+  let lines = doc.splitTextToSize(noteBody, noteWidth);
+  let lineHeight = doc.getLineHeightFactor() * size / doc.internal.scaleFactor;
+  while (noteTop + lines.length * lineHeight > noteBottom && size > 6.5) {
+    size = Math.round((size - 0.3) * 10) / 10;
     doc.setFontSize(size);
-    let lines = doc.splitTextToSize(consentLine, noteWidth);
-    let lineHeight = doc.getLineHeightFactor() * size / doc.internal.scaleFactor;
-    while (noteTop + lines.length * lineHeight > noteBottom && size > 6.5) {
-      size = Math.round((size - 0.3) * 10) / 10;
-      doc.setFontSize(size);
-      lines = doc.splitTextToSize(consentLine, noteWidth);
-      lineHeight = doc.getLineHeightFactor() * size / doc.internal.scaleFactor;
-    }
-    const maxLines = Math.max(1, Math.floor((noteBottom - noteTop) / lineHeight));
-    doc.text(lines.slice(0, maxLines), margin, noteTop);
+    lines = doc.splitTextToSize(noteBody, noteWidth);
+    lineHeight = doc.getLineHeightFactor() * size / doc.internal.scaleFactor;
   }
+  const maxLines = Math.max(1, Math.floor((noteBottom - noteTop) / lineHeight));
+  doc.text(lines.slice(0, maxLines), margin, noteTop);
 
   const pageHeight = doc.internal.pageSize.getHeight();
   const footerY = pageHeight - 12;
-  doc.setDrawColor(...SOFT);
-  doc.setLineWidth(0.25);
+  doc.setDrawColor(...BLUE);
+  doc.setLineWidth(0.45);
   doc.line(margin, footerY - 6, right, footerY - 6);
   doc.setFont('Roboto', 'normal');
-  doc.setFontSize(8);
   doc.setTextColor(...MUTED);
-  doc.text('REMAPPRO  |  Janka Kráľa 29, 990 01 Veľký Krtíš, Slovakia', (margin + right) / 2, footerY - 1.5, { align: 'center' });
-  doc.text(
-    `IČO: ${invoiceSettings.supplierIco}  |  DIČ: ${invoiceSettings.supplierDic}  |  info@remappro.eu`,
-    (margin + right) / 2,
-    footerY + 3,
-    { align: 'center' },
-  );
+  let footerSize = 7.2;
+  doc.setFontSize(footerSize);
+  while (footerSize > 5.4 && doc.getTextWidth(INVOICE_FOOTER) > right - margin) {
+    footerSize -= 0.2;
+    doc.setFontSize(footerSize);
+  }
+  doc.text(INVOICE_FOOTER, (margin + right) / 2, footerY, { align: 'center' });
 
   const blob = doc.output('blob');
   return new File([blob], pdfFilename(input.documentNumber), { type: 'application/pdf' });
@@ -506,6 +488,9 @@ export const generateInvoicePdf = (input: InvoicePdfInput) => renderAccountingPd
   buyer: input.buyer,
   price: input.price,
   consent: input.consent,
+  itemName: input.itemName,
+  itemDescription: input.itemDescription,
+  topupId: input.topupId,
 });
 
 export const generateCreditNotePdf = (input: CreditNotePdfInput) => {

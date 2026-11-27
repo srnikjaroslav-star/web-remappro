@@ -20,8 +20,13 @@ const storedLanguage = (): 'en' | 'sk' | null => {
   return null;
 };
 
-export const saveProfileLanguage = async (_userId: string, language: ProfileLanguage) => {
+export const saveProfileLanguage = async (userId: string, language: ProfileLanguage) => {
   await supabase.auth.updateUser({ data: { language } }).catch(() => undefined);
+  if (!userId) return;
+  const saved = await supabase.from('client_profiles').update({ language }).eq('user_id', userId);
+  if (saved.error) {
+    await supabase.from('client_profiles').update({ language }).eq('id', userId);
+  }
 };
 
 export const mailLanguageForClient = async (_orderId: string, userId: string): Promise<'en' | 'sk' | null> => {

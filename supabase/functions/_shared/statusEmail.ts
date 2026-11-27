@@ -165,6 +165,21 @@ const readOrderCustomer = async (
   return empty;
 };
 
+export const clientPortalLanguage = async (
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  email = "",
+  explicit?: unknown,
+): Promise<MailLanguage> => {
+  if (userId.trim()) {
+    const stored = await readLanguage(supabase, userId.trim());
+    if (stored) return stored;
+  }
+  const byEmail = await readLanguageByEmail(supabase, email);
+  if (byEmail) return byEmail;
+  return normalizeMailLanguage(explicit) || "SK";
+};
+
 export const loadOrderMailContext = async (
   orderId: string,
   payloadEmail: string,
@@ -216,7 +231,7 @@ export const loadOrderMailContext = async (
     } catch (error) {
       console.warn("[status-email] Language lookup failed, using Slovak:", error);
     }
-    const lang: MailLanguage = explicit === "EN" || orderLanguage === "EN" || clientLanguage === "EN" ? "EN" : "SK";
+    const lang: MailLanguage = clientLanguage || orderLanguage || "SK";
     return { lang, recipient, copyTo, customerName };
   } catch (error) {
     console.warn("[status-email] Order lookup failed, using request data:", error);

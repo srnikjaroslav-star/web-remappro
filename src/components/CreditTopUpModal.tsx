@@ -2,10 +2,9 @@ import { useEffect, useState } from 'react';
 import { CreditCard, Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLanguage } from '@/i18n/LanguageContext';
+import { CREDIT_PACKAGES, suggestedCreditPackage } from '@/lib/creditPackages';
 import { formatCreditUnits } from '@/lib/creditUnits';
 import { supabase } from '@/lib/supabase';
-
-const PRESETS = [50, 100, 200] as const;
 
 type CreditTopUpModalProps = {
   onClose: () => void;
@@ -13,31 +12,20 @@ type CreditTopUpModalProps = {
   creditBalance?: number | null;
 };
 
-const parseAmount = (raw: string) => {
-  const value = Number(raw.trim().replace(',', '.'));
-  if (!Number.isFinite(value) || value <= 0) return null;
-  return Math.round(value * 100) / 100;
-};
-
-const suggestedTopUpInput = (orderTotal?: number, creditBalance?: number | null) => {
-  if (typeof orderTotal !== 'number' || typeof creditBalance !== 'number') return '';
-  if (!Number.isFinite(orderTotal) || !Number.isFinite(creditBalance)) return '';
-  const missingCents = Math.round(orderTotal * 100) - Math.round(creditBalance * 100);
-  if (missingCents <= 0) return '';
-  return String(Math.ceil(missingCents / 100));
-};
-
-const formatEuros = (value: number) =>
-  `${value.toLocaleString('sk-SK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
+const formatEuros = (value: number, language: 'sk' | 'en') =>
+  `${value.toLocaleString(language === 'en' ? 'en-GB' : 'sk-SK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 
 const CreditTopUpModal = ({ onClose, orderTotal, creditBalance }: CreditTopUpModalProps) => {
   const { language, t } = useLanguage();
-  const [amountInput, setAmountInput] = useState(() => suggestedTopUpInput(orderTotal, creditBalance));
+  const shortfall = typeof orderTotal === 'number' && typeof creditBalance === 'number'
+    ? Math.max(0, Math.round((orderTotal - creditBalance) * 100) / 100)
+    : 0;
+  const [credits, setCredits] = useState(() => suggestedCreditPackage(shortfall).credits);
+  const [termsConsent, setTermsConsent] = useState(false);
+  const [declarationConsent, setDeclarationConsent] = useState(false);
   const [paying, setPaying] = useState(false);
-  const amount = parseAmount(amountInput);
-  const shortfallInput = suggestedTopUpInput(orderTotal, creditBalance);
-  const shortfallCredits = shortfallInput ? Number(shortfallInput) : null;
-  const euros = formatEuros(amount ?? 0);
+  const selected = CREDIT_PACKAGES.find((item) => item.credits === credits) ?? CREDIT_PACKAGES[0];
+  const euros = formatEuros(selected.price, language);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -49,18 +37,18 @@ const CreditTopUpModal = ({ onClose, orderTotal, creditBalance }: CreditTopUpMod
 
   const payByCard = async () => {
     if (paying) return;
-    if (amount === null) {
-      toast.error(t('topUpInvalid'));
-      return;
-    }
-    if (amount < 0.5) {
-      toast.error(t('topUpMinimum'));
+    if (!termsConsent || !declarationConsent) {
+      toast.error(t('topUpConsentRequired'));
       return;
     }
     setPaying(true);
     try {
       const invoked = await supabase.functions.invoke('create-credit-checkout', {
-        body: { amount },
+        body: {
+          credits: selected.credits,
+          termsConsent: true,
+          declarationConsent: true,
+        },
       });
       let data = invoked.data as { ok?: boolean; url?: string; code?: string } | null;
       if (invoked.error && !data) {
@@ -75,7 +63,12 @@ const CreditTopUpModal = ({ onClose, orderTotal, creditBalance }: CreditTopUpMod
         setPaying(false);
         return;
       }
-      if (data?.code === 'INVALID_AMOUNT') {
+      if (data?.code === 'CONSENT_REQUIRED') {
+        toast.error(t('topUpConsentRequired'));
+        setPaying(false);
+        return;
+      }
+      if (data?.code === 'INVALID_PACKAGE' || data?.code === 'INVALID_AMOUNT') {
         toast.error(t('topUpInvalid'));
         setPaying(false);
         return;
@@ -117,51 +110,39 @@ const CreditTopUpModal = ({ onClose, orderTotal, creditBalance }: CreditTopUpMod
           </button>
         </div>
 
-        {shortfallCredits !== null && (
+        {shortfall > 0 && (
           <div className="credit-topup-need">
             <span>{t('topUpShortfall')}</span>
-            <strong>{formatCreditUnits(shortfallCredits, language)}</strong>
+            <strong>{formatCreditUnits(shortfall, language)}</strong>
           </div>
         )}
 
         <span className="credit-topup-label">{t('topUpPresets')}</span>
         <div className="credit-topup-presets">
-          {PRESETS.map((preset) => {
-            const selected = amount === preset;
+          {CREDIT_PACKAGES.map((preset) => {
+            const active = selected.credits === preset.credits;
             return (
               <button
-                key={preset}
+                key={preset.credits}
                 type="button"
-                aria-pressed={selected}
-                onClick={() => setAmountInput(String(preset))}
-                className={`credit-topup-preset${selected ? ' is-selected' : ''}`}
+                aria-pressed={active}
+                onClick={() => setCredits(preset.credits)}
+                className={`credit-topup-preset${active ? ' is-selected' : ''}`}
               >
-                <strong>{preset}</strong>
-                <span>{t('topUpUnit')}</span>
+                <strong>{preset.credits.toLocaleString(language === 'en' ? 'en-GB' : 'sk-SK')}</strong>
+                <span>{formatEuros(preset.price, language)}</span>
+                {preset.discountPercent > 0 && (
+                  <em>{t('topUpDiscount', { percent: preset.discountPercent })}</em>
+                )}
               </button>
             );
           })}
         </div>
 
-        <label className="credit-topup-label" htmlFor="credit-topup-amount">
-          {t('topUpCreditsCount')}
-        </label>
-        <div className="credit-topup-field">
-          <input
-            id="credit-topup-amount"
-            type="text"
-            inputMode="decimal"
-            value={amountInput}
-            onChange={(event) => setAmountInput(event.target.value)}
-            className="credit-topup-input"
-          />
-          <span className="credit-topup-unit">{t('topUpUnit')}</span>
-        </div>
-
         <div className="credit-topup-summary">
           <div>
             <span className="credit-topup-summary-label">{t('topUpPosted')}</span>
-            <strong>{formatCreditUnits(amount ?? 0, language)}</strong>
+            <strong>{formatCreditUnits(selected.credits, language)}</strong>
           </div>
           <div className="credit-topup-summary-side">
             <span className="credit-topup-rate">{t('topUpRate')}</span>
@@ -169,7 +150,38 @@ const CreditTopUpModal = ({ onClose, orderTotal, creditBalance }: CreditTopUpMod
           </div>
         </div>
 
-        <button type="button" onClick={payByCard} disabled={paying} className="credit-topup-pay">
+        <div className="credit-topup-consent">
+          <label className="credit-topup-check">
+            <input
+              type="checkbox"
+              checked={termsConsent}
+              onChange={(event) => setTermsConsent(event.target.checked)}
+            />
+            <span>
+              {t('topUpTermsLead')}{' '}
+              <a href="#/terms" target="_blank" rel="noreferrer">{t('consentTerms')}</a>
+              {', '}
+              <a href="#/privacy" target="_blank" rel="noreferrer">{t('consentPrivacy')}</a>
+              {' '}{t('consentAnd')}{' '}
+              <a href="#/refunds" target="_blank" rel="noreferrer">{t('consentRefunds')}</a>.
+            </span>
+          </label>
+          <label className="credit-topup-check">
+            <input
+              type="checkbox"
+              checked={declarationConsent}
+              onChange={(event) => setDeclarationConsent(event.target.checked)}
+            />
+            <span>{t('topUpDeclaration')}</span>
+          </label>
+        </div>
+
+        <button
+          type="button"
+          onClick={payByCard}
+          disabled={paying || !termsConsent || !declarationConsent}
+          className="credit-topup-pay"
+        >
           {paying ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
           <span>{paying ? t('payCreditsLoading') : `${t('payCard')} (${euros})`}</span>
         </button>

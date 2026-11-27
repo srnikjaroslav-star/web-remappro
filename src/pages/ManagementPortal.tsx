@@ -28,13 +28,11 @@ import { statusAfterResultDelivery } from '@/lib/orderStatus';
 import { Order, ActivityLog, SUPABASE_ANON_KEY, SUPABASE_URL } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { SERVICES } from '@/data/services';
-import { mailLanguageForClient } from '@/lib/clientLanguage';
 import { loadBillingByUserId, loadClientBilling, orderDisplayName, refundOrderCredits, restoreClientCredits, settleClientCredits } from '@/lib/clientProfile';
 import { downloadOrderCreditNote, downloadOrderInvoice } from '@/lib/accountingDocument';
 import { generateCreditNotePdf, generateInvoicePdf, invoiceConsentFromOrder } from '@/utils/invoiceGenerator';
 import { loadServiceCatalog, lookupServiceName } from '@/lib/serviceCatalog';
 import { formatCreditUnits } from '@/lib/creditUnits';
-import { useLanguage } from '@/i18n/LanguageContext';
 import ClientCredits from '@/components/ClientCredits';
 import AdminServices from '@/components/AdminServices';
 import OpeningHours from '@/components/OpeningHours';
@@ -478,7 +476,7 @@ const STATUS_FILTER_OPTIONS = [
 
 const ManagementPortal = () => {
   const navigate = useNavigate();
-  const { language } = useLanguage();
+  const language = 'sk' as const;
   const [orders, setOrders] = useState<Order[]>(() => adminSnapshot?.orders ?? []);
   const [loading, setLoading] = useState(() => !adminSnapshot);
   const [searchTerm, setSearchTerm] = useState('');
@@ -817,18 +815,9 @@ const ManagementPortal = () => {
   const sendStatusEmail = async (order: Order, status: string, creditNoteNumber?: string) => {
     const orderId = order.order_number || order.id.slice(0, 8).toUpperCase();
     const clientUserId = clientIdOf(order);
-    let language = await mailLanguageForClient(order.id, clientUserId);
     const session = await supabase.auth.getSession();
     const accessToken = session.data.session?.access_token;
     if (!accessToken) throw new Error('Not authorized');
-    if (clientUserId && session.data.session?.user?.id === clientUserId) {
-      try {
-        const stored = localStorage.getItem('remappro-language');
-        if (stored === 'en' || stored === 'sk') language = stored;
-      } catch {
-        /* private mode */
-      }
-    }
     const payload = {
       orderId: order.id,
       orderNumber: orderId,
@@ -839,7 +828,6 @@ const ManagementPortal = () => {
       year: order.year || 0,
       status,
       ...(clientUserId ? { clientUserId } : {}),
-      ...(language ? { language, lang: language } : {}),
       ...(creditNoteNumber?.trim() ? { creditNoteNumber: creditNoteNumber.trim() } : {}),
     };
     const postStatusEmail = async () => {
@@ -852,7 +840,6 @@ const ManagementPortal = () => {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${accessToken}`,
             apikey: SUPABASE_ANON_KEY,
-            ...(language ? { 'x-client-language': language } : {}),
           },
           body: JSON.stringify(payload),
           signal: controller.signal,

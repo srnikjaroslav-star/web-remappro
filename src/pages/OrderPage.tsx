@@ -1178,6 +1178,11 @@ const OrderPage = () => {
           setIsSubmitting(false);
           return;
         }
+        if (code === 'CONSENT_REQUIRED') {
+          toast.error(t('errorConsent'));
+          setIsSubmitting(false);
+          return;
+        }
         if (code === 'NOT_AUTHENTICATED') {
           toast.error(t('creditAuthRequired'));
           setIsSubmitting(false);

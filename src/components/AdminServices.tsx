@@ -156,7 +156,8 @@ const CategorySelect = ({
 };
 
 const AdminServices = () => {
-  const { language, t } = useLanguage();
+  const { t } = useLanguage();
+  const language = 'sk' as const;
   const knownCatalog = peekServiceCatalog();
   const [services, setServices] = useState<CatalogService[]>(knownCatalog ?? []);
   const [loading, setLoading] = useState(!knownCatalog);
