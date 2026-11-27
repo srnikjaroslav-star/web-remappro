@@ -1,7 +1,7 @@
 import { loadBillingByUserId } from '@/lib/clientProfile';
 import { supabase } from '@/lib/supabase';
-import { generateCreditNotePdf, generateInvoicePdf, invoiceConsentFromOrder, type InvoiceBuyer } from '@/utils/invoiceGenerator';
-import { readCreditNoteMark, readInvoiceMark, saveBlob } from '@/lib/orderInvoice';
+import { generateCreditNotePdf, type InvoiceBuyer } from '@/utils/invoiceGenerator';
+import { downloadStoredInvoice, readCreditNoteMark, readInvoiceMark, saveBlob } from '@/lib/orderInvoice';
 
 export type AccountingSource = {
   id?: string | null;
@@ -123,28 +123,7 @@ export const buildAccountingFile = async (source: AccountingSource, kind: 'invoi
       }),
     };
   }
-  const number = invoice.invoice_number?.trim() || '';
-  if (!number) return null;
-  return {
-    number,
-    stored: invoice.invoice_url || '',
-    file: await generateInvoicePdf({
-      invoiceNumber: number,
-      issuedAt: issuedOn(invoice.invoice_date),
-      buyer,
-      price,
-      consent: invoiceConsentFromOrder({
-        id: source.id,
-        order_number: source.orderNumber,
-        note: source.note,
-        legal_consent: source.legalConsent,
-        legal_consent_at: source.legalConsentAt,
-        emission_offroad_consent: source.emissionOffroadConsent,
-        emission_offroad_consent_at: source.emissionOffroadConsentAt,
-        consent_summary: source.consentSummary,
-      }),
-    }),
-  };
+  return null;
 };
 
 export const materializeAccountingFile = async (source: AccountingSource, kind: 'invoice' | 'credit') => {
@@ -161,7 +140,12 @@ const downloadBuilt = async (source: AccountingSource, kind: 'invoice' | 'credit
 };
 
 export const downloadOrderInvoice = async (orderId: string, hints?: AccountingHints) => {
-  await downloadBuilt(await loadSource(orderId, hints), 'invoice');
+  const source = await loadSource(orderId, hints);
+  const invoice = readInvoiceMark(String(source.note || ''));
+  const stored = invoice.invoice_url?.trim() || '';
+  const number = invoice.invoice_number?.trim() || '';
+  if (!stored || !number) throw new Error('K tejto objednávke nie je vystavená faktúra.');
+  await downloadStoredInvoice(stored, number);
 };
 
 export const downloadOrderCreditNote = async (orderId: string, hints?: AccountingHints) => {

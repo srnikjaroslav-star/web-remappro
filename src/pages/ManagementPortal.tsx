@@ -22,15 +22,15 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useOnlineClients } from '@/lib/clientPresence';
 import { fetchBlobWithProgress, lightFileRef, loadOrderFile, orderFileLocation, packOrderFile, unpackOrderFile, uploadOrderFile } from '@/lib/ecuFile';
-import { deleteOrderFilesAndRow, DuplicateDocumentNumber, exportInvoiceArchive, nextCreditNoteNumber, nextInvoiceNumber, previewInvoiceArchive, readCreditNoteMark, readInvoiceMark, rememberCreditNote, saveOrderCreditNote, saveOrderInvoice, withDocumentSeries, type InvoiceArchiveCounts } from '@/lib/orderInvoice';
+import { deleteOrderFilesAndRow, DuplicateDocumentNumber, downloadStoredInvoice, exportInvoiceArchive, nextCreditNoteNumber, previewInvoiceArchive, readCreditNoteMark, readInvoiceMark, rememberCreditNote, saveOrderCreditNote, withDocumentSeries, type InvoiceArchiveCounts } from '@/lib/orderInvoice';
 import { supabase } from '@/lib/supabase';
 import { statusAfterResultDelivery } from '@/lib/orderStatus';
 import { Order, ActivityLog, SUPABASE_ANON_KEY, SUPABASE_URL } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { SERVICES } from '@/data/services';
 import { loadBillingByUserId, loadClientBilling, orderDisplayName, refundOrderCredits, restoreClientCredits, settleClientCredits } from '@/lib/clientProfile';
-import { downloadOrderCreditNote, downloadOrderInvoice } from '@/lib/accountingDocument';
-import { generateCreditNotePdf, generateInvoicePdf, invoiceConsentFromOrder } from '@/utils/invoiceGenerator';
+import { downloadOrderCreditNote } from '@/lib/accountingDocument';
+import { generateCreditNotePdf } from '@/utils/invoiceGenerator';
 import { loadServiceCatalog, lookupServiceName } from '@/lib/serviceCatalog';
 import { formatCreditUnits } from '@/lib/creditUnits';
 import ClientCredits from '@/components/ClientCredits';
@@ -386,43 +386,6 @@ const invoiceBuyerFor = async (order: Order) => {
 
 const numberAlreadyUsed = (error: unknown) =>
   error instanceof DuplicateDocumentNumber || (error instanceof Error && error.name === 'DuplicateDocumentNumber');
-
-const issueCompletionInvoice = (order: Order) => withDocumentSeries(async () => {
-  const buyer = await invoiceBuyerFor(order);
-  const price = Math.abs(Number(order.total_price) || 0);
-  const current = await supabase.from('orders').select('note').eq('id', order.id).maybeSingle();
-  const existing = order.invoice_number?.trim()
-    || readInvoiceMark(String(current.data?.note || '')).invoice_number?.trim()
-    || '';
-  const target = {
-    id: order.id,
-    order_number: order.order_number,
-    user_id: clientIdOf(order),
-    customer_name: order.customer_name,
-    customer_email: order.customer_email,
-    total_price: order.total_price,
-  };
-  const consent = invoiceConsentFromOrder(order);
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const invoiceNumber = existing || await nextInvoiceNumber();
-    const file = await generateInvoicePdf({ invoiceNumber, issuedAt: new Date(), buyer, price, consent });
-    try {
-      const saved = await saveOrderInvoice({ ...target, invoice_number: invoiceNumber }, file);
-      if (saved.invoice_number === invoiceNumber) return saved;
-      const kept = await generateInvoicePdf({
-        invoiceNumber: saved.invoice_number,
-        issuedAt: new Date(),
-        buyer,
-        price,
-        consent,
-      });
-      return saveOrderInvoice({ ...target, invoice_number: saved.invoice_number }, kept);
-    } catch (error) {
-      if (existing || !numberAlreadyUsed(error) || attempt === 4) throw error;
-    }
-  }
-  throw new Error('Faktúru sa nepodarilo priradiť k objednávke');
-});
 
 const issueCreditNote = (order: Order, invoiceNumber: string) => withDocumentSeries(async () => {
   const buyer = await invoiceBuyerFor(order);
@@ -1316,22 +1279,12 @@ const ManagementPortal = () => {
     const orderId = pendingUploadId.current || selectedOrderId;
     if (!file || !orderId) return;
     
-    // Strict Upload Lock: Check if invoice already exists
     const order = orders.find(o => o.id === orderId);
     if (order && returnedCredit(order)) {
       toast.error(CLOSED_ORDER_MESSAGE);
       if (e.target) e.target.value = '';
       pendingUploadId.current = null;
       setSelectedOrderId(null);
-      return;
-    }
-    const canSendFile = order?.status === 'pending' || order?.status === 'processing';
-    if (order?.invoice_number && !canSendFile) {
-      console.warn('[handleResultUpload] Invoice already sent for order:', orderId, 'Invoice:', order.invoice_number);
-      toast.warning('Faktúra už bola odoslaná pre túto objednávku');
-      if (e.target) {
-        e.target.value = '';
-      }
       return;
     }
     
@@ -1342,7 +1295,7 @@ const ManagementPortal = () => {
     setUploadingId(orderId);
     setUploadProgress(0);
     let chargedUpload: { userId: string; price: number; orderId: string } | null = null;
-    let savedOrder: Order | null = null;
+    let delivered = false;
 
     if (e.target) e.target.value = '';
 
@@ -1389,7 +1342,7 @@ const ManagementPortal = () => {
           : 'Stav zmenený na: Dokončené',
       );
       if (currentOrder && nextStatus === 'completed') notifyStatusChange(currentOrder, 'completed');
-      savedOrder = currentOrder && nextStatus === 'completed' ? currentOrder : null;
+      delivered = true;
     } catch (error) {
       console.error('[handleResultUpload] Upload error:', error);
       if (uploadGeneration.current !== generation) return;
@@ -1411,19 +1364,7 @@ const ManagementPortal = () => {
       setSelectedOrderId(null);
     }
 
-    if (!savedOrder || savedOrder.invoice_url) {
-      if (savedOrder) void fetchOrders(true);
-      return;
-    }
-    try {
-      const saved = await issueCompletionInvoice(savedOrder);
-      setOrders((prev) => prev.map((item) => (item.id === savedOrder.id ? { ...item, ...saved } : item)));
-      setDetailOrder((current) => (current?.id === savedOrder.id ? { ...current, ...saved } : current));
-    } catch (invoiceError) {
-      console.error('[handleResultUpload] Invoice generation error (non-fatal):', invoiceError);
-      toast.warning('Objednávka je dokončená. Faktúru sa nepodarilo vygenerovať.');
-    }
-    void fetchOrders(true);
+    if (delivered) void fetchOrders(true);
   };
 
   const handleResultDownload = async (order: Order) => {
@@ -1488,16 +1429,14 @@ const ManagementPortal = () => {
   };
 
   const openInvoice = async (order: Order) => {
-    if (!order.invoice_url) {
-      toast.warning('K tejto faktúre ešte nie je nahraté PDF.');
+    const stored = order.invoice_url?.trim() || '';
+    const number = order.invoice_number?.trim() || '';
+    if (!stored || !number) {
+      toast.warning('K tejto objednávke nie je vystavená faktúra. Faktúra vzniká len pri nákupe kreditového balíka.');
       return;
     }
     try {
-      await downloadOrderInvoice(order.id, {
-        customerName: order.customer_name,
-        customerEmail: order.customer_email,
-        orderRef: order.order_number || undefined,
-      });
+      await downloadStoredInvoice(stored, number);
     } catch (error) {
       console.error('Invoice download error:', error);
       toast.error('Faktúru sa nepodarilo stiahnuť');
@@ -2003,7 +1942,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                     const vehicle = [order.car_brand, order.car_model].map((part) => String(part ?? '').trim()).filter(Boolean).join(' ');
                     const documents: { number: string; href: string; title: string }[] = [];
                     if (order.invoice_number) {
-                      documents.push({ number: order.invoice_number, href: order.invoice_url || '', title: order.invoice_url ? 'Stiahnuť faktúru' : 'PDF ešte nie je nahraté' });
+                      documents.push({ number: order.invoice_number, href: order.invoice_url || '', title: order.invoice_url ? 'Stiahnuť uloženú faktúru' : 'Faktúra nie je uložená' });
                     }
                     if (order.credit_note_number) {
                       documents.push({ number: order.credit_note_number, href: order.credit_note_pdf || '#', title: 'Stiahnuť dobropis' });

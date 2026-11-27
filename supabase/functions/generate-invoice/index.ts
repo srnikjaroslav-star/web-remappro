@@ -42,6 +42,16 @@ serve(async (req) => {
     const payload: InvoiceRequest = await req.json();
     console.log("[generate-invoice] Received request:", JSON.stringify(payload, null, 2));
 
+    if (payload.documentType !== "CREDIT_NOTE") {
+      return new Response(JSON.stringify({
+        success: false,
+        error: "Faktúra sa vystavuje a odosiela len pri nákupe kreditového balíka.",
+      }), {
+        status: 409,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const { orderId, orderNumber, customerEmail, customerName, totalAmount, taxAmount, documentType, refundReason } = payload;
 
     // Validate required fields
