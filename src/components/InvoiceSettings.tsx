@@ -1,13 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import {
+  loadInvoiceSettings,
   peekInvoiceSettings,
   saveInvoiceSettings,
   type InvoiceSettings,
 } from '@/lib/invoiceSettings';
 
-const fieldClass = 'h-10 w-full rounded-md border border-primary/70 bg-[#0a192f] px-3 text-sm text-white shadow-[0_0_16px_rgba(0,242,255,0.28)] focus:border-primary focus:outline-none focus:shadow-[0_0_16px_rgba(0,242,255,0.45)]';
-const labelClass = 'mb-1 block text-[11px] font-bold uppercase tracking-wide text-muted-foreground';
+const fieldClass = 'invoice-field h-7 w-full rounded-md border border-[#00f2ff]/70 bg-[#0a192f] px-2.5 text-sm text-white shadow-[0_0_12px_rgba(0,242,255,0.22)] focus:border-[#00f2ff] focus:outline-none';
+const labelClass = 'mb-0 block text-[10px] font-bold uppercase leading-tight tracking-wide text-muted-foreground';
 
 const draftFrom = (settings: InvoiceSettings) => ({
   supplierName: settings.supplierName,
@@ -15,11 +16,9 @@ const draftFrom = (settings: InvoiceSettings) => ({
   supplierIco: settings.supplierIco,
   supplierDic: settings.supplierDic,
   supplierRegister: settings.supplierRegister,
-  vatNote: settings.vatNote,
   itemName: settings.itemName,
   iban: settings.iban,
   swift: settings.swift,
-  dueDays: String(settings.dueDays),
 });
 
 type Draft = ReturnType<typeof draftFrom>;
@@ -28,19 +27,27 @@ const InvoiceSettingsPanel = () => {
   const [draft, setDraft] = useState(() => draftFrom(peekInvoiceSettings()));
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => {
+    let active = true;
+    loadInvoiceSettings().then((settings) => {
+      if (active) setDraft(draftFrom(settings));
+    }).catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const update = (field: keyof Draft, value: string) => {
     setDraft((current) => ({ ...current, [field]: value }));
   };
 
   const save = async () => {
-    const dueDays = Number(draft.dueDays.trim());
     const required = [
       draft.supplierName,
       draft.supplierAddress,
       draft.supplierIco,
       draft.supplierDic,
       draft.supplierRegister,
-      draft.vatNote,
       draft.itemName,
       draft.iban,
       draft.swift,
@@ -49,21 +56,18 @@ const InvoiceSettingsPanel = () => {
       toast.error('Vyplňte všetky údaje dodávateľa aj faktúry.');
       return;
     }
-    if (!Number.isInteger(dueDays) || dueDays < 1 || dueDays > 365) {
-      toast.error('Splatnosť musí byť celé číslo od 1 do 365 dní.');
-      return;
-    }
     const next = {
       supplierName: draft.supplierName.trim(),
       supplierAddress: draft.supplierAddress.trim(),
       supplierIco: draft.supplierIco.trim(),
       supplierDic: draft.supplierDic.trim(),
       supplierRegister: draft.supplierRegister.trim(),
-      vatNote: draft.vatNote.trim(),
+      vatNote: 'Dodávateľ nie je platiteľom DPH.',
       itemName: draft.itemName.trim(),
+      itemDescription: draft.itemName.trim(),
       iban: draft.iban.trim(),
       swift: draft.swift.trim(),
-      dueDays,
+      dueDays: 0,
     };
     setSaving(true);
     const saved = await saveInvoiceSettings(next);
@@ -77,7 +81,7 @@ const InvoiceSettingsPanel = () => {
   };
 
   const field = (name: keyof Draft, label: string, maxLength: number) => (
-    <label className="block min-w-0">
+    <label className="grid min-w-0 grid-cols-[9.5rem_minmax(0,1fr)] items-center gap-2">
       <span className={labelClass}>{label}</span>
       <input
         value={draft[name]}
@@ -90,58 +94,43 @@ const InvoiceSettingsPanel = () => {
   );
 
   return (
-    <div className="max-w-3xl rounded-xl border border-primary/40 bg-[#070d16] p-4 shadow-[0_0_30px_rgba(0,242,255,0.22)]">
-      <h2 className="text-2xl font-bold uppercase leading-none tracking-[0.16em] text-primary">Nastavenia faktúry</h2>
-      <p className="mt-2 text-sm text-muted-foreground">Tieto hodnoty sa použijú pri každom novom PDF.</p>
+    <div className="max-w-[780px] rounded-xl border border-[#00f2ff]/75 bg-[#070d16] px-2 py-1.5 shadow-[0_0_28px_rgba(0,242,255,0.28)]">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-base font-bold uppercase leading-none tracking-[0.14em] text-primary">Nastavenia faktúry</h2>
+          <p className="mt-0.5 text-[11px] leading-tight text-muted-foreground">Tieto hodnoty sa použijú pri každom novom PDF.</p>
+        </div>
+        <button
+          type="button"
+          onClick={save}
+          disabled={saving}
+          className="inline-flex h-7 shrink-0 items-center rounded-md border border-green-400 bg-green-500/15 px-3 text-xs font-black tracking-wide text-green-400 shadow-[0_0_14px_rgba(74,222,128,0.32)] transition-colors hover:border-green-300 hover:bg-green-500/25 hover:shadow-[0_0_16px_rgba(74,222,128,0.45)] disabled:opacity-60"
+        >
+          ULOŽIŤ ZMENY
+        </button>
+      </div>
 
-      <section className="mt-4 rounded-lg border border-primary/25 bg-[#070d16]/70 p-3 shadow-[inset_0_0_22px_rgba(0,242,255,0.06)]">
-        <h3 className="mb-2 text-sm font-bold uppercase tracking-[0.14em] text-primary">Údaje dodávateľa</h3>
-        <div className="grid gap-3 sm:grid-cols-2">
+      <div className="mt-1.5 grid gap-1.5">
+      <section className="rounded-lg border border-primary/25 bg-[#070d16]/70 p-1.5 shadow-[inset_0_0_22px_rgba(0,242,255,0.06)]">
+        <h3 className="mb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-primary">Údaje dodávateľa</h3>
+        <div className="grid gap-1">
           {field('supplierName', 'Názov firmy / Meno', 80)}
           {field('supplierAddress', 'Adresa', 120)}
           {field('supplierIco', 'IČO', 20)}
           {field('supplierDic', 'DIČ', 20)}
-          <label className="block min-w-0 sm:col-span-2">
-            <span className={labelClass}>Register / č. ŽR</span>
-            <input
-              value={draft.supplierRegister}
-              onChange={(event) => update('supplierRegister', event.target.value)}
-              disabled={saving}
-              maxLength={180}
-              className={fieldClass}
-            />
-          </label>
+          {field('supplierRegister', 'Register / č. ŽR', 180)}
         </div>
       </section>
 
-      <section className="mt-3 rounded-lg border border-primary/25 bg-[#070d16]/70 p-3 shadow-[inset_0_0_22px_rgba(0,242,255,0.06)]">
-        <h3 className="mb-2 text-sm font-bold uppercase tracking-[0.14em] text-primary">Fakturačné a bankové údaje</h3>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="block min-w-0 sm:col-span-2">
-            <span className={labelClass}>Predvolený názov položky</span>
-            <input
-              value={draft.itemName}
-              onChange={(event) => update('itemName', event.target.value)}
-              disabled={saving}
-              maxLength={180}
-              className={fieldClass}
-            />
-          </label>
+      <section className="rounded-lg border border-primary/25 bg-[#070d16]/70 p-1.5 shadow-[inset_0_0_22px_rgba(0,242,255,0.06)]">
+        <h3 className="mb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-primary">Fakturačné a bankové údaje</h3>
+        <div className="grid gap-1">
+          {field('itemName', 'Predvolený názov položky', 300)}
           {field('iban', 'IBAN', 42)}
           {field('swift', 'SWIFT / BIC', 11)}
-          {field('dueDays', 'Splatnosť v dňoch', 3)}
-          {field('vatNote', 'Poznámka k DPH', 120)}
         </div>
       </section>
-
-      <button
-        type="button"
-        onClick={save}
-        disabled={saving}
-        className="mt-3 inline-flex h-11 items-center rounded-md border border-green-400/80 bg-green-500/10 px-5 text-sm font-black uppercase tracking-wide text-green-400 shadow-[0_0_14px_rgba(74,222,128,0.32)] transition-colors hover:border-green-400 hover:bg-green-500/16 hover:shadow-[0_0_16px_rgba(74,222,128,0.42)] disabled:opacity-60"
-      >
-        ✓ Uložiť
-      </button>
+      </div>
     </div>
   );
 };

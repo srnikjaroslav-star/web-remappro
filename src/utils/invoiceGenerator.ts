@@ -169,12 +169,6 @@ const formatDate = (date: Date) => {
 
 const filled = (value?: string) => value?.trim() || '';
 
-const addDays = (date: Date, days: number) => {
-  const next = new Date(date.getTime());
-  next.setDate(next.getDate() + days);
-  return next;
-};
-
 const BLUE: [number, number, number] = [14, 99, 196];
 const INK: [number, number, number] = [15, 23, 42];
 const MUTED: [number, number, number] = [71, 85, 105];
@@ -325,7 +319,7 @@ const renderAccountingPdf = async (input: AccountingPdfInput) => {
     buyerCursor += lineStep;
   });
 
-  const due = input.topupId ? issued : addDays(issued, invoiceSettings.dueDays);
+  const due = issued;
   const paymentLabel = input.topupId ? 'Uhradené kartou' : 'Bankový prevod';
   const factsY = partiesY + partiesHeight + 4;
   const factsHeight = input.originalInvoice ? 34 : 30;
@@ -409,8 +403,11 @@ const renderAccountingPdf = async (input: AccountingPdfInput) => {
     },
     didDrawCell: (data) => {
       if (data.section !== 'body' || data.column.index !== 1) return;
+      const packageDescription = invoiceSettings.itemName.trim()
+        || invoiceSettings.itemDescription.trim()
+        || PACKAGE_ITEM_DESCRIPTION;
       const description = input.itemDescription?.trim()
-        || (input.topupId ? PACKAGE_ITEM_DESCRIPTION : 'Digitálna služba B2B portálu REMAPPRO');
+        || (input.topupId ? packageDescription : 'Digitálna služba B2B portálu REMAPPRO');
       doc.setFont('Roboto', 'normal');
       doc.setFontSize(7.5);
       doc.setTextColor(...BLUE);

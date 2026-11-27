@@ -1708,6 +1708,23 @@
   }
 }
 
+@keyframes invoice-field-breathe {
+  0%, 100% {
+    border-color: rgba(0, 210, 255, 0.55);
+    box-shadow: 0 0 8px rgba(0, 210, 255, 0.28);
+    background-color: #0a192f;
+  }
+  50% {
+    border-color: rgba(140, 248, 255, 0.95);
+    box-shadow: 0 0 18px rgba(0, 242, 255, 0.55), 0 0 6px rgba(0, 170, 255, 0.35);
+    background-color: #12304a;
+  }
+}
+
+.invoice-field:hover:not(:disabled) {
+  animation: invoice-field-breathe 1.6s ease-in-out infinite;
+}
+
 .service-category-box {
   border: 1px solid hsl(var(--primary) / 0.7);
   background-color: #0a192f;

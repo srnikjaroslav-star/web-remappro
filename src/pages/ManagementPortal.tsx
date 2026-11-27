@@ -2664,7 +2664,7 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
         />
       </div>
 
-      <footer className="mt-8 w-full py-4 text-center text-xs text-gray-500">
+      <footer className={`${section === 'invoices' ? 'mt-1 py-1' : 'mt-8 py-4'} w-full text-center text-xs text-gray-500`}>
         <p>REMAPPRO, IČO: 41281471, DIČ: 1041196607, Janka Kráľa 29, 990 01 Veľký Krtíš, Slovakia</p>
         <p className="mt-1">Copyright © 2026 REMAPPRO Digital Solutions. All rights reserved.</p>
       </footer>

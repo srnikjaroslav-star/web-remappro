@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { clientMailShell, sendClientEmail } from "./clientNotice.ts";
+import { PACKAGE_ITEM_DESCRIPTION } from "./creditPackages.ts";
 import { renderPackageInvoice } from "./packageInvoice.ts";
 import { clientPortalLanguage } from "./statusEmail.ts";
 import { dispatchTelegram, notifyCreditTopUp } from "./telegramOrder.ts";
@@ -108,6 +109,15 @@ const loadBuyer = async (admin: SupabaseClient, userId: string): Promise<Buyer> 
   return buyer;
 };
 
+const loadPackageItemDescription = async (admin: SupabaseClient) => {
+  const { data, error } = await admin.from("system_settings").select("value").eq("key", "invoice").maybeSingle();
+  if (error) return PACKAGE_ITEM_DESCRIPTION;
+  const value = data?.value && typeof data.value === "object"
+    ? (data.value as Record<string, unknown>).itemDescription
+    : "";
+  return text(value) || PACKAGE_ITEM_DESCRIPTION;
+};
+
 const notifyAdminOnce = async (
   admin: SupabaseClient,
   sessionId: string,
@@ -170,6 +180,7 @@ export const fulfillCreditPackage = async (
       credits,
       price,
       topupId: topupRef,
+      itemDescription: await loadPackageItemDescription(admin),
       buyerName: buyer.company || buyer.name || text(claim.company) || text(claim.account_name) || "Zákazník",
       buyerContact: buyer.company && buyer.name ? buyer.name : "",
       buyerStreet: buyer.street,

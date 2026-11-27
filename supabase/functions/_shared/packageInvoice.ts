@@ -26,6 +26,7 @@ export type PackageInvoiceInput = {
   buyerIco?: string;
   buyerDic?: string;
   consentSummary?: string;
+  itemDescription?: string;
 };
 
 const BLUE: [number, number, number] = [14, 99, 196];
@@ -182,7 +183,8 @@ export const renderPackageInvoice = (input: PackageInvoiceInput) => {
   doc.setFont("Roboto", "normal");
   doc.setFontSize(8);
   const descriptionWidth = columns[1] - 4;
-  const description = doc.splitTextToSize(PACKAGE_ITEM_DESCRIPTION, descriptionWidth) as string[];
+  const descriptionText = filled(input.itemDescription) || PACKAGE_ITEM_DESCRIPTION;
+  const description = doc.splitTextToSize(descriptionText, descriptionWidth) as string[];
   const rowHeight = 12 + description.length * 3.6;
   doc.setDrawColor(...LINE);
   doc.rect(margin, tableY + 8, width, rowHeight);
