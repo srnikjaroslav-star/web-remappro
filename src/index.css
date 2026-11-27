@@ -1477,6 +1477,38 @@
     pointer-events: none;
   }
 
+  .credit-topup-test {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 0 0 12px;
+  }
+
+  .credit-topup-test input {
+    width: 100%;
+    height: 36px;
+    padding: 0 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(45, 212, 191, 0.45);
+    background: rgba(4, 12, 20, 0.92);
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    outline: none;
+  }
+
+  .credit-topup-test input:focus {
+    border-color: #22d3ee;
+    box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.16);
+  }
+
+  .credit-topup-test small {
+    color: #94a3b8;
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
   .credit-topup-summary {
     display: flex;
     align-items: center;

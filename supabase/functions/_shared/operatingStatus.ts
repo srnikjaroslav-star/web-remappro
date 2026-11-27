@@ -70,6 +70,14 @@ export const isFunctionAdmin = (user: { email?: string | null; app_metadata?: Re
   return role === "admin";
 };
 
+export const isDatabaseAdmin = (user: { email?: string | null; app_metadata?: Record<string, unknown> | null }) => {
+  const email = String(user.email ?? "").trim().toLowerCase();
+  if (ADMIN_EMAILS.includes(email)) return true;
+  const configured = String(Deno.env.get("ADMIN_EMAIL") ?? "").trim().toLowerCase();
+  if (configured && email === configured) return true;
+  return String(user.app_metadata?.role ?? "").trim().toLowerCase() === "admin";
+};
+
 export const operatingOpen = async (): Promise<boolean> => {
   try {
     const response = await fetch(`${STATUS_URL}/rest/v1/system_settings?select=value&key=eq.system_status`, {

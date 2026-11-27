@@ -1,6 +1,8 @@
 import Stripe from "https://esm.sh/stripe@17.7.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { creditPackageByCredits, packageItemName, PACKAGE_ITEM_DESCRIPTION } from "../_shared/creditPackages.ts";
+import { fulfillCreditPackage } from "../_shared/creditFulfillment.ts";
+import { isDatabaseAdmin } from "../_shared/operatingStatus.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -15,6 +17,7 @@ const json = (body: unknown, status = 200) =>
   });
 
 const text = (value: unknown) => String(value ?? "").trim();
+const TEST_CODE = "TEST100";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -40,11 +43,16 @@ Deno.serve(async (req) => {
       credits?: unknown;
       termsConsent?: unknown;
       declarationConsent?: unknown;
+      testCode?: unknown;
     };
     const pack = creditPackageByCredits(Number(body.credits));
     if (!pack) return json({ ok: false, code: "INVALID_PACKAGE" }, 400);
     if (body.termsConsent !== true || body.declarationConsent !== true) {
       return json({ ok: false, code: "CONSENT_REQUIRED" }, 400);
+    }
+    const testCode = text(body.testCode);
+    if (testCode && (testCode !== TEST_CODE || !isDatabaseAdmin(user))) {
+      return json({ ok: false, code: "TEST_FORBIDDEN" }, 403);
     }
 
     const profile = await userClient
@@ -64,6 +72,53 @@ Deno.serve(async (req) => {
       .filter(Boolean)
       .join(" ");
     const accountEmail = text(row.email) || text(user.email);
+
+    if (testCode === TEST_CODE) {
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (!serviceKey) return json({ ok: false, code: "SERVER" }, 500);
+      const admin = createClient(supabaseUrl, serviceKey);
+      const sessionId = `cs_admtest${crypto.randomUUID().replace(/-/g, "")}`;
+      const consentedAt = new Date().toISOString();
+      const applied = await admin.rpc("apply_admin_test_credit_topup", {
+        p_user_id: user.id,
+        p_credits: pack.credits,
+        p_session_id: sessionId,
+        p_company: company,
+        p_account_name: accountName,
+        p_account_email: accountEmail,
+        p_terms_consent: true,
+        p_declaration_consent: true,
+        p_consented_at: consentedAt,
+      });
+      if (applied.error) {
+        const message = applied.error.message || "";
+        console.error("[create-credit-checkout] test top-up", message);
+        if (message.includes("CONSENT_REQUIRED")) return json({ ok: false, code: "CONSENT_REQUIRED" }, 400);
+        if (message.includes("INVALID_AMOUNT") || message.includes("INVALID_SESSION")) {
+          return json({ ok: false, code: "INVALID_PACKAGE" }, 400);
+        }
+        return json({ ok: false, code: "SERVER" }, 500);
+      }
+      const rowData = applied.data as { balance?: number | string | null; credited?: boolean } | null;
+      const balance = Number(rowData?.balance);
+      const delivered = await fulfillCreditPackage(admin, sessionId);
+      if (!delivered.ok) {
+        return json({
+          ok: false,
+          code: "INVOICE_FAILED",
+          test: true,
+          balance: Number.isFinite(balance) ? balance : 0,
+          credited: rowData?.credited === true,
+        }, 502);
+      }
+      return json({
+        ok: true,
+        test: true,
+        balance: Number.isFinite(balance) ? balance : 0,
+        credited: rowData?.credited === true,
+        invoiceSent: true,
+      });
+    }
 
     const origin = req.headers.get("origin") || "";
     if (!origin) return json({ ok: false, code: "SERVER" }, 500);

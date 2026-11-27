@@ -4,10 +4,12 @@ import { toast } from 'sonner';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { CREDIT_PACKAGES, suggestedCreditPackage } from '@/lib/creditPackages';
 import { formatCreditUnits } from '@/lib/creditUnits';
+import { isDatabaseAdmin } from '@/lib/portalAdmin';
 import { supabase } from '@/lib/supabase';
 
 type CreditTopUpModalProps = {
   onClose: () => void;
+  onCredited?: (balance: number) => void;
   orderTotal?: number;
   creditBalance?: number | null;
 };
@@ -15,7 +17,7 @@ type CreditTopUpModalProps = {
 const formatEuros = (value: number, language: 'sk' | 'en') =>
   `${value.toLocaleString(language === 'en' ? 'en-GB' : 'sk-SK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 
-const CreditTopUpModal = ({ onClose, orderTotal, creditBalance }: CreditTopUpModalProps) => {
+const CreditTopUpModal = ({ onClose, onCredited, orderTotal, creditBalance }: CreditTopUpModalProps) => {
   const { language, t } = useLanguage();
   const shortfall = typeof orderTotal === 'number' && typeof creditBalance === 'number'
     ? Math.max(0, Math.round((orderTotal - creditBalance) * 100) / 100)
@@ -24,8 +26,22 @@ const CreditTopUpModal = ({ onClose, orderTotal, creditBalance }: CreditTopUpMod
   const [termsConsent, setTermsConsent] = useState(false);
   const [declarationConsent, setDeclarationConsent] = useState(false);
   const [paying, setPaying] = useState(false);
+  const [adminTest, setAdminTest] = useState(false);
+  const [testCode, setTestCode] = useState('');
   const selected = CREDIT_PACKAGES.find((item) => item.credits === credits) ?? CREDIT_PACKAGES[0];
-  const euros = formatEuros(selected.price, language);
+  const testActive = adminTest && testCode.trim() === 'TEST100';
+  const payable = testActive ? 0 : selected.price;
+  const euros = formatEuros(payable, language);
+
+  useEffect(() => {
+    let active = true;
+    void supabase.auth.getUser().then(({ data }) => {
+      if (active) setAdminTest(isDatabaseAdmin(data.user));
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -48,9 +64,10 @@ const CreditTopUpModal = ({ onClose, orderTotal, creditBalance }: CreditTopUpMod
           credits: selected.credits,
           termsConsent: true,
           declarationConsent: true,
+          ...(testActive ? { testCode: 'TEST100' } : {}),
         },
       });
-      let data = invoked.data as { ok?: boolean; url?: string; code?: string } | null;
+      let data = invoked.data as { ok?: boolean; url?: string; code?: string; test?: boolean; balance?: number } | null;
       if (invoked.error && !data) {
         try {
           data = await (invoked.error as { context?: Response }).context?.json();
@@ -70,6 +87,28 @@ const CreditTopUpModal = ({ onClose, orderTotal, creditBalance }: CreditTopUpMod
       }
       if (data?.code === 'INVALID_PACKAGE' || data?.code === 'INVALID_AMOUNT') {
         toast.error(t('topUpInvalid'));
+        setPaying(false);
+        return;
+      }
+      if (data?.code === 'TEST_FORBIDDEN') {
+        toast.error(t('topUpTestForbidden'));
+        setPaying(false);
+        return;
+      }
+      if (data?.code === 'INVOICE_FAILED') {
+        if (Number.isFinite(Number(data.balance))) onCredited?.(Number(data.balance));
+        toast.error(t('topUpFailed'));
+        setPaying(false);
+        return;
+      }
+      if (data?.test && data.ok) {
+        if (Number.isFinite(Number(data.balance))) onCredited?.(Number(data.balance));
+        toast.success(t('topUpSuccess'));
+        onClose();
+        return;
+      }
+      if (testActive) {
+        toast.error(t('topUpFailed'));
         setPaying(false);
         return;
       }
@@ -139,6 +178,22 @@ const CreditTopUpModal = ({ onClose, orderTotal, creditBalance }: CreditTopUpMod
           })}
         </div>
 
+        {adminTest && (
+          <label className="credit-topup-test">
+            <span className="credit-topup-label">{t('topUpTestCode')}</span>
+            <input
+              type="text"
+              value={testCode}
+              autoComplete="off"
+              spellCheck={false}
+              maxLength={32}
+              onChange={(event) => setTestCode(event.target.value)}
+              aria-describedby="credit-topup-test-hint"
+            />
+            <small id="credit-topup-test-hint">{t('topUpTestHint')}</small>
+          </label>
+        )}
+
         <div className="credit-topup-summary">
           <div>
             <span className="credit-topup-summary-label">{t('topUpPosted')}</span>
@@ -183,7 +238,7 @@ const CreditTopUpModal = ({ onClose, orderTotal, creditBalance }: CreditTopUpMod
           className="credit-topup-pay"
         >
           {paying ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
-          <span>{paying ? t('payCreditsLoading') : `${t('payCard')} (${euros})`}</span>
+          <span>{paying ? t('payCreditsLoading') : testActive ? `${t('topUpTestPay')} (${euros})` : `${t('payCard')} (${euros})`}</span>
         </button>
       </div>
     </div>

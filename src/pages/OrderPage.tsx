@@ -2028,11 +2028,12 @@ const OrderPage = () => {
         </div>
       )}
       {topUpOpen && (
-        <CreditTopUpModal
-          onClose={() => setTopUpOpen(false)}
-          orderTotal={totalPrice}
-          creditBalance={creditBalance}
-        />
+          <CreditTopUpModal
+            onClose={() => setTopUpOpen(false)}
+            onCredited={(balance) => setCreditBalance(balance)}
+            orderTotal={totalPrice}
+            creditBalance={creditBalance}
+          />
       )}
       {loginOpen && (
         <div
