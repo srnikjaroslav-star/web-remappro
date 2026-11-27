@@ -16,7 +16,7 @@ const calendarYear = (issued = new Date()) => {
 };
 
 const prefixFor = (kind: DocumentKind, year: number) => (
-  kind === "invoice" ? String(year) : `90${String(year).slice(2)}`
+  kind === "invoice" ? String(year) : `9${String(year).slice(1)}`
 );
 
 const formatNumber = (kind: DocumentKind, year: number, serial: number) => {
@@ -60,7 +60,7 @@ const reserve = async (admin: SupabaseClient, kind: DocumentKind, year: number) 
 };
 
 const nextFromNotes = async (admin: SupabaseClient, kind: DocumentKind, year: number) => {
-  let highest = 0;
+  const taken = new Set<number>();
   const pageSize = 1000;
   for (let from = 0; ; from += pageSize) {
     const rows = await admin.from("orders").select("note").range(from, from + pageSize - 1);
@@ -68,11 +68,23 @@ const nextFromNotes = async (admin: SupabaseClient, kind: DocumentKind, year: nu
     const batch = rows.data || [];
     for (const row of batch) {
       const serial = serialOf(kind, year, markedNumber(String(row.note || ""), kind));
-      if (serial > highest) highest = serial;
+      if (serial > 0) taken.add(serial);
     }
     if (batch.length < pageSize) break;
   }
-  return formatNumber(kind, year, highest + 1);
+  if (kind === "invoice") {
+    const topups = await admin.from("credit_topups").select("invoice_number");
+    if (!topups.error) {
+      for (const row of topups.data || []) {
+        const serial = serialOf(kind, year, String((row as { invoice_number?: string | null }).invoice_number || ""));
+        if (serial > 0) taken.add(serial);
+      }
+    }
+  }
+  for (let serial = 1; serial <= limit; serial += 1) {
+    if (!taken.has(serial)) return formatNumber(kind, year, serial);
+  }
+  throw new Error("Číselný rad dokladov pre tento rok je vyčerpaný.");
 };
 
 export const keepOrAssignDocumentNumber = async (orderId: string, kind: DocumentKind, issued = new Date()) => {

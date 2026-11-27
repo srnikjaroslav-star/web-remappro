@@ -17,7 +17,8 @@ export const documentCalendarYear = (issued = new Date()) => {
 export const documentPrefix = (kind: DocumentKind, year: number) => {
   const full = String(year);
   if (!/^\d{4}$/.test(full)) throw new Error('Číslo dokladu sa nepodarilo priradiť.');
-  return kind === 'invoice' ? full : `90${full.slice(2)}`;
+  // Invoice YYYYNNNN. Credit note: 9 + the last three digits of the year + NNNN.
+  return kind === 'invoice' ? full : `9${full.slice(1)}`;
 };
 
 export const formatDocumentNumber = (kind: DocumentKind, year: number, serial: number) => {
@@ -36,10 +37,13 @@ export const serialOfDocument = (kind: DocumentKind, year: number, value: string
 };
 
 export const nextDocumentSerial = (used: string[], kind: DocumentKind, year: number) => {
-  let highest = 0;
+  const taken = new Set<number>();
   for (const value of used) {
     const serial = serialOfDocument(kind, year, value);
-    if (serial > highest) highest = serial;
+    if (serial > 0) taken.add(serial);
   }
-  return formatDocumentNumber(kind, year, highest + 1);
+  for (let serial = 1; serial <= SERIES_LIMIT; serial += 1) {
+    if (!taken.has(serial)) return formatDocumentNumber(kind, year, serial);
+  }
+  throw new Error('Číselný rad dokladov pre tento rok je vyčerpaný.');
 };
