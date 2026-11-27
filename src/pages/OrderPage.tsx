@@ -321,6 +321,7 @@ const OrderPage = () => {
   const [legalConsentAgreed, setLegalConsentAgreed] = useState(false);
   const [emissionAck, setEmissionAck] = useState(false);
   const [confirmGate, setConfirmGate] = useState<null | { consent: boolean; emission: boolean }>(null);
+  const [serviceNotice, setServiceNotice] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [vehicle, setVehicle] = useState<VehicleData>(() => readOrderDraft()?.vehicle ?? { ...EMPTY_VEHICLE });
   const [services, setServices] = useState<string[]>(() => readOrderDraft()?.services ?? []);
@@ -880,7 +881,7 @@ const OrderPage = () => {
   );
 
   const totalPrice = selectedItems.reduce((total, service) => total + service.price, 0);
-  const shortOnCredits = creditBalance !== null && creditBalance < totalPrice;
+  const needsTopUp = creditBalance !== null && (creditBalance <= 0 || creditBalance < totalPrice);
   const emissionSelected = selectedItems.some((service) => service.category === 'Emission Control');
 
   useEffect(() => {
@@ -1027,6 +1028,24 @@ const OrderPage = () => {
   };
 
   const requestCheckout = () => {
+    if (needsTopUp) {
+      openCreditTopUp();
+      return;
+    }
+    if (services.length === 0) {
+      setErrors((current) => {
+        if (!current.services) return current;
+        const next = { ...current };
+        delete next.services;
+        return next;
+      });
+      setServiceNotice(true);
+      return;
+    }
+    if (operationReady && !operationOnline && !isPortalAdmin(authUser)) {
+      setOperationClosed(true);
+      return;
+    }
     const emissionOffroadConsent = Boolean(emissionSelected && emissionAck);
     const needConsent = !legalConsentAgreed;
     const needEmission = emissionSelected && !emissionOffroadConsent;
@@ -1034,8 +1053,7 @@ const OrderPage = () => {
       setConfirmGate({ consent: needConsent, emission: needEmission });
       return;
     }
-    if (shortOnCredits) openCreditTopUp();
-    else void payWithCredits(emissionOffroadConsent);
+    void payWithCredits(emissionOffroadConsent);
   };
 
   const payWithCredits = async (emissionOffroadConsent: boolean) => {
@@ -1057,8 +1075,11 @@ const OrderPage = () => {
       }
     }
     const nextErrors = validate(source);
+    const missingService = Boolean(nextErrors.services);
+    if (missingService) delete nextErrors.services;
     setErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0) {
+    if (missingService) setServiceNotice(true);
+    if (missingService || Object.keys(nextErrors).length > 0) {
       const profileMissing = Boolean(nextErrors.name || nextErrors.email);
       const formInvalid = Object.keys(nextErrors).some((key) => key !== 'name' && key !== 'email');
       if (profileMissing) toast.error(t('profileOrderRequired'));
@@ -1832,7 +1853,6 @@ const OrderPage = () => {
                       );
                   })}
                   </div>
-                  {errors.services && <p className="shrink-0 px-1 pt-2 text-xs text-red-400">{t(errors.services)}</p>}
                 </div>
 
                 <div className="order-checkout-foot shrink-0 space-y-3 border-t border-primary/20 p-4">
@@ -1897,12 +1917,12 @@ const OrderPage = () => {
                   <button
                     type="button"
                     onClick={requestCheckout}
-                    disabled={isSubmitting && !shortOnCredits}
-                    aria-busy={isSubmitting && !shortOnCredits}
-                    aria-label={shortOnCredits ? t('topUpCreditsAria') : t('payCreditsAria')}
+                    disabled={isSubmitting && !needsTopUp}
+                    aria-busy={isSubmitting && !needsTopUp}
+                    aria-label={needsTopUp ? t('topUpCreditsAria') : t('payCreditsAria')}
                     className="btn-primary order-pay-btn flex min-h-[52px] w-full items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {isSubmitting && !shortOnCredits ? (
+                    {isSubmitting && !needsTopUp ? (
                       <>
                         <Loader2 className="h-5 w-5 animate-spin" />
                         <span className="text-sm font-bold uppercase tracking-wide">{t('payCreditsLoading')}</span>
@@ -1911,7 +1931,7 @@ const OrderPage = () => {
                       <>
                         <Coins className="h-4 w-4" />
                         <span className="text-sm font-bold uppercase tracking-wide">
-                          {shortOnCredits ? t('topUpCredits') : t('pay')}
+                          {needsTopUp ? t('topUpCredits') : t('pay')}
                         </span>
                       </>
                     )}
@@ -1953,24 +1973,54 @@ const OrderPage = () => {
           </div>
         </div>
       )}
+      {serviceNotice && (
+        <div
+          className="fixed inset-0 z-[95] flex items-center justify-center overflow-hidden bg-black/55 p-4"
+          onClick={() => setServiceNotice(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="service-required-title"
+            className="order-confirm-gate w-full max-w-md rounded-xl p-5"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 id="service-required-title" className="text-base font-bold leading-snug text-[#f6d98a]">
+              {t('serviceRequiredTitle')}
+            </h2>
+            <p className="mt-3 text-sm leading-relaxed text-[#f8f1dc]">{t('serviceRequiredBody')}</p>
+            <button
+              type="button"
+              onClick={() => setServiceNotice(false)}
+              className="order-confirm-gate-ack mt-5 min-h-[44px] w-full rounded-lg text-sm font-semibold"
+            >
+              {t('serviceRequiredAck')}
+            </button>
+          </div>
+        </div>
+      )}
       {operationClosed && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/75 p-4">
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/55 p-4"
+          onClick={() => setOperationClosed(false)}
+        >
           <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="operation-closed-title"
-            className="w-full max-w-md rounded-xl border-2 border-orange-500 bg-[#070d16] p-6 shadow-[0_0_32px_rgba(249,115,22,0.45)]"
+            className="order-confirm-gate w-full max-w-md rounded-xl p-5"
+            onClick={(event) => event.stopPropagation()}
           >
-            <h2 id="operation-closed-title" className="text-xl font-bold text-orange-200">
+            <h2 id="operation-closed-title" className="text-base font-bold leading-snug text-[#f6d98a]">
               {t('operationClosedTitle')}
             </h2>
-            <p className="mt-3 text-sm leading-relaxed text-foreground">
+            <p className="mt-3 text-sm leading-relaxed text-[#f8f1dc]">
               {t('operationClosedBody')}
             </p>
             <button
               type="button"
               onClick={() => setOperationClosed(false)}
-              className="btn-primary mt-5 min-h-[44px] w-full text-sm font-bold"
+              className="order-confirm-gate-ack mt-5 min-h-[44px] w-full rounded-lg text-sm font-semibold"
             >
               {t('operationClosedAck')}
             </button>
