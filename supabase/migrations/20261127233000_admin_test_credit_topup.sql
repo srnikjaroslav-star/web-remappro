@@ -26,6 +26,20 @@ alter table public.credit_topups
 alter table public.credit_topups
   add constraint credit_topups_amount_nonnegative check (amount >= 0 and amount <= 100000);
 
+alter table public.credit_topups
+  add column if not exists credits numeric(10, 2),
+  add column if not exists company text,
+  add column if not exists account_name text,
+  add column if not exists account_email text,
+  add column if not exists terms_consent boolean not null default false,
+  add column if not exists declaration_consent boolean not null default false,
+  add column if not exists consented_at timestamptz,
+  add column if not exists topup_ref text,
+  add column if not exists consent_summary text,
+  add column if not exists invoice_number text,
+  add column if not exists invoice_sent_at timestamptz,
+  add column if not exists notified_at timestamptz;
+
 create or replace function public.apply_admin_test_credit_topup(
   p_user_id uuid,
   p_credits numeric,
@@ -128,12 +142,14 @@ begin
       updated_at = now()
   where user_id = p_user_id;
 
-  insert into public.credit_transactions (user_id, amount, note, entry_type)
+  -- credit_transactions on the live database is
+  -- id, user_id, amount, order_id, created_at, note.
+  -- entry_type is not part of that table.
+  insert into public.credit_transactions (user_id, amount, note)
   values (
     p_user_id,
     credits_to_add,
-    'Dobitie balíka ' || trim(to_char(credits_to_add, 'FM999999')) || ' kreditov',
-    'topup'
+    'Dobitie balíka ' || trim(to_char(credits_to_add, 'FM999999')) || ' kreditov'
   );
 
   insert into public.credit_topups (
@@ -181,3 +197,5 @@ revoke all on function public.apply_admin_test_credit_topup(uuid, numeric, text,
   from public, anon, authenticated;
 grant execute on function public.apply_admin_test_credit_topup(uuid, numeric, text, text, text, text, boolean, boolean, timestamptz)
   to service_role;
+
+notify pgrst, 'reload schema';
