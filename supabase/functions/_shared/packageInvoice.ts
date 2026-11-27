@@ -1,4 +1,4 @@
-import { jsPDF } from "https://esm.sh/jspdf@2.5.1";
+import { jsPDF } from "npm:jspdf@2.5.1";
 import { LOGO_BASE64 } from "./invoiceLogo.ts";
 import { ROBOTO_BOLD } from "./fonts/bold.ts";
 import { ROBOTO_REGULAR } from "./fonts/regular.ts";
@@ -55,7 +55,7 @@ const formatDate = (date: Date) => {
 const filled = (value?: string) => value?.trim() || "";
 
 export const renderPackageInvoice = (input: PackageInvoiceInput) => {
-  const doc = new jsPDF({ unit: "mm", format: "a4", compress: true });
+  const doc = new jsPDF({ unit: "mm", format: "a4", compress: false });
   doc.addFileToVFS("Roboto-Regular.ttf", ROBOTO_REGULAR);
   doc.addFileToVFS("Roboto-Bold.ttf", ROBOTO_BOLD);
   doc.addFont("Roboto-Regular.ttf", "Roboto", "normal");

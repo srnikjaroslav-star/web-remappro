@@ -1,7 +1,5 @@
-import Stripe from "https://esm.sh/stripe@17.7.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { creditPackageByCredits, packageItemName, PACKAGE_ITEM_DESCRIPTION } from "../_shared/creditPackages.ts";
-import { fulfillCreditPackage } from "../_shared/creditFulfillment.ts";
 import { isDatabaseAdmin } from "../_shared/operatingStatus.ts";
 
 const corsHeaders = {
@@ -25,10 +23,9 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-    if (!stripeKey || !supabaseUrl || !anonKey) {
+    if (!supabaseUrl || !anonKey) {
       return json({ ok: false, code: "SERVER" }, 500);
     }
 
@@ -101,6 +98,7 @@ Deno.serve(async (req) => {
       }
       const rowData = applied.data as { balance?: number | string | null; credited?: boolean } | null;
       const balance = Number(rowData?.balance);
+      const { fulfillCreditPackage } = await import("../_shared/creditFulfillment.ts");
       const delivered = await fulfillCreditPackage(admin, sessionId);
       if (!delivered.ok) {
         return json({
@@ -120,9 +118,14 @@ Deno.serve(async (req) => {
       });
     }
 
+    const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
     const origin = req.headers.get("origin") || "";
-    if (!origin) return json({ ok: false, code: "SERVER" }, 500);
+    if (!stripeKey || !origin) return json({ ok: false, code: "SERVER" }, 500);
 
+    // npm: uses Deno's current Node compatibility. The esm.sh ?target=deno build
+    // imports deno.land/std@0.177.1/node/process.ts, whose nextTick queue calls
+    // Deno.core.runMicrotasks() and crashes the Edge isolate.
+    const { default: Stripe } = await import("npm:stripe@17.7.0");
     const stripe = new Stripe(stripeKey);
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
