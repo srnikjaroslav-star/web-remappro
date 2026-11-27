@@ -11,7 +11,14 @@ export const sendClientEmail = async (input: {
 }) => {
   const key = Deno.env.get("RESEND_API_KEY") ?? "";
   const recipient = input.to.trim();
-  if (!key || !recipient) return false;
+  if (!key) {
+    console.error("[mail] RESEND_API_KEY is not set");
+    return false;
+  }
+  if (!recipient) {
+    console.error("[mail] recipient is empty");
+    return false;
+  }
   const sender = Deno.env.get("RESEND_SENDER_EMAIL") || "REMAPPRO <info@remappro.eu>";
   try {
     const response = await fetch("https://api.resend.com/emails", {

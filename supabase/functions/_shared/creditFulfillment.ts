@@ -146,19 +146,22 @@ const notifyAdminOnce = async (
 export const fulfillCreditPackage = async (
   admin: SupabaseClient,
   sessionId: string,
-): Promise<{ ok: boolean }> => {
+): Promise<{ ok: boolean; invoiceSent: boolean }> => {
   const id = sessionId.trim();
-  if (!id.startsWith("cs_")) return { ok: false };
+  if (!id.startsWith("cs_")) return { ok: false, invoiceSent: false };
 
   const { data, error } = await admin.rpc("claim_credit_package_invoice", {
     p_stripe_session_id: id,
   });
   if (error) {
     console.error("[credit-invoice]", error.message);
-    return { ok: false };
+    return { ok: false, invoiceSent: false };
   }
   const claim = (data ?? {}) as Claim;
-  if (!claim.claimed) return { ok: claim.reason === "sent" };
+  if (!claim.claimed) {
+    const alreadySent = claim.reason === "sent";
+    return { ok: alreadySent, invoiceSent: alreadySent };
+  }
 
   const userId = text(claim.user_id);
   const buyer = await loadBuyer(admin, userId);
@@ -173,7 +176,7 @@ export const fulfillCreditPackage = async (
     ? (buyer.name ? `Hello ${safeName},` : "Hello,")
     : (buyer.name ? `Dobrý deň ${safeName},` : "Dobrý deň,");
 
-  let sent = false;
+  let attachment: { filename: string; content: string } | undefined;
   try {
     const pdf = renderPackageInvoice({
       invoiceNumber,
@@ -192,35 +195,35 @@ export const fulfillCreditPackage = async (
       buyerDic: buyer.dic,
       consentSummary: text(claim.consent_summary),
     });
-    const body = language === "EN"
-      ? `<p>${greeting}</p>
-         <p><strong>${escapeHtml(String(credits))}</strong> credits were added to your REMAPPRO account. The package was paid in advance: <strong>${escapeHtml(euros(price, language))}</strong>.</p>
-         <p>Invoice <strong>${escapeHtml(invoiceNumber)}</strong> is attached. Top-up ID: <strong>${escapeHtml(topupRef)}</strong>.</p>
-         <p>The supplier is not a VAT payer.</p>`
-      : `<p>${greeting}</p>
-         <p>Na váš účet v portáli REMAPPRO bolo pripísaných <strong>${escapeHtml(String(credits))}</strong> kreditov. Balík bol uhradený vopred sumou <strong>${escapeHtml(euros(price, language))}</strong>.</p>
-         <p>V prílohe je faktúra <strong>${escapeHtml(invoiceNumber)}</strong>. ID dobitia: <strong>${escapeHtml(topupRef)}</strong>.</p>
-         <p>Dodávateľ nie je platiteľom DPH.</p>`;
-    sent = await sendClientEmail({
-      to: recipient,
-      subject: language === "EN"
-        ? `Credit top-up and invoice ${invoiceNumber}`
-        : `Dobitie kreditov a faktúra ${invoiceNumber}`,
-      html: clientMailShell(language === "EN" ? "Credits have been added" : "Kredity boli pripísané", body, language),
-      attachments: pdf.content ? [{ filename: pdf.filename, content: pdf.content }] : undefined,
-    });
+    if (pdf.content) attachment = { filename: pdf.filename, content: pdf.content };
   } catch (pdfError) {
     console.error("[credit-invoice] pdf", pdfError);
-    sent = false;
   }
+
+  const body = language === "EN"
+    ? `<p>${greeting}</p>
+       <p><strong>${escapeHtml(String(credits))}</strong> credits were added to your REMAPPRO account. The package was paid in advance: <strong>${escapeHtml(euros(price, language))}</strong>.</p>
+       <p>${attachment ? `Invoice <strong>${escapeHtml(invoiceNumber)}</strong> is attached.` : `Invoice number: <strong>${escapeHtml(invoiceNumber)}</strong>.`} Top-up ID: <strong>${escapeHtml(topupRef)}</strong>.</p>
+       <p>The supplier is not a VAT payer.</p>`
+    : `<p>${greeting}</p>
+       <p>Na váš účet v portáli REMAPPRO bolo pripísaných <strong>${escapeHtml(String(credits))}</strong> kreditov. Balík bol uhradený vopred sumou <strong>${escapeHtml(euros(price, language))}</strong>.</p>
+       <p>${attachment ? `V prílohe je faktúra <strong>${escapeHtml(invoiceNumber)}</strong>.` : `Číslo faktúry: <strong>${escapeHtml(invoiceNumber)}</strong>.`} ID dobitia: <strong>${escapeHtml(topupRef)}</strong>.</p>
+       <p>Dodávateľ nie je platiteľom DPH.</p>`;
+  const sent = await sendClientEmail({
+    to: recipient,
+    subject: language === "EN"
+      ? `Credit top-up and invoice ${invoiceNumber}`
+      : `Dobitie kreditov a faktúra ${invoiceNumber}`,
+    html: clientMailShell(language === "EN" ? "Credits have been added" : "Kredity boli pripísané", body, language),
+    attachments: attachment ? [attachment] : undefined,
+  });
 
   await notifyAdminOnce(admin, id, claim, buyer, recipient);
 
   if (!sent) {
-    await admin.rpc("release_credit_package_invoice", { p_stripe_session_id: id });
-    return { ok: false };
+    console.error("[credit-invoice] e-mail sa neodoslal, kredity aj číslo faktúry ostávajú", id);
   }
-  return { ok: true };
+  return { ok: true, invoiceSent: sent };
 };
 
 export const sendCreditOrderEmail = async (

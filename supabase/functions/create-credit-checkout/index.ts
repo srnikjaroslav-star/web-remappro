@@ -114,7 +114,7 @@ Deno.serve(async (req) => {
         test: true,
         balance: Number.isFinite(balance) ? balance : 0,
         credited: rowData?.credited === true,
-        invoiceSent: true,
+        invoiceSent: delivered.invoiceSent,
       });
     }
 

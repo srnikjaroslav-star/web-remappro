@@ -60,7 +60,7 @@ Deno.serve(async (req) => {
       balance: applied.balance,
       credited: applied.credited,
       amount: applied.amount,
-      invoiceSent: delivered.ok,
+      invoiceSent: delivered.invoiceSent,
     });
   } catch (error) {
     console.error("[confirm-credit-topup]", error);

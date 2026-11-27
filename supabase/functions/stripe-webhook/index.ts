@@ -241,10 +241,13 @@ serve(async (req) => {
         if (applied.ok) {
           const delivered = await fulfillCreditPackage(supabase, String(session.id ?? ""));
           if (!delivered.ok) {
-            return new Response(JSON.stringify({ error: "Credit invoice was not sent" }), {
+            return new Response(JSON.stringify({ error: "Credit invoice was not issued" }), {
               status: 500,
               headers: { ...corsHeaders, "Content-Type": "application/json" },
             });
+          }
+          if (!delivered.invoiceSent) {
+            console.error("[stripe-webhook] credit invoice email was not sent", session.id);
           }
         }
         return new Response(JSON.stringify({
