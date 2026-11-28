@@ -16,7 +16,6 @@ const draftFrom = (settings: InvoiceSettings) => ({
   supplierIco: settings.supplierIco,
   supplierDic: settings.supplierDic,
   supplierRegister: settings.supplierRegister,
-  itemName: settings.itemName,
   iban: settings.iban,
   swift: settings.swift,
 });
@@ -25,12 +24,18 @@ type Draft = ReturnType<typeof draftFrom>;
 
 const InvoiceSettingsPanel = () => {
   const [draft, setDraft] = useState(() => draftFrom(peekInvoiceSettings()));
+  const [keptItem, setKeptItem] = useState(() => {
+    const settings = peekInvoiceSettings();
+    return { itemName: settings.itemName, itemDescription: settings.itemDescription };
+  });
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     let active = true;
     loadInvoiceSettings().then((settings) => {
-      if (active) setDraft(draftFrom(settings));
+      if (!active) return;
+      setDraft(draftFrom(settings));
+      setKeptItem({ itemName: settings.itemName, itemDescription: settings.itemDescription });
     }).catch(() => undefined);
     return () => {
       active = false;
@@ -48,7 +53,6 @@ const InvoiceSettingsPanel = () => {
       draft.supplierIco,
       draft.supplierDic,
       draft.supplierRegister,
-      draft.itemName,
       draft.iban,
       draft.swift,
     ];
@@ -63,8 +67,8 @@ const InvoiceSettingsPanel = () => {
       supplierDic: draft.supplierDic.trim(),
       supplierRegister: draft.supplierRegister.trim(),
       vatNote: 'Dodávateľ nie je platiteľom DPH.',
-      itemName: draft.itemName.trim(),
-      itemDescription: draft.itemName.trim(),
+      itemName: keptItem.itemName,
+      itemDescription: keptItem.itemDescription,
       iban: draft.iban.trim(),
       swift: draft.swift.trim(),
       dueDays: 0,
@@ -125,7 +129,6 @@ const InvoiceSettingsPanel = () => {
       <section className="rounded-lg border border-primary/25 bg-[#070d16]/70 p-1.5 shadow-[inset_0_0_22px_rgba(0,242,255,0.06)]">
         <h3 className="mb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-primary">Fakturačné a bankové údaje</h3>
         <div className="grid gap-1">
-          {field('itemName', 'Predvolený názov položky', 300)}
           {field('iban', 'IBAN', 42)}
           {field('swift', 'SWIFT / BIC', 11)}
         </div>

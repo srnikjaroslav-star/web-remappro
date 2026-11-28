@@ -37,6 +37,7 @@ import ClientCredits from '@/components/ClientCredits';
 import AdminServices from '@/components/AdminServices';
 import OpeningHours from '@/components/OpeningHours';
 import InvoiceSettingsPanel from '@/components/InvoiceSettings';
+import CreditPackageInvoices from '@/components/CreditPackageInvoices';
 
 type RevenueOrder = { status?: string; total_price?: number | string | null; created_at?: string | null };
 type AdminSnapshot = { orders: Order[]; stats: { grossRevenue: number; todayRevenue: number } | null };
@@ -1749,7 +1750,12 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
           {visited.includes('hours') || section === 'hours' ? <OpeningHours /> : null}
         </div>
         <div hidden={section !== 'invoices'}>
-          {visited.includes('invoices') || section === 'invoices' ? <InvoiceSettingsPanel /> : null}
+          {section === 'invoices' ? (
+            <>
+              <InvoiceSettingsPanel />
+              <CreditPackageInvoices scope="admin" />
+            </>
+          ) : null}
         </div>
         <div hidden={section !== 'orders'}>
         <>

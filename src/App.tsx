@@ -53,6 +53,7 @@ const AppShell = () => {
           <Route path="/order" element={<OrderPage />} />
           <Route path="/objednavky" element={<OrderPage />} />
           <Route path="/profil" element={<OrderPage />} />
+          <Route path="/faktury" element={<OrderPage />} />
 
           {/* TRACKING: Toto je kľúčová cesta pre tvoj link z emailu */}
           <Route path="/track" element={<TrackPage />} />

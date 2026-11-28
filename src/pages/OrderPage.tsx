@@ -6,6 +6,7 @@ import ClientProfile from '@/components/ClientProfile';
 import CreditTopUpModal from '@/components/CreditTopUpModal';
 import NavLogo from '@/components/NavLogo';
 import MyOrders from '@/components/MyOrders';
+import CreditPackageInvoices from '@/components/CreditPackageInvoices';
 import ConnectionDot from '@/components/ConnectionDot';
 import SystemStatus, { fetchSystemSettings, isSystemOnline, useSystemOnline } from '@/components/SystemStatus';
 import { useLanguage } from '@/i18n/LanguageContext';
@@ -48,6 +49,7 @@ import {
   Eye,
   EyeOff,
   File,
+  FileText,
   Fuel,
   Gauge,
   List,
@@ -138,13 +140,13 @@ const headerControl =
 const headerControlActive =
   'inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border border-primary bg-primary/20 px-3 text-sm font-medium text-primary shadow-[0_0_18px_rgba(0,242,255,0.5)] transition-colors';
 
-type PortalView = 'new' | 'orders' | 'profile';
+type PortalView = 'new' | 'orders' | 'profile' | 'invoices';
 
 const portalPath = (view: PortalView) =>
-  view === 'orders' ? '/objednavky' : view === 'profile' ? '/profil' : '/';
+  view === 'orders' ? '/objednavky' : view === 'profile' ? '/profil' : view === 'invoices' ? '/faktury' : '/';
 
 const portalFromPath = (pathname: string): PortalView =>
-  pathname === '/objednavky' ? 'orders' : pathname === '/profil' ? 'profile' : 'new';
+  pathname === '/objednavky' ? 'orders' : pathname === '/profil' ? 'profile' : pathname === '/faktury' ? 'invoices' : 'new';
 
 const orderRefFromSearch = (search: string) => {
   const query = search.includes('?') ? search.slice(search.indexOf('?')) : '';
@@ -1378,6 +1380,17 @@ const OrderPage = () => {
                   {t('myOrders')}
                 </button>
               )}
+              {authUser && (
+                <button
+                  type="button"
+                  onClick={() => setPortalView('invoices')}
+                  aria-pressed={portalView === 'invoices'}
+                  className={portalView === 'invoices' ? headerControlActive : headerControl}
+                >
+                  <FileText className="h-4 w-4" />
+                  {t('myInvoices')}
+                </button>
+              )}
             </div>
           </div>
         </header>
@@ -1416,6 +1429,11 @@ const OrderPage = () => {
                   </button>
                 </div>
               ) : null}
+            </div>
+          ) : portalView === 'invoices' && authUser ? (
+            <div className="space-y-3">
+              <h1 className="text-2xl font-bold tracking-tight md:text-3xl">{t('myInvoices')}</h1>
+              <CreditPackageInvoices scope="client" />
             </div>
           ) : portalView === 'profile' && (authUser || !authReady) ? (
             authUser ? (

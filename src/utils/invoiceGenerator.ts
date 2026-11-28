@@ -47,6 +47,7 @@ export type InvoicePdfInput = {
   itemName?: string;
   itemDescription?: string;
   topupId?: string;
+  noteExtra?: string;
 };
 
 export type CreditNotePdfInput = {
@@ -69,6 +70,7 @@ type AccountingPdfInput = {
   itemName?: string;
   itemDescription?: string;
   topupId?: string;
+  noteExtra?: string;
 };
 
 const formatConsentWhen = (value?: string | null) => {
@@ -438,6 +440,7 @@ const renderAccountingPdf = async (input: AccountingPdfInput) => {
     SUPPLIER_VAT_NOTE,
     input.topupId ? `ID dobitia: ${input.topupId}` : '',
     consentNoteText(input.consent),
+    input.noteExtra?.trim() || '',
   ].filter(Boolean);
   const noteBody = noteParts.join(' ');
   const noteWidth = Math.max(48, right - summaryWidth - margin - 5);
@@ -488,6 +491,7 @@ export const generateInvoicePdf = (input: InvoicePdfInput) => renderAccountingPd
   itemName: input.itemName,
   itemDescription: input.itemDescription,
   topupId: input.topupId,
+  noteExtra: input.noteExtra,
 });
 
 export const generateCreditNotePdf = (input: CreditNotePdfInput) => {
