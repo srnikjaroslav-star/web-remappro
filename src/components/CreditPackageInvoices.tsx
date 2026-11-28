@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ExternalLink, X } from 'lucide-react';
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
@@ -128,6 +128,8 @@ const CreditPackageInvoices = ({ scope }: CreditPackageInvoicesProps) => {
   const [busyId, setBusyId] = useState('');
   const [preview, setPreview] = useState<Preview | null>(null);
   const [selectedKey, setSelectedKey] = useState('');
+  const [scrollbarWidth, setScrollbarWidth] = useState(0);
+  const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let active = true;
@@ -192,13 +194,30 @@ const CreditPackageInvoices = ({ scope }: CreditPackageInvoicesProps) => {
     }
   };
 
-  const stickyTop = scope === 'client' ? 'top-[63px]' : 'top-[4.25rem]';
-  const headCell = `sticky ${stickyTop} z-30 border-y border-cyan-300/80 bg-[#041820] px-2 py-2 font-bold shadow-[inset_0_1px_0_rgba(0,242,255,0.95),inset_0_-1px_0_rgba(0,242,255,0.7),0_10px_18px_rgba(0,0,0,0.55)]`;
+  const columns = scope === 'admin'
+    ? 'minmax(0,1.25fr) minmax(0,1.05fr) minmax(0,1.15fr) minmax(0,0.7fr) minmax(0,0.7fr) 15.5rem'
+    : 'minmax(0,1.45fr) minmax(0,1.15fr) minmax(0,0.75fr) minmax(0,0.75fr) 15.5rem';
+  const gridStyle = { gridTemplateColumns: columns };
+  const headCell = 'flex min-w-0 items-center border-y-2 border-[#22d3ee] border-r border-[#155e75] bg-[#0b1929] px-2 py-3 text-sm font-bold uppercase tracking-wide text-[#fef08a]';
+  const bodyCell = 'flex min-w-0 items-center border-b border-r border-[#155e75]/80 px-2 py-[3px] text-sm';
+
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    if (!list) {
+      setScrollbarWidth(0);
+      return;
+    }
+    const measure = () => setScrollbarWidth(list.offsetWidth - list.clientWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(list);
+    return () => observer.disconnect();
+  }, [loading, visible.length, scope]);
 
   return (
-    <section className="rounded-xl border border-primary/45 bg-[#050910] p-3 shadow-[0_0_28px_rgba(0,242,255,0.14)]">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className={`text-sm font-bold uppercase tracking-[0.12em] ${scope === 'client' ? 'border-b border-primary/80 pb-1 text-primary' : 'text-slate-100'}`}>{t('packageInvoicesTitle')}</h2>
+    <section className={`rounded-xl border border-primary/45 bg-[#050910] p-3 shadow-[0_0_28px_rgba(0,242,255,0.14)] ${scope === 'client' ? 'flex min-h-0 flex-1 flex-col' : ''}`}>
+      <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <h2 className={`text-sm font-bold uppercase tracking-[0.12em] ${scope === 'client' ? 'border-b border-[#22d3ee] pb-1 text-[#22d3ee]' : 'text-slate-100'}`}>{t('packageInvoicesTitle')}</h2>
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
@@ -211,70 +230,76 @@ const CreditPackageInvoices = ({ scope }: CreditPackageInvoicesProps) => {
       ) : visible.length === 0 ? (
         <p className="mt-3 text-sm text-slate-400">{t('packageInvoicesEmpty')}</p>
       ) : (
-        <div className="mt-3 overflow-x-auto md:overflow-x-visible">
-          <table className="w-full min-w-[640px] border-separate border-spacing-0 text-left text-sm md:min-w-0">
-            <thead>
-              <tr className="text-[11px] uppercase tracking-wide text-primary">
-                <th className={`${headCell} text-left`}>{t('packageInvoiceNumber')}</th>
-                <th className={`${headCell} text-left`}>{t('packageInvoiceDate')}</th>
-                {scope === 'admin' ? <th className={`${headCell} text-left`}>{t('packageInvoiceClient')}</th> : null}
-                <th className={`${headCell} text-left`}>{t('packageInvoiceCredits')}</th>
-                <th className={`${headCell} text-left`}>{t('packageInvoiceAmount')}</th>
-                <th className={`${headCell} text-right`}>{t('packageInvoiceActions')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visible.map((row) => {
-                const key = row.id || row.invoiceNumber;
-                const selected = selectedKey === key;
-                const tone = selected
-                  ? 'border-y border-cyan-300/75 bg-[#072636] shadow-[inset_0_0_18px_rgba(0,242,255,0.22)]'
-                  : 'border-b border-white/5 group-hover:bg-primary/10';
-                return (
-                  <tr
-                    key={key}
-                    onClick={() => setSelectedKey(key)}
-                    aria-selected={selected}
-                    className="group cursor-pointer text-slate-100"
-                  >
-                    <td className={`px-2 py-2.5 font-mono font-bold text-cyan-200 ${tone} ${selected ? 'border-l-[3px] border-l-cyan-300' : ''}`}>{row.invoiceNumber}</td>
-                    <td className={`whitespace-nowrap px-2 py-2.5 text-slate-300 ${tone}`}>{when(row.issuedAt, language)}</td>
-                    {scope === 'admin' ? (
-                      <td className={`max-w-[14rem] truncate px-2 py-2.5 ${tone}`} title={row.accountEmail}>
-                        {row.company || row.accountName || row.accountEmail || '—'}
-                      </td>
-                    ) : null}
-                    <td className={`px-2 py-2.5 ${tone}`}>
-                      <span className="inline-flex rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-bold text-emerald-400">
-                        {creditsBadge(row.credits)}
-                      </span>
-                    </td>
-                    <td className={`whitespace-nowrap px-2 py-2.5 tabular-nums ${tone}`}>{money(row.amount, language)}</td>
-                    <td className={`px-2 py-2.5 ${tone} ${selected ? 'border-r border-r-cyan-300/80' : ''}`}>
-                      <div className="flex justify-end gap-2">
-                        <button
-                          type="button"
-                          disabled={busyId === row.id}
-                          onClick={() => void openFile(row, 'view')}
-                          className="inline-flex h-8 items-center rounded-md border border-primary/50 bg-sky-600 px-3 text-xs font-bold text-white shadow-[0_0_12px_rgba(0,180,255,0.28)] hover:bg-sky-500 disabled:opacity-50"
-                        >
-                          {t('packageInvoiceView')}
-                        </button>
-                        <button
-                          type="button"
-                          disabled={busyId === row.id}
-                          onClick={() => void openFile(row, 'download')}
-                          className="inline-flex h-8 items-center rounded-md bg-cyan-400 px-3 text-xs font-bold text-slate-950 shadow-[0_0_14px_rgba(0,242,255,0.35)] hover:bg-cyan-300 disabled:opacity-50"
-                        >
-                          {t('packageInvoiceDownload')}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div className={`mt-3 flex min-h-0 flex-col ${scope === 'client' ? 'flex-1' : ''}`} role="table">
+          <div className="shrink-0" style={{ paddingRight: scrollbarWidth }}>
+            <div className="grid" style={gridStyle} role="row">
+              <div className={headCell} role="columnheader">{t('packageInvoiceNumber')}</div>
+              <div className={headCell} role="columnheader">{t('packageInvoiceDate')}</div>
+              {scope === 'admin' ? <div className={headCell} role="columnheader">{t('packageInvoiceClient')}</div> : null}
+              <div className={headCell} role="columnheader">{t('packageInvoiceCredits')}</div>
+              <div className={headCell} role="columnheader">{t('packageInvoiceAmount')}</div>
+              <div className={`${headCell} justify-center text-center`} role="columnheader">{t('packageInvoiceActions')}</div>
+            </div>
+          </div>
+          <div
+            ref={listRef}
+            className={`invoice-doc-scroll min-h-0 ${scope === 'client' ? 'flex-1' : 'max-h-[min(70vh,36rem)]'}`}
+          >
+            {visible.map((row) => {
+              const key = row.id || row.invoiceNumber;
+              const selected = selectedKey === key;
+              const tone = selected
+                ? 'bg-[#072636] shadow-[inset_0_0_16px_rgba(0,242,255,0.2)]'
+                : 'group-hover:bg-primary/10';
+              const lead = selected
+                ? 'bg-[#072636] shadow-[inset_3px_0_0_#22d3ee,inset_0_0_16px_rgba(0,242,255,0.2)]'
+                : 'group-hover:bg-primary/10';
+              return (
+                <div
+                  key={key}
+                  role="row"
+                  onClick={() => setSelectedKey(key)}
+                  aria-selected={selected}
+                  className="group grid cursor-pointer text-slate-100"
+                  style={gridStyle}
+                >
+                  <div className={`${bodyCell} font-mono font-bold text-cyan-200 ${lead}`} role="cell">{row.invoiceNumber}</div>
+                  <div className={`${bodyCell} whitespace-nowrap text-slate-300 ${tone}`} role="cell">{when(row.issuedAt, language)}</div>
+                  {scope === 'admin' ? (
+                    <div className={`${bodyCell} truncate ${tone}`} role="cell" title={row.accountEmail}>
+                      {row.company || row.accountName || row.accountEmail || '—'}
+                    </div>
+                  ) : null}
+                  <div className={`${bodyCell} ${tone}`} role="cell">
+                    <span className="inline-flex rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-bold text-emerald-400">
+                      {creditsBadge(row.credits)}
+                    </span>
+                  </div>
+                  <div className={`${bodyCell} whitespace-nowrap tabular-nums ${tone}`} role="cell">{money(row.amount, language)}</div>
+                  <div className={`${bodyCell} justify-center ${tone}`} role="cell">
+                    <div className="flex justify-center gap-2">
+                      <button
+                        type="button"
+                        disabled={busyId === row.id}
+                        onClick={() => void openFile(row, 'view')}
+                        className="inline-flex h-8 items-center rounded-md border border-primary/50 bg-sky-600 px-3 text-xs font-bold text-white shadow-[0_0_12px_rgba(0,180,255,0.28)] hover:bg-sky-500 disabled:opacity-50"
+                      >
+                        {t('packageInvoiceView')}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busyId === row.id}
+                        onClick={() => void openFile(row, 'download')}
+                        className="inline-flex h-8 items-center rounded-md bg-cyan-400 px-3 text-xs font-bold text-slate-950 shadow-[0_0_14px_rgba(0,242,255,0.35)] hover:bg-cyan-300 disabled:opacity-50"
+                      >
+                        {t('packageInvoiceDownload')}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
       {preview ? <PdfCanvasPreview preview={preview} onClose={() => setPreview(null)} /> : null}

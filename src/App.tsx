@@ -32,6 +32,7 @@ const AppShell = () => {
   const [recovery, setRecovery] = useState(isRecoveryLink);
   const { pathname } = useLocation();
   const showFooter = pathname !== "/login" && pathname !== "/track" && pathname !== "/sprava-29-vk";
+  const invoicesFit = pathname === "/faktury";
 
   if (recovery) {
     return (
@@ -45,8 +46,8 @@ const AppShell = () => {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-background">
-      <main className="flex w-full flex-grow flex-col">
+    <div className={`flex flex-col bg-background ${invoicesFit ? 'h-dvh overflow-hidden' : 'min-h-screen'}`}>
+      <main className={`flex w-full flex-col ${invoicesFit ? 'min-h-0 flex-1 overflow-hidden' : 'flex-grow'}`}>
         <Routes>
           {/* Koreň aplikácie je objednávkový formulár. */}
           <Route path="/" element={<OrderPage />} />

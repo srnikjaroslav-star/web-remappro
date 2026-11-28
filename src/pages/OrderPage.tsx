@@ -1234,9 +1234,10 @@ const OrderPage = () => {
   };
 
   const newOrderFit = !showOrders && portalView === 'new';
+  const invoicesFit = portalView === 'invoices' && Boolean(authUser);
 
   return (
-    <div className={`relative flex w-full min-w-0 flex-grow flex-col overflow-x-clip bg-background ${newOrderFit ? 'lg:h-[calc(100dvh-4.25rem)] lg:max-h-[calc(100dvh-4.25rem)] lg:overflow-hidden' : ''}`}>
+    <div className={`relative flex w-full min-w-0 flex-col overflow-x-clip bg-background ${invoicesFit ? 'h-full min-h-0 flex-1 overflow-hidden' : 'flex-grow'} ${newOrderFit ? 'lg:h-[calc(100dvh-4.25rem)] lg:max-h-[calc(100dvh-4.25rem)] lg:overflow-hidden' : ''}`}>
       <div className="order-hex-layer" aria-hidden="true">
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <pre className="w-1/2">{HEX_DUMP}</pre>
@@ -1244,7 +1245,7 @@ const OrderPage = () => {
         </div>
       </div>
 
-      <div className={`relative z-10 flex w-full flex-grow flex-col ${newOrderFit ? 'lg:min-h-0 lg:overflow-hidden' : ''}`}>
+      <div className={`relative z-10 flex w-full min-h-0 flex-col ${invoicesFit ? 'h-full flex-1 overflow-hidden' : 'flex-grow'} ${newOrderFit ? 'lg:min-h-0 lg:overflow-hidden' : ''}`}>
         <header className="sticky top-0 z-40 w-full border-b border-primary/25">
           <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-background/80 backdrop-blur-sm" />
           <div className="relative mx-auto flex w-full max-w-[1600px] flex-nowrap items-center gap-2 px-4 py-3 sm:gap-3 lg:px-8">
@@ -1395,7 +1396,7 @@ const OrderPage = () => {
           </div>
         </header>
 
-        <div className={`mx-auto w-full max-w-[1600px] flex-grow px-4 pb-6 pt-2 lg:px-8 ${newOrderFit ? 'lg:flex lg:min-h-0 lg:flex-col lg:overflow-hidden lg:pb-2' : ''}`}>
+        <div className={`mx-auto w-full max-w-[1600px] px-4 pt-2 lg:px-8 ${invoicesFit ? 'flex min-h-0 flex-1 flex-col overflow-hidden pb-2' : `flex-grow pb-6 ${newOrderFit ? 'lg:flex lg:min-h-0 lg:flex-col lg:overflow-hidden lg:pb-2' : ''}`}`}>
           {showOrders ? (
             <div className="space-y-3">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1431,7 +1432,7 @@ const OrderPage = () => {
               ) : null}
             </div>
           ) : portalView === 'invoices' && authUser ? (
-            <div className="w-full">
+            <div className="flex min-h-0 w-full flex-1 flex-col">
               <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <h1 className="text-2xl font-bold tracking-tight md:text-3xl">{t('myInvoices')}</h1>
                 <button

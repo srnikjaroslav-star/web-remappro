@@ -1832,3 +1832,23 @@
   text-shadow: none;
   outline: none;
 }
+
+.invoice-doc-scroll {
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: #22d3ee #06101b;
+}
+
+.invoice-doc-scroll::-webkit-scrollbar {
+  width: 10px;
+}
+
+.invoice-doc-scroll::-webkit-scrollbar-track {
+  background: #06101b;
+}
+
+.invoice-doc-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #22d3ee, #0284c7);
+  border-radius: 999px;
+}
