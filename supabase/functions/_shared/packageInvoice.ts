@@ -1,10 +1,9 @@
 import { jsPDF } from "npm:jspdf@2.5.1";
-import { LOGO_BASE64 } from "./invoiceLogo.ts";
+import { LOGO_BASE64, LOGO_NATURAL_HEIGHT, LOGO_NATURAL_WIDTH } from "./invoiceLogo.ts";
 import { ROBOTO_BOLD } from "./fonts/bold.ts";
 import { ROBOTO_REGULAR } from "./fonts/regular.ts";
 import {
   INVOICE_FOOTER,
-  INVOICE_SUBTITLE,
   PACKAGE_ITEM_DESCRIPTION,
   SUPPLIER_VAT_NOTE,
   packageItemName,
@@ -74,13 +73,10 @@ export const renderPackageInvoice = (input: PackageInvoiceInput) => {
     creator: "REMAPPRO B2B",
   });
 
-  const logoWidth = 48;
-  const logoHeight = logoWidth * (327 / 1024);
-  doc.addImage(LOGO_BASE64, "PNG", margin, 12, logoWidth, logoHeight);
-  doc.setFont("Roboto", "bold");
-  doc.setFontSize(7);
-  doc.setTextColor(...BLUE);
-  doc.text(INVOICE_SUBTITLE, margin, 12 + logoHeight + 4.2);
+  const logoTop = 12;
+  const logoHeight = 18;
+  const logoWidth = logoHeight * (LOGO_NATURAL_WIDTH / LOGO_NATURAL_HEIGHT);
+  doc.addImage(LOGO_BASE64, "JPEG", margin, logoTop, logoWidth, logoHeight);
 
   doc.setFont("Roboto", "bold");
   doc.setFontSize(8);
@@ -93,7 +89,7 @@ export const renderPackageInvoice = (input: PackageInvoiceInput) => {
   doc.setTextColor(...MUTED);
   doc.text(`Vystavené ${issuedLabel}`, right, 28.5, { align: "right" });
 
-  const ruleY = 12 + logoHeight + 7.5;
+  const ruleY = logoTop + logoHeight + 6;
   doc.setDrawColor(...BLUE);
   doc.setLineWidth(0.8);
   doc.line(margin, ruleY, right, ruleY);

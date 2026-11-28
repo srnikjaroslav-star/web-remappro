@@ -2,8 +2,8 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import regularFont from '../assets/fonts/Roboto-Regular.ttf';
 import boldFont from '../assets/fonts/Roboto-Bold.ttf';
-import { INVOICE_FOOTER, INVOICE_SUBTITLE, PACKAGE_ITEM_DESCRIPTION, SUPPLIER_VAT_NOTE } from '@/lib/creditPackages';
-import { LOGO_BASE64 } from '@/lib/invoiceLogo';
+import { INVOICE_FOOTER, PACKAGE_ITEM_DESCRIPTION, SUPPLIER_VAT_NOTE } from '@/lib/creditPackages';
+import { LOGO_BASE64, LOGO_NATURAL_HEIGHT, LOGO_NATURAL_WIDTH } from '@/lib/invoiceLogo';
 import { loadInvoiceSettings } from '@/lib/invoiceSettings';
 
 export type InvoiceBuyer = {
@@ -210,14 +210,10 @@ const renderAccountingPdf = async (input: AccountingPdfInput) => {
     creator: 'REMAPPRO B2B',
   });
 
-  const logoWidth = 42;
-  const logoHeight = logoWidth * (327 / 1024);
+  const logoHeight = 18;
+  const logoWidth = logoHeight * (LOGO_NATURAL_WIDTH / LOGO_NATURAL_HEIGHT);
   const headerTop = 14;
-  doc.addImage(LOGO_BASE64, 'PNG', margin, headerTop, logoWidth, logoHeight);
-  doc.setFont('Roboto', 'bold');
-  doc.setFontSize(6.4);
-  doc.setTextColor(...BLUE);
-  doc.text(INVOICE_SUBTITLE, margin, headerTop + logoHeight + 3.6);
+  doc.addImage(LOGO_BASE64, 'JPEG', margin, headerTop, logoWidth, logoHeight);
 
   const kind = input.originalInvoice ? 'DOBROPIS' : 'FAKTÚRA';
   doc.setFont('Roboto', 'bold');
@@ -237,7 +233,7 @@ const renderAccountingPdf = async (input: AccountingPdfInput) => {
   const mid = margin + contentWidth / 2;
   const pad = 4;
   const columnText = contentWidth / 2 - pad * 2;
-  const partiesY = headerTop + logoHeight + 11;
+  const partiesY = headerTop + logoHeight + 10;
   const lineStep = 4.5;
   const supplierLines = 8;
   const buyer = input.buyer;

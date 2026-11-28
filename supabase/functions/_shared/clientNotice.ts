@@ -1,6 +1,21 @@
+import { LOGO_BASE64 } from "./invoiceLogo.ts";
+
 export type MailAttachment = {
   filename: string;
   content: string;
+  content_id?: string;
+};
+
+const LOGO_CID = "remappro-logo";
+
+const logoAttachment = (): MailAttachment => {
+  const marker = "base64,";
+  const splitAt = LOGO_BASE64.indexOf(marker);
+  return {
+    filename: "remappro-logo.jpg",
+    content: splitAt >= 0 ? LOGO_BASE64.slice(splitAt + marker.length) : LOGO_BASE64,
+    content_id: LOGO_CID,
+  };
 };
 
 export const sendClientEmail = async (input: {
@@ -20,6 +35,10 @@ export const sendClientEmail = async (input: {
     return false;
   }
   const sender = Deno.env.get("RESEND_SENDER_EMAIL") || "REMAPPRO <info@remappro.eu>";
+  const attachments = [
+    ...(input.html.includes(`cid:${LOGO_CID}`) ? [logoAttachment()] : []),
+    ...(input.attachments ?? []),
+  ];
   try {
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -32,7 +51,7 @@ export const sendClientEmail = async (input: {
         to: [recipient],
         subject: input.subject,
         html: input.html,
-        ...(input.attachments?.length ? { attachments: input.attachments } : {}),
+        ...(attachments.length ? { attachments } : {}),
       }),
     });
     if (!response.ok) {
@@ -54,8 +73,7 @@ export const clientMailShell = (title: string, body: string, lang: "SK" | "EN") 
     <tr><td align="center">
       <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border:1px solid #dbe7f5;border-radius:12px;">
         <tr><td style="padding:28px 32px 18px;border-bottom:3px solid #0e63c4;">
-          <div style="font-size:22px;font-weight:800;letter-spacing:1px;">REMAP<span style="color:#0e63c4;">PRO</span></div>
-          <div style="margin-top:6px;color:#0e63c4;font-size:12px;font-weight:700;">Automotive Electronics &amp; Software Calibration</div>
+          <img src="cid:${LOGO_CID}" alt="REMAPPRO" width="280" height="70" style="width:280px;max-width:100%;height:auto;display:block;border:0;outline:none;text-decoration:none;">
           <div style="margin-top:14px;font-size:18px;font-weight:700;">${title}</div>
         </td></tr>
         <tr><td style="padding:24px 32px;font-size:15px;line-height:1.55;">${body}</td></tr>
