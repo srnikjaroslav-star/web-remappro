@@ -37,6 +37,7 @@ export interface Order {
   invoice_url: string | null;
   credit_note_number: string | null;
   credit_note_pdf: string | null;
+  language?: string | null;
   refund_reason: string | null;
   tax_point_date: string | null;
   refund_iban: string | null;

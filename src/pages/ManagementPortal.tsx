@@ -23,9 +23,10 @@ import {
 import { useOnlineClients } from '@/lib/clientPresence';
 import { fetchBlobWithProgress, lightFileRef, loadOrderFile, orderFileLocation, packOrderFile, unpackOrderFile, uploadOrderFile } from '@/lib/ecuFile';
 import { deleteOrderFilesAndRow, DuplicateDocumentNumber, downloadStoredInvoice, exportInvoiceArchive, nextCreditNoteNumber, previewInvoiceArchive, readCreditNoteMark, readInvoiceMark, rememberCreditNote, saveOrderCreditNote, withDocumentSeries, type InvoiceArchiveCounts } from '@/lib/orderInvoice';
-import { supabase } from '@/lib/supabase';
+import { supabase, supabaseAnonKey, supabaseUrl } from '@/lib/supabase';
+import { profileLanguage } from '@/lib/clientLanguage';
 import { statusAfterResultDelivery } from '@/lib/orderStatus';
-import { Order, ActivityLog, SUPABASE_ANON_KEY, SUPABASE_URL } from '@/integrations/supabase/client';
+import { Order, ActivityLog } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { SERVICES } from '@/data/services';
 import { loadBillingByUserId, loadClientBilling, orderDisplayName, refundOrderCredits, restoreClientCredits, settleClientCredits } from '@/lib/clientProfile';
@@ -230,6 +231,7 @@ const normalizeOrder = (row: StoredOrderRow, owner?: { name: string; email: stri
     credit_note_number: row.credit_note_number || packed.creditNumber || null,
     credit_note_pdf: row.credit_note_pdf || packed.creditUrl || null,
     created_at: row.created_at || new Date().toISOString(),
+    language: typeof row.language === 'string' ? row.language : null,
     legal_consent: row.legal_consent ?? true,
     legal_consent_at: row.legal_consent_at || null,
     legal_consent_known: typeof row.legal_consent === 'boolean',
@@ -647,12 +649,14 @@ const ManagementPortal = () => {
       if (!user) return;
       const listBase = 'id, user_id, created_at, vehicle_brand, vehicle_model, vehicle_year, engine, ecu, fuel, services, total_price, status, note';
       const listWithConsent = `${listBase}, legal_consent, legal_consent_at, emission_offroad_consent, emission_offroad_consent_at, consent_summary`;
+      const listWithLanguage = `${listWithConsent}, language`;
       const loadOrderList = (columns: string) => {
         let query = supabase.from('orders').select(columns).order('created_at', { ascending: false });
         if (user.id) query = query.eq('user_id', user.id);
         return query;
       };
-      const listedWithConsent = await loadOrderList(listWithConsent);
+      const listedWithLanguage = await loadOrderList(listWithLanguage);
+      const listedWithConsent = listedWithLanguage.error ? await loadOrderList(listWithConsent) : listedWithLanguage;
       const listed = listedWithConsent.error ? await loadOrderList(listBase) : listedWithConsent;
       const billing = await loadClientBilling(user);
       if (listed.error) throw listed.error;
@@ -779,6 +783,7 @@ const ManagementPortal = () => {
   const sendStatusEmail = async (order: Order, status: string, creditNoteNumber?: string) => {
     const orderId = order.order_number || order.id.slice(0, 8).toUpperCase();
     const clientUserId = clientIdOf(order);
+    const orderLanguage = profileLanguage(order.language);
     const session = await supabase.auth.getSession();
     const accessToken = session.data.session?.access_token;
     if (!accessToken) throw new Error('Not authorized');
@@ -792,18 +797,19 @@ const ManagementPortal = () => {
       year: order.year || 0,
       status,
       ...(clientUserId ? { clientUserId } : {}),
+      ...(orderLanguage ? { language: orderLanguage } : {}),
       ...(creditNoteNumber?.trim() ? { creditNoteNumber: creditNoteNumber.trim() } : {}),
     };
     const postStatusEmail = async () => {
       const controller = new AbortController();
       const timer = window.setTimeout(() => controller.abort(), 20000);
       try {
-        const response = await fetch(`${SUPABASE_URL}/functions/v1/status-email`, {
+        const response = await fetch(`${supabaseUrl}/functions/v1/status-email`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${accessToken}`,
-            apikey: SUPABASE_ANON_KEY,
+            apikey: supabaseAnonKey,
           },
           body: JSON.stringify(payload),
           signal: controller.signal,

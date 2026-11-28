@@ -188,20 +188,17 @@ Deno.serve(async (req) => {
         emission_offroad_consent_at: emissionOffroadConsent ? consentedAt : null,
         consent_summary: consentSummary,
       };
-      const saved = await admin.from("orders").update({
+      const languageSaved = await admin.from("orders").update({
         language,
         user_id: user.id,
-        ...consentPatch,
       }).eq("id", orderId);
-      if (saved.error) {
-        const withLanguage = await admin.from("orders").update({ language, user_id: user.id }).eq("id", orderId);
-        if (withLanguage.error) {
-          await admin.from("orders").update({ user_id: user.id }).eq("id", orderId);
-        }
-        const consentSaved = await admin.from("orders").update(consentPatch).eq("id", orderId);
-        if (consentSaved.error) {
-          console.error("[pay-with-credits] consent audit", consentSaved.error.message);
-        }
+      if (languageSaved.error) {
+        console.error("[pay-with-credits] language", languageSaved.error.message);
+        await admin.from("orders").update({ user_id: user.id }).eq("id", orderId);
+      }
+      const consentSaved = await admin.from("orders").update(consentPatch).eq("id", orderId);
+      if (consentSaved.error) {
+        console.error("[pay-with-credits] consent audit", consentSaved.error.message);
       }
     }
 

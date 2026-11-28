@@ -26,7 +26,7 @@ const readLanguage = async (
   supabase: ReturnType<typeof createClient>,
   userId: string,
 ): Promise<MailLanguage | null> => {
-  for (const column of ["user_id", "id"] as const) {
+  for (const column of ["id", "user_id"] as const) {
     const { data, error } = await supabase
       .from("client_profiles")
       .select("language")
@@ -131,38 +131,37 @@ const readLanguageByEmail = async (
   return normalizeMailLanguage((profile.data?.[0] as { language?: unknown } | undefined)?.language);
 };
 
+const readOrderColumn = async (
+  supabase: ReturnType<typeof createClient>,
+  orderId: string,
+  columns: string,
+) => {
+  const result = await supabase.from("orders").select(columns).eq("id", orderId).maybeSingle();
+  if (result.error) {
+    if (missingColumn(result.error)) return { row: null as Record<string, unknown> | null, missing: true };
+    throw result.error;
+  }
+  return { row: (result.data ?? null) as Record<string, unknown> | null, missing: false };
+};
+
 const readOrderCustomer = async (
   supabase: ReturnType<typeof createClient>,
   orderId: string,
 ) => {
   const empty = { email: "", name: "", language: "", userId: "" };
   if (!orderId) return empty;
-  const attempts = [
-    "customer_email, customer_name, language, user_id",
-    "customer_email, customer_name, user_id",
-    "user_id",
-  ];
-  for (const columns of attempts) {
-    const result = await supabase.from("orders").select(columns).eq("id", orderId).maybeSingle();
-    if (result.error) {
-      if (missingColumn(result.error)) continue;
-      return empty;
-    }
-    const row = result.data as {
-      customer_email?: string | null;
-      customer_name?: string | null;
-      language?: string | null;
-      user_id?: string | null;
-    } | null;
-    if (!row) return empty;
-    return {
-      email: String(row.customer_email || "").trim(),
-      name: String(row.customer_name || "").trim(),
-      language: String(row.language || "").trim(),
-      userId: String(row.user_id || "").trim(),
-    };
-  }
-  return empty;
+
+  const owner = await readOrderColumn(supabase, orderId, "user_id");
+  const contact = await readOrderColumn(supabase, orderId, "customer_email, customer_name");
+  const storedLanguage = await readOrderColumn(supabase, orderId, "language");
+  if (!owner.row && !contact.row && !storedLanguage.row) return empty;
+
+  return {
+    email: String(contact.row?.customer_email || "").trim(),
+    name: String(contact.row?.customer_name || "").trim(),
+    language: String(storedLanguage.row?.language || "").trim(),
+    userId: String(owner.row?.user_id || "").trim(),
+  };
 };
 
 export const clientPortalLanguage = async (
@@ -233,7 +232,7 @@ export const loadOrderMailContext = async (
     } catch (error) {
       console.warn("[status-email] Language lookup failed, using the order language:", error);
     }
-    const lang: MailLanguage = orderLanguage || clientLanguage || explicit || "SK";
+    const lang: MailLanguage = orderLanguage || explicit || clientLanguage || "SK";
     return { lang, recipient, copyTo, customerName };
   } catch (error) {
     console.warn("[status-email] Order lookup failed, using request data:", error);
