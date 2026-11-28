@@ -1,6 +1,3 @@
-const STATUS_URL = "https://kivqvwdfujsnuwfxjtcz.supabase.co";
-const STATUS_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtpdnF2d2RmdWpzbnV3ZnhqdGN6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcwMjQ1OTMsImV4cCI6MjA4MjYwMDU5M30.-iDvC0T6lozYv5d4xrHrHeS9PSGOfqwajZapMB7hqjQ";
-
 const ADMIN_EMAILS = ["srnik.jaroslav@gmail.com", "info@remappro.eu"];
 const DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 const WEEKDAYS: Record<string, (typeof DAY_KEYS)[number]> = {
@@ -79,9 +76,12 @@ export const isDatabaseAdmin = (user: { email?: string | null; app_metadata?: Re
 };
 
 export const operatingOpen = async (): Promise<boolean> => {
+  const url = String(Deno.env.get("SUPABASE_URL") ?? "").replace(/\/$/, "");
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_ANON_KEY") || "";
+  if (!url || !key) return isOperatingOpen(null);
   try {
-    const response = await fetch(`${STATUS_URL}/rest/v1/system_settings?select=value&key=eq.system_status`, {
-      headers: { apikey: STATUS_KEY, Authorization: `Bearer ${STATUS_KEY}` },
+    const response = await fetch(`${url}/rest/v1/system_settings?select=value&key=eq.system_status`, {
+      headers: { apikey: key, Authorization: `Bearer ${key}` },
       signal: AbortSignal.timeout(5000),
     });
     if (!response.ok) return isOperatingOpen(null);

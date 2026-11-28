@@ -4,12 +4,14 @@ import { toast } from 'sonner';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { CREDIT_PACKAGES, suggestedCreditPackage } from '@/lib/creditPackages';
 import { formatCreditUnits } from '@/lib/creditUnits';
-import { isDatabaseAdmin } from '@/lib/portalAdmin';
+import { fetchSystemSettings, isSystemOnline } from '@/components/SystemStatus';
+import { isDatabaseAdmin, isPortalAdmin } from '@/lib/portalAdmin';
 import { supabase } from '@/lib/supabase';
 
 type CreditTopUpModalProps = {
   onClose: () => void;
   onCredited?: (balance: number) => void;
+  onOffline?: () => void;
   orderTotal?: number;
   creditBalance?: number | null;
 };
@@ -17,7 +19,7 @@ type CreditTopUpModalProps = {
 const formatEuros = (value: number, language: 'sk' | 'en') =>
   `${value.toLocaleString(language === 'en' ? 'en-GB' : 'sk-SK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 
-const CreditTopUpModal = ({ onClose, onCredited, orderTotal, creditBalance }: CreditTopUpModalProps) => {
+const CreditTopUpModal = ({ onClose, onCredited, onOffline, orderTotal, creditBalance }: CreditTopUpModalProps) => {
   const { language, t } = useLanguage();
   const shortfall = typeof orderTotal === 'number' && typeof creditBalance === 'number'
     ? Math.max(0, Math.round((orderTotal - creditBalance) * 100) / 100)
@@ -57,6 +59,14 @@ const CreditTopUpModal = ({ onClose, onCredited, orderTotal, creditBalance }: Cr
       toast.error(t('topUpConsentRequired'));
       return;
     }
+    const { data: auth } = await supabase.auth.getUser();
+    if (!isPortalAdmin(auth.user)) {
+      const settings = await fetchSystemSettings();
+      if (settings && !isSystemOnline(settings.mode, settings.schedule)) {
+        onOffline?.();
+        return;
+      }
+    }
     setPaying(true);
     try {
       const invoked = await supabase.functions.invoke('create-credit-checkout', {
@@ -74,6 +84,11 @@ const CreditTopUpModal = ({ onClose, onCredited, orderTotal, creditBalance }: Cr
         } catch {
           data = null;
         }
+      }
+      if (data?.code === 'OFFLINE') {
+        onOffline?.();
+        setPaying(false);
+        return;
       }
       if (data?.code === 'NOT_AUTHENTICATED') {
         toast.error(t('creditAuthRequired'));

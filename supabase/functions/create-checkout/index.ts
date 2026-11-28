@@ -1,4 +1,6 @@
 import Stripe from "https://esm.sh/stripe@17.7.0?target=deno";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { isFunctionAdmin, operatingOpen } from "../_shared/operatingStatus.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -22,6 +24,25 @@ Deno.serve(async (req) => {
     }
 
     const stripe = new Stripe(STRIPE_SECRET_KEY);
+
+    if (!await operatingOpen()) {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL");
+      const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+      let admin = false;
+      if (supabaseUrl && anonKey) {
+        const userClient = createClient(supabaseUrl, anonKey, {
+          global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } },
+        });
+        const { data } = await userClient.auth.getUser();
+        admin = Boolean(data.user && isFunctionAdmin(data.user));
+      }
+      if (!admin) {
+        return new Response(JSON.stringify({ error: "OFFLINE", code: "OFFLINE" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
 
     // Debug: log raw body text before parsing
     const rawBody = await req.text();

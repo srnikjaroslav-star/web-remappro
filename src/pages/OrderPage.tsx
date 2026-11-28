@@ -684,6 +684,10 @@ const OrderPage = () => {
       setLoginOpen(true);
       return;
     }
+    if (operationReady && !operationOnline && !isPortalAdmin(authUser)) {
+      setOperationClosed(true);
+      return;
+    }
     setTopUpOpen(true);
   };
 
@@ -1030,6 +1034,10 @@ const OrderPage = () => {
   };
 
   const requestCheckout = () => {
+    if (operationReady && !operationOnline && !isPortalAdmin(authUser)) {
+      setOperationClosed(true);
+      return;
+    }
     if (needsTopUp) {
       openCreditTopUp();
       return;
@@ -1042,10 +1050,6 @@ const OrderPage = () => {
         return next;
       });
       setServiceNotice(true);
-      return;
-    }
-    if (operationReady && !operationOnline && !isPortalAdmin(authUser)) {
-      setOperationClosed(true);
       return;
     }
     const emissionOffroadConsent = Boolean(emissionSelected && emissionAck);
@@ -2060,6 +2064,10 @@ const OrderPage = () => {
           <CreditTopUpModal
             onClose={() => setTopUpOpen(false)}
             onCredited={(balance) => setCreditBalance(balance)}
+            onOffline={() => {
+              setTopUpOpen(false);
+              setOperationClosed(true);
+            }}
             orderTotal={totalPrice}
             creditBalance={creditBalance}
           />

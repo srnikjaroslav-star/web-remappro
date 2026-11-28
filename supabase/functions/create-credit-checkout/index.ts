@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { creditPackageByCredits, packageItemName, PACKAGE_ITEM_DESCRIPTION } from "../_shared/creditPackages.ts";
-import { isDatabaseAdmin } from "../_shared/operatingStatus.ts";
+import { isDatabaseAdmin, isFunctionAdmin, operatingOpen } from "../_shared/operatingStatus.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -35,6 +35,9 @@ Deno.serve(async (req) => {
     const { data: userData, error: userError } = await userClient.auth.getUser();
     const user = userData.user;
     if (userError || !user) return json({ ok: false, code: "NOT_AUTHENTICATED" }, 401);
+    if (!isFunctionAdmin(user) && !await operatingOpen()) {
+      return json({ ok: false, code: "OFFLINE" }, 403);
+    }
 
     const body = await req.json().catch(() => ({})) as {
       credits?: unknown;
