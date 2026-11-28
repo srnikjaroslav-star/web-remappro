@@ -1236,7 +1236,7 @@ const OrderPage = () => {
   const newOrderFit = !showOrders && portalView === 'new';
 
   return (
-    <div className={`relative flex w-full min-w-0 flex-grow flex-col overflow-x-hidden bg-background ${newOrderFit ? 'lg:h-[calc(100dvh-4.25rem)] lg:max-h-[calc(100dvh-4.25rem)] lg:overflow-hidden' : ''}`}>
+    <div className={`relative flex w-full min-w-0 flex-grow flex-col overflow-x-clip bg-background ${newOrderFit ? 'lg:h-[calc(100dvh-4.25rem)] lg:max-h-[calc(100dvh-4.25rem)] lg:overflow-hidden' : ''}`}>
       <div className="order-hex-layer" aria-hidden="true">
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <pre className="w-1/2">{HEX_DUMP}</pre>
@@ -1245,7 +1245,7 @@ const OrderPage = () => {
       </div>
 
       <div className={`relative z-10 flex w-full flex-grow flex-col ${newOrderFit ? 'lg:min-h-0 lg:overflow-hidden' : ''}`}>
-        <header className="sticky top-0 z-50 w-full border-b border-primary/25">
+        <header className="sticky top-0 z-40 w-full border-b border-primary/25">
           <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-background/80 backdrop-blur-sm" />
           <div className="relative mx-auto flex w-full max-w-[1600px] flex-nowrap items-center gap-2 px-4 py-3 sm:gap-3 lg:px-8">
             <div className="flex shrink-0 items-center gap-2 sm:gap-6 max-sm:[&_a>span:last-child]:hidden">
@@ -1432,7 +1432,17 @@ const OrderPage = () => {
             </div>
           ) : portalView === 'invoices' && authUser ? (
             <div className="mx-auto w-full max-w-[1240px]">
-              <h1 className="mb-3 text-2xl font-bold tracking-tight md:text-3xl">{t('myInvoices')}</h1>
+              <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <h1 className="text-2xl font-bold tracking-tight md:text-3xl">{t('myInvoices')}</h1>
+                <button
+                  type="button"
+                  onClick={() => setPortalView('new')}
+                  className="inline-flex h-10 w-auto shrink-0 items-center justify-center gap-1.5 self-end rounded-lg border border-primary/70 bg-primary/15 px-3 text-sm font-bold text-primary shadow-[0_0_16px_rgba(0,242,255,0.4)] transition-colors hover:bg-primary/25 sm:self-start"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  {t('backToNewOrder')}
+                </button>
+              </div>
               <CreditPackageInvoices scope="client" />
             </div>
           ) : portalView === 'profile' && (authUser || !authReady) ? (

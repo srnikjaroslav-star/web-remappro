@@ -194,7 +194,7 @@ const CreditPackageInvoices = ({ scope }: CreditPackageInvoicesProps) => {
   return (
     <section className="rounded-xl border border-white/10 bg-[#0c121c] p-3">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="text-sm font-bold uppercase tracking-[0.12em] text-slate-100">{t('packageInvoicesTitle')}</h2>
+        <h2 className={`text-sm font-bold uppercase tracking-[0.12em] ${scope === 'client' ? 'border-b border-primary/80 pb-1 text-primary' : 'text-slate-100'}`}>{t('packageInvoicesTitle')}</h2>
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
