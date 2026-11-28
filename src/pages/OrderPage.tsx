@@ -269,6 +269,7 @@ const OrderPage = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [operationClosed, setOperationClosed] = useState(false);
+  const [authRequired, setAuthRequired] = useState<null | 'order' | 'topup'>(null);
   const { online: operationOnline, ready: operationReady } = useSystemOnline();
   const [authUser, setAuthUser] = useState<User | null>(null);
   const connected = useClientPresence(authUser?.id ?? null);
@@ -408,7 +409,11 @@ const OrderPage = () => {
     const applyAccount = (user: User | null) => {
       if (!user) {
         setProfileReady(false);
-        setBilling(emptyBilling());
+        setBilling((current) => {
+          const blank = emptyBilling();
+          const same = (Object.keys(blank) as (keyof ClientBilling)[]).every((key) => current[key] === blank[key]);
+          return same ? current : blank;
+        });
         return;
       }
       setBilling((current) => {
@@ -677,18 +682,46 @@ const OrderPage = () => {
     document.getElementById('order-credit-balance')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
 
-  const openCreditTopUp = () => {
-    if (!authUser) {
-      setLoginError('');
-      setAuthMode('sign-in');
-      setLoginOpen(true);
-      return;
+  const shopIsOpen = async () => {
+    if (operationReady) return operationOnline;
+    const fresh = await fetchSystemSettings();
+    return fresh ? isSystemOnline(fresh.mode, fresh.schedule) : operationOnline;
+  };
+
+  const showClosedOrAccount = async (purpose: 'order' | 'topup') => {
+    const open = await shopIsOpen();
+    if (!open && !isPortalAdmin(authUser)) {
+      setOperationClosed(true);
+      return true;
     }
-    if (operationReady && !operationOnline && !isPortalAdmin(authUser)) {
+    if (!authUser) {
+      setAuthRequired(purpose);
+      return true;
+    }
+    return false;
+  };
+
+  const openCreditTopUp = () => {
+    void (async () => {
+      if (await showClosedOrAccount('topup')) return;
+      setTopUpOpen(true);
+    })();
+  };
+
+  const openAccount = (mode: 'sign-in' | 'sign-up') => {
+    setAuthRequired(null);
+    setLoginError('');
+    setAuthMode(mode);
+    setLoginOpen(true);
+  };
+
+  const noticeGuestSelection = (adding: boolean) => {
+    if (!adding || authUser || !operationReady) return;
+    if (!operationOnline && !isPortalAdmin(authUser)) {
       setOperationClosed(true);
       return;
     }
-    setTopUpOpen(true);
+    setAuthRequired('order');
   };
 
   const signIn = async (event: React.FormEvent) => {
@@ -920,10 +953,12 @@ const OrderPage = () => {
   };
 
   const toggleService = (serviceId: string) => {
+    const adding = !services.includes(serviceId);
     setServices((current) =>
       current.includes(serviceId) ? current.filter((id) => id !== serviceId) : [...current, serviceId],
     );
     clearServiceError();
+    noticeGuestSelection(adding);
   };
 
   const selectStage = (groupId: string, optionId: string) => {
@@ -940,6 +975,7 @@ const OrderPage = () => {
       return next;
     });
     clearServiceError();
+    noticeGuestSelection(Boolean(optionId) && !services.includes(optionId));
   };
 
   const clearFileError = () => {
@@ -1034,32 +1070,39 @@ const OrderPage = () => {
   };
 
   const requestCheckout = () => {
-    if (operationReady && !operationOnline && !isPortalAdmin(authUser)) {
-      setOperationClosed(true);
-      return;
-    }
-    if (needsTopUp) {
-      openCreditTopUp();
-      return;
-    }
-    if (services.length === 0) {
-      setErrors((current) => {
-        if (!current.services) return current;
-        const next = { ...current };
-        delete next.services;
-        return next;
-      });
-      setServiceNotice(true);
-      return;
-    }
-    const emissionOffroadConsent = Boolean(emissionSelected && emissionAck);
-    const needConsent = !legalConsentAgreed;
-    const needEmission = emissionSelected && !emissionOffroadConsent;
-    if (needConsent || needEmission) {
-      setConfirmGate({ consent: needConsent, emission: needEmission });
-      return;
-    }
-    void payWithCredits(emissionOffroadConsent);
+    void (async () => {
+      const open = await shopIsOpen();
+      if (!open && !isPortalAdmin(authUser)) {
+        setOperationClosed(true);
+        return;
+      }
+      if (!authUser) {
+        setAuthRequired(needsTopUp ? 'topup' : 'order');
+        return;
+      }
+      if (needsTopUp) {
+        openCreditTopUp();
+        return;
+      }
+      if (services.length === 0) {
+        setErrors((current) => {
+          if (!current.services) return current;
+          const next = { ...current };
+          delete next.services;
+          return next;
+        });
+        setServiceNotice(true);
+        return;
+      }
+      const emissionOffroadConsent = Boolean(emissionSelected && emissionAck);
+      const needConsent = !legalConsentAgreed;
+      const needEmission = emissionSelected && !emissionOffroadConsent;
+      if (needConsent || needEmission) {
+        setConfirmGate({ consent: needConsent, emission: needEmission });
+        return;
+      }
+      void payWithCredits(emissionOffroadConsent);
+    })();
   };
 
   const payWithCredits = async (emissionOffroadConsent: boolean) => {
@@ -1069,6 +1112,10 @@ const OrderPage = () => {
       : operationOnline;
     if (!operationOpen && !isPortalAdmin(authUser)) {
       setOperationClosed(true);
+      return;
+    }
+    if (!authUser) {
+      setAuthRequired('order');
       return;
     }
     let source = billing;
@@ -1093,7 +1140,7 @@ const OrderPage = () => {
       return;
     }
     if (!authUser) {
-      toast.error(t('creditAuthRequired'));
+      setAuthRequired('order');
       return;
     }
     const available = await readCreditBalance(authUser.id);
@@ -1211,7 +1258,7 @@ const OrderPage = () => {
           return;
         }
         if (code === 'NOT_AUTHENTICATED') {
-          toast.error(t('creditAuthRequired'));
+          setAuthRequired('order');
           setIsSubmitting(false);
           return;
         }
@@ -2032,6 +2079,41 @@ const OrderPage = () => {
           </div>
         </div>
       )}
+      {authRequired && (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/55 p-4"
+          onClick={() => setAuthRequired(null)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="auth-required-title"
+            className="order-confirm-gate w-full max-w-md rounded-xl p-5"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 id="auth-required-title" className="text-base font-bold leading-snug text-[#f6d98a]">
+              {t('authRequiredTitle')}
+            </h2>
+            <p className="mt-3 text-sm leading-relaxed text-[#f8f1dc]">
+              {authRequired === 'topup' ? t('authRequiredTopUp') : t('authRequiredOrder')}
+            </p>
+            <button
+              type="button"
+              onClick={() => openAccount('sign-in')}
+              className="order-confirm-gate-ack mt-5 min-h-[44px] w-full rounded-lg text-sm font-semibold"
+            >
+              {t('signIn')}
+            </button>
+            <button
+              type="button"
+              onClick={() => openAccount('sign-up')}
+              className="order-confirm-gate-ack mt-2 min-h-[44px] w-full rounded-lg text-sm font-semibold"
+            >
+              {t('authRequiredSignUp')}
+            </button>
+          </div>
+        </div>
+      )}
       {operationClosed && (
         <div
           className="fixed inset-0 z-[90] flex items-center justify-center bg-black/55 p-4"
@@ -2067,6 +2149,10 @@ const OrderPage = () => {
             onOffline={() => {
               setTopUpOpen(false);
               setOperationClosed(true);
+            }}
+            onAuthRequired={() => {
+              setTopUpOpen(false);
+              setAuthRequired('topup');
             }}
             orderTotal={totalPrice}
             creditBalance={creditBalance}

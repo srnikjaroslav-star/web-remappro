@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CreditCard, Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLanguage } from '@/i18n/LanguageContext';
@@ -12,6 +12,7 @@ type CreditTopUpModalProps = {
   onClose: () => void;
   onCredited?: (balance: number) => void;
   onOffline?: () => void;
+  onAuthRequired?: () => void;
   orderTotal?: number;
   creditBalance?: number | null;
 };
@@ -19,7 +20,7 @@ type CreditTopUpModalProps = {
 const formatEuros = (value: number, language: 'sk' | 'en') =>
   `${value.toLocaleString(language === 'en' ? 'en-GB' : 'sk-SK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 
-const CreditTopUpModal = ({ onClose, onCredited, onOffline, orderTotal, creditBalance }: CreditTopUpModalProps) => {
+const CreditTopUpModal = ({ onClose, onCredited, onOffline, onAuthRequired, orderTotal, creditBalance }: CreditTopUpModalProps) => {
   const { language, t } = useLanguage();
   const shortfall = typeof orderTotal === 'number' && typeof creditBalance === 'number'
     ? Math.max(0, Math.round((orderTotal - creditBalance) * 100) / 100)
@@ -34,11 +35,22 @@ const CreditTopUpModal = ({ onClose, onCredited, onOffline, orderTotal, creditBa
   const testActive = adminTest && testCode.trim() === 'TEST100';
   const payable = testActive ? 0 : selected.price;
   const euros = formatEuros(payable, language);
+  const onOfflineRef = useRef(onOffline);
+  const onAuthRequiredRef = useRef(onAuthRequired);
+  onOfflineRef.current = onOffline;
+  onAuthRequiredRef.current = onAuthRequired;
 
   useEffect(() => {
     let active = true;
-    void supabase.auth.getUser().then(({ data }) => {
-      if (active) setAdminTest(isDatabaseAdmin(data.user));
+    void supabase.auth.getUser().then(async ({ data }) => {
+      if (!active) return;
+      const user = data.user ?? null;
+      setAdminTest(isDatabaseAdmin(user));
+      if (user) return;
+      const settings = await fetchSystemSettings();
+      if (!active) return;
+      if (settings && !isSystemOnline(settings.mode, settings.schedule)) onOfflineRef.current?.();
+      else onAuthRequiredRef.current?.();
     });
     return () => {
       active = false;
@@ -55,10 +67,6 @@ const CreditTopUpModal = ({ onClose, onCredited, onOffline, orderTotal, creditBa
 
   const payByCard = async () => {
     if (paying) return;
-    if (!termsConsent || !declarationConsent) {
-      toast.error(t('topUpConsentRequired'));
-      return;
-    }
     const { data: auth } = await supabase.auth.getUser();
     if (!isPortalAdmin(auth.user)) {
       const settings = await fetchSystemSettings();
@@ -66,6 +74,14 @@ const CreditTopUpModal = ({ onClose, onCredited, onOffline, orderTotal, creditBa
         onOffline?.();
         return;
       }
+    }
+    if (!auth.user) {
+      onAuthRequired?.();
+      return;
+    }
+    if (!termsConsent || !declarationConsent) {
+      toast.error(t('topUpConsentRequired'));
+      return;
     }
     setPaying(true);
     try {
@@ -91,7 +107,7 @@ const CreditTopUpModal = ({ onClose, onCredited, onOffline, orderTotal, creditBa
         return;
       }
       if (data?.code === 'NOT_AUTHENTICATED') {
-        toast.error(t('creditAuthRequired'));
+        onAuthRequired?.();
         setPaying(false);
         return;
       }
