@@ -1751,10 +1751,10 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
         </div>
         <div hidden={section !== 'invoices'}>
           {section === 'invoices' ? (
-            <>
+            <div className="grid items-start gap-4 lg:grid-cols-[390px_minmax(0,1fr)]">
               <InvoiceSettingsPanel />
               <CreditPackageInvoices scope="admin" />
-            </>
+            </div>
           ) : null}
         </div>
         <div hidden={section !== 'orders'}>

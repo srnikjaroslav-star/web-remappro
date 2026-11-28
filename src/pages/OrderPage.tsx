@@ -1431,8 +1431,8 @@ const OrderPage = () => {
               ) : null}
             </div>
           ) : portalView === 'invoices' && authUser ? (
-            <div className="space-y-3">
-              <h1 className="text-2xl font-bold tracking-tight md:text-3xl">{t('myInvoices')}</h1>
+            <div className="mx-auto w-full max-w-[1240px]">
+              <h1 className="mb-3 text-2xl font-bold tracking-tight md:text-3xl">{t('myInvoices')}</h1>
               <CreditPackageInvoices scope="client" />
             </div>
           ) : portalView === 'profile' && (authUser || !authReady) ? (

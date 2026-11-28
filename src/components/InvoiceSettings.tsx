@@ -7,8 +7,8 @@ import {
   type InvoiceSettings,
 } from '@/lib/invoiceSettings';
 
-const fieldClass = 'invoice-field h-7 w-full rounded-md border border-[#00f2ff]/70 bg-[#0a192f] px-2.5 text-sm text-white shadow-[0_0_12px_rgba(0,242,255,0.22)] focus:border-[#00f2ff] focus:outline-none';
-const labelClass = 'mb-0 block text-[10px] font-bold uppercase leading-tight tracking-wide text-muted-foreground';
+const fieldClass = 'invoice-field h-8 w-full rounded-md border border-white/10 bg-[#070b12] px-2.5 text-sm text-white focus:border-cyan-300/70 focus:outline-none';
+const labelClass = 'mb-1 block text-[10px] font-bold uppercase leading-tight tracking-wide text-slate-400';
 
 const draftFrom = (settings: InvoiceSettings) => ({
   supplierName: settings.supplierName,
@@ -85,7 +85,7 @@ const InvoiceSettingsPanel = () => {
   };
 
   const field = (name: keyof Draft, label: string, maxLength: number) => (
-    <label className="grid min-w-0 grid-cols-[9.5rem_minmax(0,1fr)] items-center gap-2">
+    <label className="block min-w-0">
       <span className={labelClass}>{label}</span>
       <input
         value={draft[name]}
@@ -98,42 +98,25 @@ const InvoiceSettingsPanel = () => {
   );
 
   return (
-    <div className="max-w-[780px] rounded-xl border border-[#00f2ff]/75 bg-[#070d16] px-2 py-1.5 shadow-[0_0_28px_rgba(0,242,255,0.28)]">
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="text-base font-bold uppercase leading-none tracking-[0.14em] text-primary">Nastavenia faktúry</h2>
-          <p className="mt-0.5 text-[11px] leading-tight text-muted-foreground">Tieto hodnoty sa použijú pri každom novom PDF.</p>
-        </div>
-        <button
-          type="button"
-          onClick={save}
-          disabled={saving}
-          className="inline-flex h-7 shrink-0 items-center rounded-md border border-green-400 bg-green-500/15 px-3 text-xs font-black tracking-wide text-green-400 shadow-[0_0_14px_rgba(74,222,128,0.32)] transition-colors hover:border-green-300 hover:bg-green-500/25 hover:shadow-[0_0_16px_rgba(74,222,128,0.45)] disabled:opacity-60"
-        >
-          ULOŽIŤ ZMENY
-        </button>
+    <div className="rounded-xl border border-white/10 bg-[#0c121c] p-3">
+      <h2 className="text-sm font-bold uppercase tracking-[0.14em] text-slate-100">Nastavenia faktúry</h2>
+      <div className="mt-3 grid gap-2">
+        {field('supplierName', 'Názov firmy / Meno', 80)}
+        {field('supplierAddress', 'Adresa', 120)}
+        {field('supplierIco', 'IČO', 20)}
+        {field('supplierDic', 'DIČ', 20)}
+        {field('supplierRegister', 'Register / č. ŽR', 180)}
+        {field('iban', 'IBAN', 42)}
+        {field('swift', 'SWIFT / BIC', 11)}
       </div>
-
-      <div className="mt-1.5 grid gap-1.5">
-      <section className="rounded-lg border border-primary/25 bg-[#070d16]/70 p-1.5 shadow-[inset_0_0_22px_rgba(0,242,255,0.06)]">
-        <h3 className="mb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-primary">Údaje dodávateľa</h3>
-        <div className="grid gap-1">
-          {field('supplierName', 'Názov firmy / Meno', 80)}
-          {field('supplierAddress', 'Adresa', 120)}
-          {field('supplierIco', 'IČO', 20)}
-          {field('supplierDic', 'DIČ', 20)}
-          {field('supplierRegister', 'Register / č. ŽR', 180)}
-        </div>
-      </section>
-
-      <section className="rounded-lg border border-primary/25 bg-[#070d16]/70 p-1.5 shadow-[inset_0_0_22px_rgba(0,242,255,0.06)]">
-        <h3 className="mb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-primary">Fakturačné a bankové údaje</h3>
-        <div className="grid gap-1">
-          {field('iban', 'IBAN', 42)}
-          {field('swift', 'SWIFT / BIC', 11)}
-        </div>
-      </section>
-      </div>
+      <button
+        type="button"
+        onClick={save}
+        disabled={saving}
+        className="mt-3 inline-flex h-9 w-full items-center justify-center rounded-md bg-emerald-500 text-xs font-black tracking-wide text-slate-950 shadow-[0_0_18px_rgba(16,185,129,0.45)] transition-colors hover:bg-emerald-400 disabled:opacity-60"
+      >
+        ULOŽIŤ ZMENY
+      </button>
     </div>
   );
 };
