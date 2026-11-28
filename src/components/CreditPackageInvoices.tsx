@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ExternalLink, Trash2, X } from 'lucide-react';
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
@@ -17,6 +17,7 @@ GlobalWorkerOptions.workerSrc = workerUrl;
 
 type CreditPackageInvoicesProps = {
   scope: 'admin' | 'client';
+  headerAction?: ReactNode;
 };
 
 type Preview = {
@@ -123,7 +124,7 @@ const PdfCanvasPreview = ({ preview, onClose }: { preview: Preview; onClose: () 
   );
 };
 
-const CreditPackageInvoices = ({ scope }: CreditPackageInvoicesProps) => {
+const CreditPackageInvoices = ({ scope, headerAction }: CreditPackageInvoicesProps) => {
   const { language, t } = useLanguage();
   const [rows, setRows] = useState<CreditPackageInvoice[]>([]);
   const [loading, setLoading] = useState(true);
@@ -252,12 +253,24 @@ const CreditPackageInvoices = ({ scope }: CreditPackageInvoicesProps) => {
     <section className={`rounded-xl border border-primary/45 bg-[#050910] p-3 shadow-[0_0_28px_rgba(0,242,255,0.14)] ${scope === 'client' ? 'flex min-h-0 flex-1 flex-col' : ''}`}>
       <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <h2 className={`text-sm font-bold uppercase tracking-[0.12em] ${scope === 'client' ? 'border-b border-[#22d3ee] pb-1 text-[#22d3ee]' : 'text-slate-100'}`}>{t('packageInvoicesTitle')}</h2>
-        <input
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder={t('packageInvoiceSearch')}
-          className="h-8 w-full rounded-md border border-primary/40 bg-black/70 px-2.5 text-sm text-white shadow-[0_0_12px_rgba(0,242,255,0.12)] placeholder:text-slate-500 focus:border-cyan-300/70 focus:outline-none sm:max-w-xs"
-        />
+        {headerAction ? (
+          <div className="flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder={t('packageInvoiceSearch')}
+              className="h-8 w-full rounded-md border border-primary/40 bg-black/70 px-2.5 text-sm text-white shadow-[0_0_12px_rgba(0,242,255,0.12)] placeholder:text-slate-500 focus:border-cyan-300/70 focus:outline-none sm:max-w-xs"
+            />
+            {headerAction}
+          </div>
+        ) : (
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={t('packageInvoiceSearch')}
+            className="h-8 w-full rounded-md border border-primary/40 bg-black/70 px-2.5 text-sm text-white shadow-[0_0_12px_rgba(0,242,255,0.12)] placeholder:text-slate-500 focus:border-cyan-300/70 focus:outline-none sm:max-w-xs"
+          />
+        )}
       </div>
       {loading ? (
         <p className="mt-3 text-sm text-slate-400">{t('statusLoading')}</p>

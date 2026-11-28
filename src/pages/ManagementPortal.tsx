@@ -1753,7 +1753,19 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
           {section === 'invoices' ? (
             <div className="grid items-start gap-4 lg:grid-cols-[390px_minmax(0,1fr)]">
               <InvoiceSettingsPanel />
-              <CreditPackageInvoices scope="admin" />
+              <CreditPackageInvoices
+                scope="admin"
+                headerAction={(
+                  <button
+                    type="button"
+                    onClick={openAccounting}
+                    className="inline-flex h-[42px] shrink-0 items-center gap-2 rounded-lg border border-primary/70 bg-[#000000] px-3 text-sm font-semibold text-[#00eaff] shadow-[0_0_18px_rgba(0,242,255,0.28)] transition-shadow hover:border-primary hover:shadow-[0_0_22px_rgba(0,242,255,0.38)]"
+                  >
+                    <FileText className="h-4 w-4" />
+                    Účtovníctvo / Export
+                  </button>
+                )}
+              />
             </div>
           ) : null}
         </div>
@@ -1890,14 +1902,6 @@ const getServiceNames = (serviceIds: string[] | string | null) => {
                 </div>
               ) : null}
             </div>
-            <button
-              type="button"
-              onClick={openAccounting}
-              className="inline-flex h-[42px] shrink-0 items-center gap-2 rounded-lg border border-primary/70 bg-[#000000] px-3 text-sm font-semibold text-[#00eaff] shadow-[0_0_18px_rgba(0,242,255,0.28)] transition-shadow hover:border-primary hover:shadow-[0_0_22px_rgba(0,242,255,0.38)]"
-            >
-              <FileText className="h-4 w-4" />
-              Účtovníctvo / Export
-            </button>
           </div>
           <div className="max-h-[calc(100vh-23.25rem)] overflow-auto">
             <table className="w-full min-w-[95.25rem] table-fixed border-separate border-spacing-0 text-base">
