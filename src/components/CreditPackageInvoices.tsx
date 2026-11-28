@@ -127,6 +127,7 @@ const CreditPackageInvoices = ({ scope }: CreditPackageInvoicesProps) => {
   const [query, setQuery] = useState('');
   const [busyId, setBusyId] = useState('');
   const [preview, setPreview] = useState<Preview | null>(null);
+  const [selectedKey, setSelectedKey] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -191,15 +192,18 @@ const CreditPackageInvoices = ({ scope }: CreditPackageInvoicesProps) => {
     }
   };
 
+  const stickyTop = scope === 'client' ? 'top-[63px]' : 'top-[4.25rem]';
+  const headCell = `sticky ${stickyTop} z-30 border-y border-cyan-300/80 bg-[#041820] px-2 py-2 font-bold shadow-[inset_0_1px_0_rgba(0,242,255,0.95),inset_0_-1px_0_rgba(0,242,255,0.7),0_10px_18px_rgba(0,0,0,0.55)]`;
+
   return (
-    <section className="rounded-xl border border-white/10 bg-[#0c121c] p-3">
+    <section className="rounded-xl border border-primary/45 bg-[#050910] p-3 shadow-[0_0_28px_rgba(0,242,255,0.14)]">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <h2 className={`text-sm font-bold uppercase tracking-[0.12em] ${scope === 'client' ? 'border-b border-primary/80 pb-1 text-primary' : 'text-slate-100'}`}>{t('packageInvoicesTitle')}</h2>
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder={t('packageInvoiceSearch')}
-          className="h-8 w-full rounded-md border border-white/10 bg-[#070b12] px-2.5 text-sm text-white placeholder:text-slate-500 focus:border-cyan-300/70 focus:outline-none sm:max-w-xs"
+          className="h-8 w-full rounded-md border border-primary/40 bg-black/70 px-2.5 text-sm text-white shadow-[0_0_12px_rgba(0,242,255,0.12)] placeholder:text-slate-500 focus:border-cyan-300/70 focus:outline-none sm:max-w-xs"
         />
       </div>
       {loading ? (
@@ -207,56 +211,68 @@ const CreditPackageInvoices = ({ scope }: CreditPackageInvoicesProps) => {
       ) : visible.length === 0 ? (
         <p className="mt-3 text-sm text-slate-400">{t('packageInvoicesEmpty')}</p>
       ) : (
-        <div className="mt-3 overflow-x-auto">
-          <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+        <div className="mt-3 overflow-x-auto md:overflow-x-visible">
+          <table className="w-full min-w-[640px] border-separate border-spacing-0 text-left text-sm md:min-w-0">
             <thead>
-              <tr className="border-b border-white/10 text-[11px] uppercase tracking-wide text-slate-400">
-                <th className="px-2 py-2 font-bold">{t('packageInvoiceNumber')}</th>
-                <th className="px-2 py-2 font-bold">{t('packageInvoiceDate')}</th>
-                {scope === 'admin' ? <th className="px-2 py-2 font-bold">{t('packageInvoiceClient')}</th> : null}
-                <th className="px-2 py-2 font-bold">{t('packageInvoiceCredits')}</th>
-                <th className="px-2 py-2 font-bold">{t('packageInvoiceAmount')}</th>
-                <th className="px-2 py-2 text-right font-bold">{t('packageInvoiceActions')}</th>
+              <tr className="text-[11px] uppercase tracking-wide text-primary">
+                <th className={`${headCell} text-left`}>{t('packageInvoiceNumber')}</th>
+                <th className={`${headCell} text-left`}>{t('packageInvoiceDate')}</th>
+                {scope === 'admin' ? <th className={`${headCell} text-left`}>{t('packageInvoiceClient')}</th> : null}
+                <th className={`${headCell} text-left`}>{t('packageInvoiceCredits')}</th>
+                <th className={`${headCell} text-left`}>{t('packageInvoiceAmount')}</th>
+                <th className={`${headCell} text-right`}>{t('packageInvoiceActions')}</th>
               </tr>
             </thead>
             <tbody>
-              {visible.map((row) => (
-                <tr key={row.id || row.invoiceNumber} className="border-b border-white/5 text-slate-100">
-                  <td className="px-2 py-2.5 font-mono font-bold text-cyan-200">{row.invoiceNumber}</td>
-                  <td className="whitespace-nowrap px-2 py-2.5 text-slate-300">{when(row.issuedAt, language)}</td>
-                  {scope === 'admin' ? (
-                    <td className="max-w-[14rem] truncate px-2 py-2.5" title={row.accountEmail}>
-                      {row.company || row.accountName || row.accountEmail || '—'}
+              {visible.map((row) => {
+                const key = row.id || row.invoiceNumber;
+                const selected = selectedKey === key;
+                const tone = selected
+                  ? 'border-y border-cyan-300/75 bg-[#072636] shadow-[inset_0_0_18px_rgba(0,242,255,0.22)]'
+                  : 'border-b border-white/5 group-hover:bg-primary/10';
+                return (
+                  <tr
+                    key={key}
+                    onClick={() => setSelectedKey(key)}
+                    aria-selected={selected}
+                    className="group cursor-pointer text-slate-100"
+                  >
+                    <td className={`px-2 py-2.5 font-mono font-bold text-cyan-200 ${tone} ${selected ? 'border-l-[3px] border-l-cyan-300' : ''}`}>{row.invoiceNumber}</td>
+                    <td className={`whitespace-nowrap px-2 py-2.5 text-slate-300 ${tone}`}>{when(row.issuedAt, language)}</td>
+                    {scope === 'admin' ? (
+                      <td className={`max-w-[14rem] truncate px-2 py-2.5 ${tone}`} title={row.accountEmail}>
+                        {row.company || row.accountName || row.accountEmail || '—'}
+                      </td>
+                    ) : null}
+                    <td className={`px-2 py-2.5 ${tone}`}>
+                      <span className="inline-flex rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-bold text-emerald-400">
+                        {creditsBadge(row.credits)}
+                      </span>
                     </td>
-                  ) : null}
-                  <td className="px-2 py-2.5">
-                    <span className="inline-flex rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-bold text-emerald-400">
-                      {creditsBadge(row.credits)}
-                    </span>
-                  </td>
-                  <td className="whitespace-nowrap px-2 py-2.5 tabular-nums">{money(row.amount, language)}</td>
-                  <td className="px-2 py-2.5">
-                    <div className="flex justify-end gap-2">
-                      <button
-                        type="button"
-                        disabled={busyId === row.id}
-                        onClick={() => void openFile(row, 'view')}
-                        className="inline-flex h-8 items-center rounded-md bg-sky-600 px-3 text-xs font-bold text-white hover:bg-sky-500 disabled:opacity-50"
-                      >
-                        {t('packageInvoiceView')}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={busyId === row.id}
-                        onClick={() => void openFile(row, 'download')}
-                        className="inline-flex h-8 items-center rounded-md bg-cyan-400 px-3 text-xs font-bold text-slate-950 hover:bg-cyan-300 disabled:opacity-50"
-                      >
-                        {t('packageInvoiceDownload')}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    <td className={`whitespace-nowrap px-2 py-2.5 tabular-nums ${tone}`}>{money(row.amount, language)}</td>
+                    <td className={`px-2 py-2.5 ${tone} ${selected ? 'border-r border-r-cyan-300/80' : ''}`}>
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          disabled={busyId === row.id}
+                          onClick={() => void openFile(row, 'view')}
+                          className="inline-flex h-8 items-center rounded-md border border-primary/50 bg-sky-600 px-3 text-xs font-bold text-white shadow-[0_0_12px_rgba(0,180,255,0.28)] hover:bg-sky-500 disabled:opacity-50"
+                        >
+                          {t('packageInvoiceView')}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busyId === row.id}
+                          onClick={() => void openFile(row, 'download')}
+                          className="inline-flex h-8 items-center rounded-md bg-cyan-400 px-3 text-xs font-bold text-slate-950 shadow-[0_0_14px_rgba(0,242,255,0.35)] hover:bg-cyan-300 disabled:opacity-50"
+                        >
+                          {t('packageInvoiceDownload')}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

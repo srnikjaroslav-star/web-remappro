@@ -1431,7 +1431,7 @@ const OrderPage = () => {
               ) : null}
             </div>
           ) : portalView === 'invoices' && authUser ? (
-            <div className="mx-auto w-full max-w-[1240px]">
+            <div className="w-full">
               <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <h1 className="text-2xl font-bold tracking-tight md:text-3xl">{t('myInvoices')}</h1>
                 <button
