@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { mailLogoAttachment } from "../_shared/clientNotice.ts";
 import { loadOrderMailContext, renderStatusEmail } from "../_shared/statusEmail.ts";
 import { requireStaffCaller } from "../_shared/staffCaller.ts";
 
@@ -92,6 +93,7 @@ const handler = async (req: Request): Promise<Response> => {
         ...(mail.copyTo ? { bcc: [mail.copyTo] } : {}),
         subject: emailSubject,
         html: emailHtml,
+        attachments: [mailLogoAttachment()],
       }),
     });
 

@@ -8,7 +8,7 @@ export type MailAttachment = {
 
 const LOGO_CID = "remappro-logo";
 
-const logoAttachment = (): MailAttachment => {
+export const mailLogoAttachment = (): MailAttachment => {
   const marker = "base64,";
   const splitAt = LOGO_BASE64.indexOf(marker);
   return {
@@ -36,7 +36,7 @@ export const sendClientEmail = async (input: {
   }
   const sender = Deno.env.get("RESEND_SENDER_EMAIL") || "REMAPPRO <info@remappro.eu>";
   const attachments = [
-    ...(input.html.includes(`cid:${LOGO_CID}`) ? [logoAttachment()] : []),
+    ...(input.html.includes(`cid:${LOGO_CID}`) ? [mailLogoAttachment()] : []),
     ...(input.attachments ?? []),
   ];
   try {

@@ -362,7 +362,7 @@ export const renderStatusEmail = (input: {
         <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" bgcolor="#161b22" style="width: 600px; max-width: 600px; background-color: #161b22; border: 1px solid #30363d;">
           <tr>
             <td align="center" style="text-align: center; padding: 30px 20px 0px 20px; line-height: 0;">
-              <img src="https://huswisewblkfcozdgvrq.supabase.co/storage/v1/object/public/assets/Logo-mail-clean.png" alt="REMAPPRO" width="250" style="width: 250px; max-width: 100%; height: auto; display: block; margin: 0 auto; border: none; outline: none; text-decoration: none;">
+              <img src="cid:remappro-logo" alt="REMAPPRO" width="250" style="width: 250px; max-width: 100%; height: auto; display: block; margin: 0 auto; border: none; outline: none; text-decoration: none;">
               <hr style="border: 0; border-top: 2px solid #00d2ff; margin-top: 15px; margin-bottom: 20px; width: 100%;">
             </td>
           </tr>
