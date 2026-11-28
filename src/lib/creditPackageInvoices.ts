@@ -25,6 +25,37 @@ const num = (value: unknown) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const TEST_ACCOUNT_EMAIL = 'srnik.jaroslav@gmail.com';
+
+export const CREDIT_INVOICES_REFRESH_KEY = 'remappro-credit-invoices-refresh';
+
+export const isDeletableTestCreditInvoice = (row: CreditPackageInvoice) => {
+  const email = row.accountEmail.trim().toLowerCase();
+  const name = row.accountName.trim().toLowerCase();
+  const company = row.company.trim().toLowerCase();
+  const session = row.id.trim().toLowerCase();
+  const consent = row.consentSummary.toLowerCase();
+  const testFlag = session.startsWith('cs_admtest')
+    || consent.includes('test100')
+    || consent.includes('admin test');
+  const testAccount = email === TEST_ACCOUNT_EMAIL || name === 'admin test' || company === 'admin test';
+  return testFlag || (row.amount <= 0 && testAccount);
+};
+
+export const deleteTestCreditPackageInvoice = async (stripeSessionId: string) => {
+  const { data, error } = await supabase.functions.invoke('delete-test-credit-invoice', {
+    body: { stripeSessionId },
+  });
+  if (error) throw new Error(error.message);
+  const payload = data as { ok?: boolean; code?: string } | null;
+  if (!payload?.ok) throw new Error(payload?.code || 'DELETE_FAILED');
+  try {
+    localStorage.setItem(CREDIT_INVOICES_REFRESH_KEY, String(Date.now()));
+  } catch {
+    /* another open portal tab refreshes when storage is available */
+  }
+};
+
 export const loadCreditPackageInvoices = async (): Promise<CreditPackageInvoice[]> => {
   const { data, error } = await supabase.functions.invoke('list-credit-package-invoices', { body: {} });
   if (error) throw new Error(error.message);

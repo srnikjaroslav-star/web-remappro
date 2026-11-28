@@ -1,11 +1,14 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ExternalLink, X } from 'lucide-react';
+import { ExternalLink, Trash2, X } from 'lucide-react';
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { toast } from 'sonner';
 import { useLanguage } from '@/i18n/LanguageContext';
 import {
+  CREDIT_INVOICES_REFRESH_KEY,
   creditPackageInvoiceFile,
+  deleteTestCreditPackageInvoice,
+  isDeletableTestCreditInvoice,
   loadCreditPackageInvoices,
   type CreditPackageInvoice,
 } from '@/lib/creditPackageInvoices';
@@ -129,7 +132,15 @@ const CreditPackageInvoices = ({ scope }: CreditPackageInvoicesProps) => {
   const [preview, setPreview] = useState<Preview | null>(null);
   const [selectedKey, setSelectedKey] = useState('');
   const [scrollbarWidth, setScrollbarWidth] = useState(0);
+  const [pendingDelete, setPendingDelete] = useState<CreditPackageInvoice | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
+
+  const reload = () => {
+    loadCreditPackageInvoices()
+      .then((list) => setRows(list))
+      .catch(() => toast.error(t('packageInvoicesLoadFailed')))
+      .finally(() => setLoading(false));
+  };
 
   useEffect(() => {
     let active = true;
@@ -143,8 +154,13 @@ const CreditPackageInvoices = ({ scope }: CreditPackageInvoicesProps) => {
       .finally(() => {
         if (active) setLoading(false);
       });
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === CREDIT_INVOICES_REFRESH_KEY) reload();
+    };
+    window.addEventListener('storage', onStorage);
     return () => {
       active = false;
+      window.removeEventListener('storage', onStorage);
     };
   }, [t]);
 
@@ -194,8 +210,26 @@ const CreditPackageInvoices = ({ scope }: CreditPackageInvoicesProps) => {
     }
   };
 
+  const confirmDelete = async () => {
+    const row = pendingDelete;
+    if (!row || busyId || scope !== 'admin' || !isDeletableTestCreditInvoice(row)) return;
+    setBusyId(row.id);
+    try {
+      await deleteTestCreditPackageInvoice(row.id);
+      setPendingDelete(null);
+      toast.success(t('packageInvoiceDeleted', { number: row.invoiceNumber }));
+      const list = await loadCreditPackageInvoices();
+      setRows(list);
+      if (selectedKey === (row.id || row.invoiceNumber)) setSelectedKey('');
+    } catch {
+      toast.error(t('packageInvoiceDeleteFailed'));
+    } finally {
+      setBusyId('');
+    }
+  };
+
   const columns = scope === 'admin'
-    ? 'minmax(0,1.25fr) minmax(0,1.05fr) minmax(0,1.15fr) minmax(0,0.7fr) minmax(0,0.7fr) 15.5rem'
+    ? 'minmax(0,1.25fr) minmax(0,1.05fr) minmax(0,1.15fr) minmax(0,0.7fr) minmax(0,0.7fr) 18.5rem'
     : 'minmax(0,1.45fr) minmax(0,1.15fr) minmax(0,0.75fr) minmax(0,0.75fr) 15.5rem';
   const gridStyle = { gridTemplateColumns: columns };
   const headCell = 'flex min-w-0 items-center border-y-2 border-[#22d3ee] border-r border-[#155e75] bg-[#0b1929] px-2 py-3 text-sm font-bold uppercase tracking-wide text-[#fef08a]';
@@ -294,6 +328,21 @@ const CreditPackageInvoices = ({ scope }: CreditPackageInvoicesProps) => {
                       >
                         {t('packageInvoiceDownload')}
                       </button>
+                      {scope === 'admin' && isDeletableTestCreditInvoice(row) ? (
+                        <button
+                          type="button"
+                          disabled={busyId === row.id}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setPendingDelete(row);
+                          }}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-rose-400/50 bg-rose-950/40 text-xs text-rose-200 hover:bg-rose-900/50 disabled:opacity-50"
+                          aria-label={t('packageInvoiceDelete')}
+                          title={t('packageInvoiceDelete')}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      ) : null}
                     </div>
                   </div>
                 </div>
@@ -303,6 +352,38 @@ const CreditPackageInvoices = ({ scope }: CreditPackageInvoicesProps) => {
         </div>
       )}
       {preview ? <PdfCanvasPreview preview={preview} onClose={() => setPreview(null)} /> : null}
+      {pendingDelete ? (
+        <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/80 p-4" onClick={() => { if (!busyId) setPendingDelete(null); }}>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-test-invoice-title"
+            className="w-full max-w-md rounded-xl border border-rose-400/40 bg-[#0c121c] p-4 shadow-[0_0_28px_rgba(244,63,94,0.2)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h3 id="delete-test-invoice-title" className="text-sm font-bold text-rose-100">{t('packageInvoiceDeleteTitle')}</h3>
+            <p className="mt-2 text-sm text-slate-200">{t('packageInvoiceDeleteConfirm', { number: pendingDelete.invoiceNumber })}</p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                disabled={Boolean(busyId)}
+                onClick={() => setPendingDelete(null)}
+                className="inline-flex h-8 items-center rounded-md border border-white/15 px-3 text-xs font-bold text-slate-200 hover:bg-white/10 disabled:opacity-50"
+              >
+                {t('packageInvoiceDeleteCancel')}
+              </button>
+              <button
+                type="button"
+                disabled={Boolean(busyId)}
+                onClick={() => void confirmDelete()}
+                className="inline-flex h-8 items-center rounded-md bg-rose-600 px-3 text-xs font-bold text-white hover:bg-rose-500 disabled:opacity-50"
+              >
+                {t('packageInvoiceDelete')}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 };
