@@ -1,4 +1,5 @@
 import { documentCalendarYear, nextDocumentSerial, serialOfDocument, type DocumentKind } from '@/lib/accountingNumbers';
+import { creditPackageInvoiceFile, creditPackageInvoicesInRange } from '@/lib/creditPackageInvoices';
 import { supabase } from '@/lib/supabase';
 
 const INVOICE_BUCKET = 'tunes';
@@ -541,16 +542,34 @@ const loadExportRows = async () => {
 
 export type InvoiceArchiveCounts = { invoices: number; credits: number; total: number };
 
+const packageInvoicesForExport = async (fromYmd: string, toYmd: string, takenNumbers: Set<string>) => {
+  const rows = await creditPackageInvoicesInRange(fromYmd, toYmd);
+  return rows.filter((row) => row.invoiceNumber && !takenNumbers.has(row.invoiceNumber));
+};
+
 export const previewInvoiceArchive = async (fromYmd: string, toYmd: string): Promise<InvoiceArchiveCounts> => {
   const documents = documentsForExport(await loadExportRows(), fromYmd, toYmd);
-  const invoices = documents.filter((item) => item.kind === 'invoice').length;
+  const taken = new Set(documents.filter((item) => item.kind === 'invoice').map((item) => item.number));
+  const packageInvoices = await packageInvoicesForExport(fromYmd, toYmd, taken);
+  const invoices = taken.size + packageInvoices.length;
   const credits = documents.filter((item) => item.kind === 'credit').length;
-  return { invoices, credits, total: documents.length };
+  return { invoices, credits, total: invoices + credits };
 };
 
 export const exportInvoiceArchive = async (fromYmd: string, toYmd: string) => {
   const files: { name: string; data: Uint8Array }[] = [];
   const used = new Set<string>();
+  const addNamedPdf = (number: string, bytes: Uint8Array) => {
+    const base = safePdfName(number || 'faktura');
+    let name = `${base}.pdf`;
+    let copy = 2;
+    while (used.has(name)) {
+      name = `${base}-${copy}.pdf`;
+      copy += 1;
+    }
+    used.add(name);
+    files.push({ name, data: bytes });
+  };
   const pushFile = async (document: ExportDocument) => {
     let bytes: Uint8Array | null = null;
     try {
@@ -571,19 +590,17 @@ export const exportInvoiceArchive = async (fromYmd: string, toYmd: string) => {
       console.error('[exportInvoiceArchive] Nové PDF sa nepodarilo zostaviť, použije sa uložený súbor:', error);
     }
     if (!bytes) bytes = await readInvoiceBytes(document.url);
-    const base = safePdfName(document.number || 'faktura');
-    let name = `${base}.pdf`;
-    let copy = 2;
-    while (used.has(name)) {
-      name = `${base}-${copy}.pdf`;
-      copy += 1;
-    }
-    used.add(name);
-    files.push({ name, data: bytes });
+    addNamedPdf(document.number, bytes);
   };
 
-  for (const document of documentsForExport(await loadExportRows(), fromYmd, toYmd)) {
+  const orderDocuments = documentsForExport(await loadExportRows(), fromYmd, toYmd);
+  for (const document of orderDocuments) {
     await pushFile(document);
+  }
+  const taken = new Set(orderDocuments.filter((item) => item.kind === 'invoice').map((item) => item.number));
+  for (const row of await packageInvoicesForExport(fromYmd, toYmd, taken)) {
+    const file = await creditPackageInvoiceFile(row);
+    addNamedPdf(row.invoiceNumber, new Uint8Array(await file.arrayBuffer()));
   }
 
   if (files.length === 0) return 0;
